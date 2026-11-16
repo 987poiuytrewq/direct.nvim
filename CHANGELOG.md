@@ -5,6 +5,8 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-16
+
 ### Changed
 
 - Collapse chains of single-child directories into one row, such as

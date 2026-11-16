@@ -569,8 +569,8 @@ copy_lines = function(lines)
 end
 
 -- preflight(paths) validates user inputs, recovers any journal, then classifies
--- BOTH history stacks from raw bytes. Unsupported formats are silently reset;
--- unreadable files and ambiguous recovery states fail closed.
+-- BOTH history stacks from raw bytes. Unsupported formats are preserved and
+-- block operations; unreadable files and ambiguous recovery states fail closed.
 local function preflight_locked(user_paths)
   local valid, validation_err = validate_user_paths(user_paths)
   if not valid then

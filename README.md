@@ -584,12 +584,14 @@ with Git into the ignored `.rocks/` directory, then runs the suite with it:
 
 ```sh
 make coverage          # writes coverage/index.html and coverage/summary.out
+make coverage-check    # fails below 86% total coverage (override with COVERAGE_MIN)
 make coverage-summary  # writes coverage/summary.md
 ```
 
 On pull requests and pushes to `master`, CI runs the suite with coverage on
-Linux, macOS and Windows against Neovim 0.11.7, checks the full Lua tree with
-Luacheck, StyLua and LuaLS, tests latest stable and nightly Neovim, and checks
+Linux, macOS and Windows against Neovim 0.11.7, rejects coverage below the
+floor, checks the full Lua tree with Luacheck, StyLua and LuaLS, tests latest
+stable Neovim on all three platforms and nightly Neovim on Linux, and checks
 the demo tour.
 
 ### Release checklist

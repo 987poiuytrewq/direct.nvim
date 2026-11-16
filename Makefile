@@ -6,11 +6,13 @@ LUACHECK ?= luacheck
 LUACHECK_MAX_WARNINGS ?= 0
 LUALS ?= lua-language-server
 LUALS_LOGPATH ?= $(CURDIR)/.cache/luals
+COVERAGE_MIN ?= 86
 
-.PHONY: ci test lint coverage coverage-deps coverage-summary live-startup demo demo-record demo-gif demo-check check-nvim
+.PHONY: ci test lint coverage coverage-deps coverage-check coverage-summary live-startup demo demo-record demo-gif demo-check check-nvim
 
 ci:
 	$(MAKE) coverage
+	$(MAKE) coverage-check
 	$(MAKE) coverage-summary
 	$(MAKE) live-startup
 
@@ -40,6 +42,18 @@ coverage: check-nvim coverage-deps
 	@mkdir -p coverage
 	@rm -f coverage/luacov.stats.out coverage/index.html coverage/summary.out
 	NVIM='$(NVIM)' bash tests/run_coverage.sh
+
+coverage-check:
+	@test -s coverage/summary.out || { echo 'Run make coverage before make coverage-check' >&2; exit 1; }
+	@total=$$(sed -n 's/^Total .* \([0-9][0-9]*\.[0-9][0-9]*\)%$$/\1/p' coverage/summary.out | tail -1); \
+	  if [ -z "$$total" ]; then echo 'could not read total coverage from coverage/summary.out' >&2; exit 1; fi; \
+	  awk -v total="$$total" -v minimum='$(COVERAGE_MIN)' 'BEGIN { \
+	    if (total + 0 < minimum + 0) { \
+	      printf "coverage %.2f%% is below the %.2f%% floor\n", total, minimum > "/dev/stderr"; \
+	      exit 1; \
+	    } \
+	    printf "coverage %.2f%% (floor %.2f%%)\n", total, minimum; \
+	  }'
 
 coverage-summary:
 	@test -s coverage/luacov.stats.out || { echo 'Run make coverage before make coverage-summary' >&2; exit 1; }

@@ -103,12 +103,16 @@ jobs:
           if-no-files-found: warn
 
   stable:
-    name: Test latest stable Neovim
-    runs-on: ubuntu-latest
+    name: Test latest stable Neovim on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     defaults:
       run:
         shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: Check out the repository
@@ -120,16 +124,24 @@ jobs:
           neovim: true
           version: stable
 
+      - name: Install GNU Make on Windows
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        with:
+          msystem: MSYS
+          install: make
+          path-type: inherit
+
       - name: Run CI
         run: make ci
         env:
-          COVERAGE_PLATFORM: Linux-stable
+          COVERAGE_PLATFORM: ${{ runner.os }}-stable
 
       - name: Publish coverage report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: coverage-Linux-stable
+          name: coverage-${{ runner.os }}-stable
           path: |
             coverage/index.html
             coverage/summary.out

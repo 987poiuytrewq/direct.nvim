@@ -25,6 +25,121 @@ function M.content()
   return lines[1]
 end
 
+-- A delete-backed register keeps no copies. It stores a manifest next to the
+-- content directory that maps each yanked basename to its trash payload, so
+-- paste and the undo proof copy from trash instead of duplicating the tree.
+local function manifest_path(dir) return dir .. '.manifest' end
+
+local function read_manifest(dir)
+  local path = manifest_path(dir)
+  if vim.fn.filereadable(path) ~= 1 then return nil, nil, false end
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok or type(lines) ~= 'table' or #lines == 0 then return nil, 'register manifest is unreadable', true end
+  local decoded, payload = pcall(vim.json.decode, lines[1])
+  if
+    not decoded
+    or type(payload) ~= 'table'
+    or payload.format ~= 'direct-register'
+    or type(payload.entries) ~= 'table'
+  then
+    return nil, 'register manifest is malformed', true
+  end
+  local entries, seen = {}, {}
+  for _, value in ipairs(payload.entries) do
+    if type(value) ~= 'table' or type(value.name) ~= 'string' or type(value.path) ~= 'string' then
+      return nil, 'register manifest is malformed', true
+    end
+    local reason = M.action.entry_name_reason(value.name)
+    if reason ~= nil or seen[value.name] then return nil, 'register manifest has an invalid entry name', true end
+    local path_ok = M.paths.validate_canonical_path(value.path)
+    if not path_ok then return nil, 'register manifest has an invalid path', true end
+    local original
+    if value.original ~= nil then
+      if type(value.original) ~= 'string' or not M.paths.validate_canonical_path(value.original) then
+        return nil, 'register manifest has an invalid original path', true
+      end
+      original = value.original
+    end
+    seen[value.name] = true
+    entries[#entries + 1] = { name = value.name, path = value.path, original = original }
+  end
+  table.sort(entries, function(a, b) return a.name < b.name end)
+  return entries, nil, true
+end
+
+local function write_manifest(dir, entries)
+  local payload_entries = {}
+  for _, entry in ipairs(entries) do
+    payload_entries[#payload_entries + 1] = {
+      name = entry.name,
+      path = entry.path,
+      original = entry.original,
+    }
+  end
+  local ok, encoded = pcall(vim.json.encode, { format = 'direct-register', entries = payload_entries })
+  if not ok then return nil, 'could not encode register manifest' end
+  return M.log.write(manifest_path(dir), { encoded })
+end
+
+-- entries(dir) -> {{name, path, original}, ...} | nil, err. Manifest-backed
+-- registers resolve each name to its trash payload; ordinary yanks list the
+-- copied entries in the content directory.
+function M.entries(dir)
+  if type(dir) ~= 'string' then return nil, 'register path is missing' end
+  local manifest, manifest_err, has_manifest = read_manifest(dir)
+  if has_manifest then
+    if not manifest then return nil, manifest_err end
+    return manifest
+  end
+  local names, list_err = M.fs.list_dir(dir)
+  if not names then return nil, list_err end
+  local entries = {}
+  for _, name in ipairs(names) do
+    entries[#entries + 1] = { name = name, path = M.paths.join(dir, name) }
+  end
+  table.sort(entries, function(a, b) return a.name < b.name end)
+  return entries
+end
+
+-- entry_path(dir, name) returns the persisted source path, plus the original
+-- source path for a delete-backed entry. nil means the name is not registered.
+function M.entry_path(dir, name)
+  local manifest, _, has_manifest = read_manifest(dir)
+  if has_manifest then
+    for _, entry in ipairs(manifest or {}) do
+      if entry.name == name then return entry.path, entry.original end
+    end
+    return nil
+  end
+  return M.paths.join(dir, name)
+end
+
+-- resolve_entry(entry) returns an existing path for a register entry. A
+-- restored trash entry falls back to its original path.
+local function resolve_entry(entry)
+  local reserved = entry.path and M.action.trash_reserved(entry.path)
+  if entry.path and M.fs.exists(entry.path) and not reserved then return entry.path end
+  if reserved and entry.original and M.fs.exists(entry.original) then return entry.original end
+  return nil
+end
+
+-- resolve(dir, name) returns a source that still exists. A restored trash
+-- entry falls back to its original path; nil means it can no longer be pasted.
+function M.resolve(dir, name)
+  local path, original = M.entry_path(dir, name)
+  return resolve_entry({ path = path, original = original })
+end
+
+function M.entry_names(dir)
+  local entries, err = M.entries(dir)
+  if not entries then return nil, err end
+  local names = {}
+  for _, entry in ipairs(entries) do
+    names[#names + 1] = entry.name
+  end
+  return names
+end
+
 -- yank(sources) -> true | nil, err. `sources` is a list of absolute paths.
 function M.yank(sources, options)
   options = options or {}
@@ -68,6 +183,12 @@ function M.yank(sources, options)
       local ok, merr = M.fs.mkdirp(dst)
       if not ok then return nil, merr end
     end
+    -- A digest collision with an older delete-backed register would make paste
+    -- read the stale manifest instead of the newly copied entries.
+    if M.fs.exists(manifest_path(dst)) then
+      local ok, merr = M.fs.rm_file(manifest_path(dst))
+      if not ok then return nil, merr end
+    end
     for _, src in ipairs(sources) do
       -- _yank_one returns true[, skipped] on success and nil, err on failure.
       local ok, skipped = M._yank_one(dst, src)
@@ -86,6 +207,227 @@ function M.yank(sources, options)
     end
     local ok, werr = M.log.write(M.paths.join(dir, 'content'), { dst })
     if not ok then return nil, werr end
+    return true
+  end)
+end
+
+-- _yank_one_async(dst, src, callback) -> true. Asynchronous counterpart of
+-- _yank_one: files copy with fs.copy_file_async, directories with
+-- fs.copy_tree_async after removing a stale entry of the same name.
+function M._yank_one_async(dst, src, callback)
+  local st = M.fs.stat(src)
+  if not st then return callback(false, 'cannot yank: ' .. tostring(src)) end
+  local name = M.fs.basename(M.fs.abspath(src))
+  if name == nil or name == '' then return callback(false, 'cannot yank: no basename for ' .. tostring(src)) end
+  local reason = M.action.entry_name_reason(name)
+  if reason ~= nil then return callback(false, 'cannot yank: entry name ' .. reason .. ': ' .. tostring(name)) end
+  local entry = M.paths.join(dst, name)
+  if st.type == 'file' then
+    return M.fs.copy_file_async(src, entry, function(ok, err) callback(ok, err) end)
+  elseif st.type == 'directory' then
+    if M.fs.exists(entry) then
+      local ok, err = M.fs.rm_tree(entry)
+      if not ok then return callback(false, err) end
+    end
+    return M.fs.copy_tree_async(src, entry, function(ok, skipped, err)
+      if ok then
+        callback(true, skipped)
+      else
+        callback(false, err)
+      end
+    end)
+  end
+  return callback(false, 'cannot yank: unsupported entry type for ' .. tostring(src))
+end
+
+-- yank_async(sources[, callback]) -> true | nil, err. Explicit yanks keep a
+-- copy because their source stays in place and may change. The copy runs in the
+-- background under the pending guard; callback(ok, err) runs after it settles.
+function M.yank_async(sources, callback)
+  if M.pending.refuse('yank') then return nil, 'another direct operation is pending' end
+  if type(sources) ~= 'table' then return nil, 'register.yank_async: a list of sources is required' end
+  for _, src in ipairs(sources) do
+    local valid, path_err = M.paths.validate_canonical_path(src)
+    if not valid then
+      local message = 'cannot yank: ' .. tostring(path_err)
+      M.ui.notify('direct: ' .. message, vim.log.levels.ERROR)
+      return nil, message
+    end
+    local st = M.fs.stat(src)
+    if not st then
+      local message = 'cannot yank: ' .. tostring(src)
+      M.ui.notify('direct: ' .. message, vim.log.levels.ERROR)
+      return nil, message
+    end
+    local name = M.fs.basename(M.fs.abspath(src))
+    local reason = M.action.entry_name_reason(name)
+    if reason ~= nil then
+      local message = 'cannot yank: entry name ' .. reason .. ': ' .. tostring(name)
+      M.ui.notify('direct: ' .. message, vim.log.levels.ERROR)
+      return nil, message
+    end
+  end
+
+  local began, begin_err = M.pending.begin('yank')
+  if not began then
+    M.ui.notify('direct: cannot yank: ' .. tostring(begin_err), vim.log.levels.WARN)
+    return nil, begin_err
+  end
+  local acquired, acquire_err = M.history.lock.acquire()
+  if not acquired then
+    M.pending.finish()
+    M.ui.notify('direct: cannot yank: ' .. tostring(acquire_err), vim.log.levels.ERROR)
+    return nil, acquire_err
+  end
+
+  local finished, lock_released = false, false
+  local function release_lock()
+    if lock_released then return true end
+    lock_released = true
+    local ok, err = M.history.lock.release()
+    if not ok then
+      M.ui.notify('direct: could not release the history lock: ' .. tostring(err), vim.log.levels.ERROR)
+    end
+    return ok, err
+  end
+  local function finish(ok, err)
+    if finished then return end
+    finished = true
+    release_lock()
+    M.pending.finish()
+    if not ok and err ~= nil then M.ui.notify('direct: cannot yank: ' .. tostring(err), vim.log.levels.ERROR) end
+    if type(callback) == 'function' then
+      local called, callback_err = pcall(callback, ok, err)
+      if not called then M.ui.report_error('refresh after yanking', callback_err) end
+    end
+  end
+
+  local preflight, preflight_err = M.history.preflight(sources)
+  if not preflight then
+    finish(false, preflight_err)
+    return nil, preflight_err
+  end
+  local dir, err = M.paths.ensure_data_dir('register')
+  if not dir then
+    finish(false, err)
+    return nil, err
+  end
+  local sorted = vim.deepcopy(sources)
+  table.sort(sorted)
+  local dst = M.paths.join(dir, M.paths.digest(sorted))
+  if not M.fs.exists(dst) then
+    local ok, merr = M.fs.mkdirp(dst)
+    if not ok then
+      finish(false, merr)
+      return nil, merr
+    end
+  end
+  if M.fs.exists(manifest_path(dst)) then
+    local ok, merr = M.fs.rm_file(manifest_path(dst))
+    if not ok then
+      finish(false, merr)
+      return nil, merr
+    end
+  end
+
+  local index = 1
+  local function next_source()
+    if index > #sources then
+      local ok, werr = M.log.write(M.paths.join(dir, 'content'), { dst })
+      if not ok then return finish(false, werr) end
+      return finish(true)
+    end
+    local src = sources[index]
+    index = index + 1
+    M._yank_one_async(dst, src, function(ok, skipped_or_err)
+      if not ok then return finish(false, skipped_or_err) end
+      M.ui.notify('Yanked ' .. src, vim.log.levels.INFO)
+      local n = skipped_or_err ~= nil and #skipped_or_err or 0
+      if n > 0 then
+        M.ui.notify(
+          'Skipped ' .. n .. ' ' .. (n == 1 and 'entry' or 'entries') .. ' that cannot be copied: ' .. src,
+          vim.log.levels.WARN
+        )
+      end
+      next_source()
+    end)
+  end
+  next_source()
+  return true
+end
+
+-- yank_deleted(entries[, options]) -> true | nil, err. `entries` is a list of
+-- { src = original path, dst = resolved trash payload }. Nothing is copied: the
+-- register content directory only holds a manifest that points paste and the
+-- undo proof at the trash payloads already created by the delete actions.
+function M.yank_deleted(entries, options)
+  options = options or {}
+  if not options.bypass_pending and M.pending.refuse('yank') then return nil, 'another direct operation is pending' end
+  if type(entries) ~= 'table' or #entries == 0 then
+    return nil, 'register.yank_deleted: a non-empty list of entries is required'
+  end
+  local sources = {}
+  for _, entry in ipairs(entries) do
+    if type(entry) ~= 'table' or type(entry.src) ~= 'string' or type(entry.dst) ~= 'string' then
+      return nil, 'register.yank_deleted: each entry needs a source and trash path'
+    end
+    local valid, path_err = M.paths.validate_canonical_path(entry.src)
+    if not valid then
+      local message = 'cannot yank: ' .. tostring(path_err)
+      M.ui.notify('direct: ' .. message, vim.log.levels.ERROR)
+      return nil, message
+    end
+    if not M.paths.validate_canonical_path(entry.dst) then
+      local message = 'cannot yank: invalid trash path'
+      M.ui.notify('direct: ' .. message, vim.log.levels.ERROR)
+      return nil, message
+    end
+    local name = M.fs.basename(M.fs.abspath(entry.src))
+    local reason = M.action.entry_name_reason(name)
+    if reason ~= nil then
+      local message = 'cannot yank: entry name ' .. reason .. ': ' .. tostring(name)
+      M.ui.notify('direct: ' .. message, vim.log.levels.ERROR)
+      return nil, message
+    end
+    sources[#sources + 1] = entry.src
+  end
+  return M.history.with_lock(function()
+    local preflight, preflight_err = M.history.preflight(sources)
+    if not preflight then return nil, preflight_err end
+    local dir, err = M.paths.ensure_data_dir('register')
+    if not dir then
+      M.ui.notify('direct: register unavailable: ' .. tostring(err), vim.log.levels.ERROR)
+      return nil, err
+    end
+    local trash_paths = {}
+    for _, entry in ipairs(entries) do
+      trash_paths[#trash_paths + 1] = entry.dst
+    end
+    table.sort(trash_paths)
+    local dst = M.paths.join(dir, M.paths.digest(trash_paths))
+    -- Recreate the snapshot directory so a previous copy with the same digest
+    -- cannot survive as a stale visible entry alongside the manifest.
+    if M.fs.exists(dst) then
+      local removed, remove_err = M.fs.rm_tree(dst)
+      if not removed then return nil, remove_err end
+    end
+    local made, make_err = M.fs.mkdirp(dst)
+    if not made then return nil, make_err end
+    local manifest_entries = {}
+    for _, entry in ipairs(entries) do
+      manifest_entries[#manifest_entries + 1] = {
+        name = M.fs.basename(M.fs.abspath(entry.src)),
+        path = entry.dst,
+        original = entry.src,
+      }
+    end
+    local written, write_err = write_manifest(dst, manifest_entries)
+    if not written then return nil, write_err end
+    local ok, werr = M.log.write(M.paths.join(dir, 'content'), { dst })
+    if not ok then return nil, werr end
+    for _, entry in ipairs(entries) do
+      M.ui.notify('Yanked ' .. entry.src, vim.log.levels.INFO)
+    end
     return true
   end)
 end
@@ -158,20 +500,29 @@ function M.paste(dst, name, callback)
     M.ui.notify('Register is empty', vim.log.levels.WARN)
     return nil
   end
-  local names = M.fs.list_dir(src)
-  if not names then
-    M.ui.notify('direct: cannot read register: ' .. tostring(src), vim.log.levels.ERROR)
+  local entries, entries_err = M.entries(src)
+  if not entries then
+    M.ui.notify('direct: cannot read register: ' .. tostring(entries_err or src), vim.log.levels.ERROR)
     return nil, 'cannot read register'
   end
   -- The persisted register is untrusted. Validate each entry as one basename
-  -- component before building the JSONL record or copying it.
-  local pasteable = {}
-  for _, entry_name in ipairs(names) do
-    local reason = M.action.entry_name_reason(entry_name)
+  -- component before building the JSONL record or copying it. A delete-backed
+  -- entry whose trash payload was restored or removed is reported and skipped.
+  local names, pasteable = {}, {}
+  for _, entry in ipairs(entries) do
+    local reason = M.action.entry_name_reason(entry.name)
     if reason ~= nil then
-      M.ui.notify('direct: skipping register entry (' .. reason .. '): ' .. tostring(entry_name), vim.log.levels.ERROR)
+      M.ui.notify('direct: skipping register entry (' .. reason .. '): ' .. tostring(entry.name), vim.log.levels.ERROR)
     else
-      pasteable[#pasteable + 1] = entry_name
+      names[#names + 1] = entry.name
+      if resolve_entry(entry) then
+        pasteable[#pasteable + 1] = entry.name
+      else
+        M.ui.notify(
+          'direct: skipping register entry that is no longer available: ' .. tostring(entry.name),
+          vim.log.levels.WARN
+        )
+      end
     end
   end
   if #pasteable == 0 then
@@ -213,7 +564,7 @@ function M.paste(dst, name, callback)
     return nil, lock_err
   end
   local current_register = M.content()
-  local current_names = current_register == src and M.fs.list_dir(src) or nil
+  local current_names = current_register == src and M.entry_names(src) or nil
   if current_register ~= src or not vim.deep_equal(current_names, names) then
     M.history.finish_paste(operation)
     M.pending.finish()

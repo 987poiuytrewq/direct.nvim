@@ -813,10 +813,30 @@ return function(context)
       return nil, reason
     end
 
-    -- Yank removed paths before applying actions. If yanking is refused, leave
-    -- the filesystem untouched.
+    -- Yank removed paths before applying actions. Delete-backed registers point
+    -- at each action's resolved trash payload instead of copying the tree.
     if #yanks > 0 then
-      local ok, yerr = register.yank(yanks, { bypass_pending = options.bypass_pending })
+      local trash_by_src = {}
+      for _, act in ipairs(actions) do
+        if (act._kind == 'rm' or act._kind == 'rmdir') and type(act.src) == 'string' and type(act.dst) == 'string' then
+          trash_by_src[paths.canonical(act.src)] = act.dst
+        end
+      end
+      local deleted_entries, point_at_trash = {}, true
+      for _, path in ipairs(yanks) do
+        local trash_path = trash_by_src[paths.canonical(path)]
+        if not trash_path then
+          point_at_trash = false
+          break
+        end
+        deleted_entries[#deleted_entries + 1] = { src = path, dst = trash_path }
+      end
+      local ok, yerr
+      if point_at_trash then
+        ok, yerr = register.yank_deleted(deleted_entries, { bypass_pending = options.bypass_pending })
+      else
+        ok, yerr = register.yank(yanks, { bypass_pending = options.bypass_pending })
+      end
       if not ok then
         ui.notify('Action failed - could not yank deleted entries: ' .. tostring(yerr), vim.log.levels.ERROR)
         require('direct.events').emit('DirectSyncPost', {

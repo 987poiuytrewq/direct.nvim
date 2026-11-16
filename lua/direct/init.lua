@@ -422,17 +422,25 @@ function M.yank(first, last)
     first, last = last, first
   end
   local b = buffer.restore()
-  local was_modified = vim.bo[vim.api.nvim_get_current_buf()].modified
+  local bufnr = vim.api.nvim_get_current_buf()
+  local was_modified = vim.bo[bufnr].modified
   local sources, path_err = b:get_paths(first, last)
   if not sources then
     ui.notify('direct: cannot yank selection: ' .. tostring(path_err), vim.log.levels.ERROR)
     return nil, path_err
   end
   if #sources == 0 then return true end
-  local yanked, yank_err = register.yank(sources)
-  if not yanked then return nil, yank_err end
-  if was_modified then return true end
-  return b:list()
+  -- The copy runs in the background under the pending guard. An unmodified
+  -- listing refreshes once it settles, matching the old synchronous behavior.
+  local started, start_err = register.yank_async(sources, function(ok)
+    if not ok or was_modified then return end
+    if not vim.api.nvim_buf_is_valid(bufnr) then return end
+    if vim.bo[bufnr].filetype ~= constants.FILETYPE then return end
+    local refresh_ok, refresh_err = pcall(function() b:list() end)
+    if not refresh_ok then ui.report_error('refresh after yanking', refresh_err) end
+  end)
+  if not started then return nil, start_err end
+  return true
 end
 
 -- No argument pastes relative to the current row and refreshes the listing;

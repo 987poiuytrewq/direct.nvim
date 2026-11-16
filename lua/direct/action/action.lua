@@ -18,6 +18,16 @@ end
 
 function M.trash_metadata_path(trash_path) return trash_path .. TRASH_METADATA_SUFFIX end
 
+-- A restored trash slot keeps an empty reservation marker so a later delete
+-- cannot reuse the slot while history can still reverse to it. Register entries
+-- pointing at such a slot must fall back to the original path.
+function M.trash_reserved(trash_path)
+  local bytes, _, exists = M.log.read_raw(M.trash_metadata_path(trash_path))
+  if not exists or not bytes then return false end
+  local ok, value = pcall(vim.json.decode, bytes)
+  return ok and type(value) == 'table' and value.format == 'direct-trash' and value.reserved == true
+end
+
 local function trash_metadata(original_path, reserved, purpose)
   local stat = lstat(original_path)
   local value = {
@@ -633,6 +643,18 @@ end
 -- Multi-actions
 -- ---------------------------------------------------------------------------
 
+-- Paste sources normally live in the register content directory. A
+-- delete-backed register stores a manifest that points at trash payloads, with
+-- the original path as a fallback after undo restores the entry.
+local function paste_source(src, name)
+  local ok, register = pcall(require, 'direct.register')
+  if ok and type(register.resolve) == 'function' then
+    local path = register.resolve(src, name)
+    if path then return path end
+  end
+  return M.fs.join(src, name)
+end
+
 -- Paste creates an action. Its callback executor prompts asynchronously on
 -- clashes; the synchronous executor refuses clashes rather than blocking.
 function M.Paste(src, dst, src_names, dst_names)
@@ -646,7 +668,7 @@ function M.Paste(src, dst, src_names, dst_names)
   self._execute = function()
     local copied, last = {}, nil
     for _, pair in ipairs(self.renames) do
-      local full_src = M.fs.join(self.src, pair.src)
+      local full_src = paste_source(self.src, pair.src)
       local full_dst = M.fs.join(self.dst, pair.dst)
       local st = M.fs.stat(full_src)
       if st then
@@ -787,7 +809,7 @@ function M.Paste(src, dst, src_names, dst_names)
         return
       end
       local pair = self.renames[index]
-      local full_src = M.fs.join(self.src, pair.src)
+      local full_src = paste_source(self.src, pair.src)
       local full_dst = M.fs.join(self.dst, pair.dst)
       local st = M.fs.stat(full_src)
       if not st then
@@ -915,7 +937,7 @@ function M.Unpaste(src, dst, src_names, dst_names)
     local items = {}
     for _, pair in ipairs(self.renames) do
       local path = M.fs.join(self.src, pair.src)
-      local reference = M.fs.join(self.dst, pair.dst)
+      local reference = require('direct.register').resolve(self.dst, pair.dst) or M.fs.join(self.dst, pair.dst)
       local identity, stat = M.fs.entry_identity(path)
       if identity == nil or identity.inode == nil then
         return unpaste_refusal('cannot inspect pasted entry: ' .. path)

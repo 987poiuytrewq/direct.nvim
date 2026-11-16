@@ -54,7 +54,7 @@ H.describe('sync with expanded children', function()
     H.assert_fs_eq(ws, { 'keep.txt' }, 'the directory tree is removed')
     local content = register.content()
     H.assert_not_nil(content, 'the removed tree is auto-yanked')
-    H.assert_eq(vim.fn.readfile(content .. '/sub/inside.txt'), { 'inside' },
+    H.assert_eq(vim.fn.readfile(register.resolve(content, 'sub') .. '/inside.txt'), { 'inside' },
       'the auto-yank contains the collapsed directory contents')
   end)
 
@@ -118,7 +118,7 @@ H.describe('sync with expanded children', function()
       'only the deleted root file is removed')
     local content = register.content()
     H.assert_not_nil(content, 'legacy root deletion auto-yanks after preflight')
-    H.assert_eq(vim.fn.readfile(content .. '/root.txt'), { 'root' },
+    H.assert_eq(vim.fn.readfile(register.resolve(content, 'root.txt')), { 'root' },
       'the root file is the only auto-yanked entry')
     local undo = history_lines('undo.log')
     H.assert_eq(#undo, 2, 'only one root deletion is recorded in history')
@@ -177,12 +177,14 @@ H.describe('sync with expanded children', function()
     local before_undo = history_lines('undo.log')
     local before_redo = history_lines('redo.log')
     local yanked = 0
-    local yank = register.yank
+    local yank, yank_deleted = register.yank, register.yank_deleted
     register.yank = function(...) yanked = yanked + 1; return yank(...) end
+    register.yank_deleted = function(...) yanked = yanked + 1; return yank_deleted(...) end
 
     local ok, reason = listing:sync()
 
     register.yank = yank
+    register.yank_deleted = yank_deleted
     H.assert_nil(ok, 'missing surviving child identity is refused')
     H.assert_true(tostring(reason):find('child', 1, true) ~= nil
       or tostring(reason):find('identity', 1, true) ~= nil, tostring(reason))
@@ -327,10 +329,14 @@ H.describe('sync with expanded children', function()
     }, 'a root-only edit never treats redone children as root actions')
 
     local register = require('direct.register')
-    local original_yank, yanked = register.yank, nil
-    register.yank = function(sources) yanked = vim.deepcopy(sources); return true end
+    local original_yank_async, yanked = register.yank_async, nil
+    register.yank_async = function(sources, callback)
+      yanked = vim.deepcopy(sources)
+      if callback then callback(true) end
+      return true
+    end
     local yank_ok, yank_err = pcall(require('direct').yank, 3, 3)
-    register.yank = original_yank
+    register.yank_async = original_yank_async
     H.assert_true(yank_ok, tostring(yank_err))
     H.assert_eq(yanked, { ws .. '/a/nested/deep.txt' },
       'yank on the restored deep child uses its exact filesystem path')
@@ -406,10 +412,14 @@ H.describe('sync with expanded children', function()
       H.assert_eq(H.fs_snapshot(ws), fs_before, 'a no-op write changes no filesystem entries')
       H.assert_eq(register.content(), register_before, 'a no-op write does not change the register')
 
-      local original_yank, yanked = register.yank, nil
-      register.yank = function(sources) yanked = vim.deepcopy(sources); return true end
+      local original_yank_async, yanked = register.yank_async, nil
+      register.yank_async = function(sources, callback)
+        yanked = vim.deepcopy(sources)
+        if callback then callback(true) end
+        return true
+      end
       local yank_ok, yank_err = pcall(require('direct').yank, 2, 2)
-      register.yank = original_yank
+      register.yank_async = original_yank_async
       H.assert_true(yank_ok, tostring(yank_err))
       H.assert_eq(yanked, { child .. '/inside.txt' },
         'yank accepts the restored child and uses its original path')
@@ -503,10 +513,14 @@ H.describe('sync with expanded children', function()
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
 
     local register = require('direct.register')
-    local original_yank, yanked = register.yank, nil
-    register.yank = function(sources) yanked = vim.deepcopy(sources); return true end
+    local original_yank_async, yanked = register.yank_async, nil
+    register.yank_async = function(sources, callback)
+      yanked = vim.deepcopy(sources)
+      if callback then callback(true) end
+      return true
+    end
     require('direct').yank(2, 2)
-    register.yank = original_yank
+    register.yank_async = original_yank_async
     H.assert_eq(yanked, { ws .. '/child/inside.txt' },
       'yank consumes the restored child path')
   end)
@@ -559,15 +573,20 @@ H.describe('sync with expanded children', function()
     local fs_before = H.fs_snapshot(ws)
     local register = require('direct.register')
     local register_before = register.content()
-    local original_yank, yank_calls = register.yank, 0
+    local original_yank, original_yank_async, yank_calls = register.yank, register.yank_async, 0
     register.yank = function(...)
       yank_calls = yank_calls + 1
       return original_yank(...)
+    end
+    register.yank_async = function(...)
+      yank_calls = yank_calls + 1
+      return original_yank_async(...)
     end
 
     local paths, path_err = listing:get_paths(2, 2)
     local yank_ok, yank_result = pcall(require('direct').yank, 2, 2)
     register.yank = original_yank
+    register.yank_async = original_yank_async
 
     H.assert_nil(paths, 'get_paths refuses text that no longer matches its child record')
     H.assert_true(type(path_err) == 'string' and path_err ~= '', 'get_paths explains the refusal')
@@ -598,11 +617,13 @@ H.describe('sync with expanded children', function()
     vim.api.nvim_buf_set_lines(bufnr, 1, 2, false, { 'tampered.txt' })
 
     local register = require('direct.register')
-    local original_yank, yank_calls = register.yank, 0
+    local original_yank, original_yank_async, yank_calls = register.yank, register.yank_async, 0
     register.yank = function(...) yank_calls = yank_calls + 1; return original_yank(...) end
+    register.yank_async = function(...) yank_calls = yank_calls + 1; return original_yank_async(...) end
     local yank_call_ok, yank_result = pcall(require('direct').yank, 2, 2)
     local open_result = listing:open('  tampered.txt')
     register.yank = original_yank
+    register.yank_async = original_yank_async
     H.assert_true(yank_call_ok, tostring(yank_result))
     H.assert_nil(yank_result, 'yank rejects text that no longer matches the child identity')
     H.assert_eq(yank_calls, 0, 'tampered child text does not reach the register')
@@ -612,12 +633,14 @@ H.describe('sync with expanded children', function()
     local before_register = register.content()
     local before_undo, before_redo = history_lines('undo.log'), history_lines('redo.log')
     local yanked = 0
-    local yank = register.yank
+    local yank, yank_deleted = register.yank, register.yank_deleted
     register.yank = function(...) yanked = yanked + 1; return yank(...) end
+    register.yank_deleted = function(...) yanked = yanked + 1; return yank_deleted(...) end
 
     local ok, reason = listing:sync()
 
     register.yank = yank
+    register.yank_deleted = yank_deleted
     H.assert_nil(ok, 'tampered redone child text is refused')
     H.assert_true(type(reason) == 'string' and reason ~= '',
       'refusal explains why the redone row is unsafe')
@@ -649,8 +672,9 @@ H.describe('sync with expanded children', function()
     local before_register = register.content()
     local before_undo, before_redo = history_lines('undo.log'), history_lines('redo.log')
     local yanked = 0
-    local yank = register.yank
+    local yank, yank_async = register.yank, register.yank_async
     register.yank = function(...) yanked = yanked + 1; return yank(...) end
+    register.yank_async = function(...) yanked = yanked + 1; return yank_async(...) end
 
     local yank_call_ok, yank_result = pcall(require('direct').yank, 2, 2)
     local open_result = listing:open('  inside.txt')
@@ -662,6 +686,7 @@ H.describe('sync with expanded children', function()
     local ok, reason = listing:sync()
 
     register.yank = yank
+    register.yank_async = yank_async
     H.assert_nil(ok, 'redo with a changed directory snapshot is ambiguous and refused')
     H.assert_true(type(reason) == 'string' and reason ~= '',
       'the refusal explains why recovery was unsafe')
@@ -901,7 +926,7 @@ H.describe('sync with expanded children', function()
     H.assert_false(fs.exists(ws .. '/renamed.txt'), 'root file was deleted')
     local content = register.content()
     H.assert_not_nil(content, 'normal unblocked root deletes still auto-yank')
-    H.assert_eq(vim.fn.readfile(content .. '/renamed.txt'), { 'root' },
+    H.assert_eq(vim.fn.readfile(register.resolve(content, 'renamed.txt')), { 'root' },
       'root file contents were auto-yanked')
   end)
 
@@ -1076,13 +1101,15 @@ H.describe('sync with expanded children', function()
       return marks
     end
     local yanked = 0
-    local original_yank = register.yank
+    local original_yank, original_yank_deleted = register.yank, register.yank_deleted
     local register_before = register.content()
     local undo_before, redo_before = history_lines('undo.log'), history_lines('redo.log')
     register.yank = function(...) yanked = yanked + 1; return original_yank(...) end
+    register.yank_deleted = function(...) yanked = yanked + 1; return original_yank_deleted(...) end
     local called, sync_result, reason = pcall(function() return listing:sync() end)
     vim.api.nvim_buf_get_extmarks = original_get_extmarks
     register.yank = original_yank
+    register.yank_deleted = original_yank_deleted
 
     H.assert_true(called, tostring(sync_result))
     H.assert_nil(sync_result, 'duplicate invalid identities are refused')
@@ -1127,7 +1154,7 @@ H.describe('sync with expanded children', function()
     local listing = buffer.list(ws)
     listing:expand(1)
     local register_calls, fs_mutations = 0, 0
-    local yank = register.yank
+    local yank_deleted = register.yank_deleted
     local mutation_names = { 'rename', 'rename_noreplace', 'copy_file',
       'copy_tree', 'rm_tree', 'mkdirp' }
     local original_fs = {}
@@ -1139,7 +1166,7 @@ H.describe('sync with expanded children', function()
         return original_fs[method_name](...)
       end
     end
-    register.yank = function() register_calls = register_calls + 1; return true end
+    register.yank_deleted = function() register_calls = register_calls + 1; return true end
     local register_before = register.content()
     local undo_before, redo_before = history_lines('undo.log'), history_lines('redo.log')
     fs_mutations = 0
@@ -1158,7 +1185,7 @@ H.describe('sync with expanded children', function()
     vim.api.nvim_buf_set_text(0, 0, 0, 0, #('other/'), { 'sub/' })
     vim.api.nvim_buf_set_lines(0, 0, 1, false, {})
     local deleted, delete_err = listing:sync()
-    register.yank = yank
+    register.yank_deleted = yank_deleted
     for _, name in ipairs(mutation_names) do fs[name] = original_fs[name] end
     H.assert_false(fs.exists(ws .. '/other'), 'the selected directory was removed')
     H.assert_true(deleted == true, tostring(delete_err))
@@ -1201,10 +1228,12 @@ H.describe('sync with expanded children', function()
       listing:expand(1)
       case.edit()
       local yanked = 0
-      local yank = register.yank
+      local yank, yank_deleted = register.yank, register.yank_deleted
       register.yank = function() yanked = yanked + 1; return true end
+      register.yank_deleted = function() yanked = yanked + 1; return true end
       local ok, reason = listing:sync()
       register.yank = yank
+      register.yank_deleted = yank_deleted
       H.assert_nil(ok, case.name .. ' was refused')
       H.assert_true(tostring(reason):find('child', 1, true) ~= nil
         or tostring(reason):find('identity', 1, true) ~= nil,
@@ -1230,10 +1259,10 @@ H.describe('sync with expanded children', function()
     -- materialized descendants; the row identities protect the entire subtree.
     vim.api.nvim_buf_set_lines(0, 0, 1, false, {})
     local yanked = 0
-    local yank = register.yank
-    register.yank = function() yanked = yanked + 1; return true end
+    local yank_deleted = register.yank_deleted
+    register.yank_deleted = function() yanked = yanked + 1; return true end
     local ok = listing:sync()
-    register.yank = yank
+    register.yank_deleted = yank_deleted
 
     H.assert_true(ok == true, 'expanded directory deletion succeeds')
     H.assert_eq(yanked, 1, 'directory deletion is auto-yanked once')
@@ -1255,16 +1284,19 @@ H.describe('sync with expanded children', function()
     listing:expand(1)
     vim.api.nvim_buf_set_lines(0, 0, 2, false, {})
     local yank_calls, yanked = 0, nil
-    local yank = register.yank
-    register.yank = function(paths)
+    local yank_deleted = register.yank_deleted
+    register.yank_deleted = function(entries)
       yank_calls = yank_calls + 1
-      yanked = vim.deepcopy(paths)
+      yanked = {}
+      for _, entry in ipairs(entries) do
+        yanked[#yanked + 1] = entry.src
+      end
       return true
     end
 
     local ok, reason = listing:sync()
 
-    register.yank = yank
+    register.yank_deleted = yank_deleted
     H.assert_true(ok == true, tostring(reason))
     H.assert_eq(yank_calls, 1, 'the whole tree is yanked once')
     H.assert_eq(yanked, { ws .. '/sub/' }, 'only the directory root is auto-yanked')

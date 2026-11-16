@@ -105,6 +105,7 @@ H.describe('plugin User events', function()
     end), 'the listing is restored for the paste test')
 
     H.assert_true(api.yank(1, 1), 'yank the restored file for paste')
+    H.wait_for_direct()
     api.paste(destination)
     local paste_post
     H.assert_true(vim.wait(5000, function()

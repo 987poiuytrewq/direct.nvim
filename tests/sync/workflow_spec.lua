@@ -79,6 +79,7 @@ H.describe('command workflows: filesystem and listing stay in sync', function()
     H.assert_buf_eq({ 'tree/' }, 0, 'the source listing displays the directory')
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
     vim.cmd('DirectYank')
+    H.wait_for_direct()
     H.assert_buf_eq({ 'tree/' }, 0, 'yanking keeps the source listing visible')
 
     list_dir(destination)

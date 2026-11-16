@@ -195,7 +195,11 @@ local function reverse_intent(state, which, reversal, inverse)
     local items, reserved = {}, {}
     for _, pair in ipairs(reversal.renames or {}) do
       local path = M.action.fs.join(reversal.src, pair.src)
-      local reference = M.action.fs.join(reversal.dst, pair.dst)
+      local register_ok, register_mod = pcall(require, 'direct.register')
+      local reference = register_ok
+          and type(register_mod.resolve) == 'function'
+          and register_mod.resolve(reversal.dst, pair.dst)
+        or M.action.fs.join(reversal.dst, pair.dst)
       local identity, stat = M.action.fs.entry_identity(path)
       if
         not stat

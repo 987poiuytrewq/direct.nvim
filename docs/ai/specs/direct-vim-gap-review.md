@@ -50,7 +50,7 @@ into each task below:
 
 | ID | Priority | Status | Task |
 |----|----------|--------|------|
-| A26 | P2 | Proposed | Stop history, trash and register from growing forever |
+| A26 | P2 | Complete | Stop history, trash and register from growing forever |
 | A27 | P2 | Complete | Stop deletes on save from copying everything into the register first |
 | A28 | P3 | Proposed | Define, document and test edits to collapsed rows |
 | A29 | P3 | Proposed | Handle a busy history lock from another Neovim instance clearly |
@@ -60,6 +60,10 @@ into each task below:
 ## Robustness and performance
 
 ### A26 — History, trash and register grow forever (P2)
+
+**Status: COMPLETE in #138.** History is capped at 1000 steps per stack,
+90-day trash retention is on by default, unused register snapshots are pruned,
+and `:checkhealth` reports history counts and register size.
 
 **Problem.**
 
@@ -294,7 +298,7 @@ name `git.ignore_timeout_ms`.
 
 ## Suggested order
 
-1. A27 is complete; A26 is next. A27 stops the biggest copies, and A26's
-   register clean-up builds on it.
+1. A27 and A26 are complete. A27 stops the biggest copies, and A26's register
+   clean-up builds on it.
 2. A29 and A28, in either order.
 3. A31 at any time; it only touches docs and the release notes.

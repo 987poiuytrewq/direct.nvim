@@ -129,6 +129,23 @@ H.describe('config', function()
     config.clear_mappings()
   end)
 
+  H.it('configures a positive Git-ignore timeout independently of status', function()
+    local config = fresh_config()
+    config.clear_mappings()
+    H.assert_eq(config.defaults.git.ignore_timeout_ms, 200,
+      'ignore checks default to 200ms')
+    H.assert_eq(config.setup({ git = { ignore_timeout_ms = 350 } }).git.ignore_timeout_ms,
+      350, 'a positive integer ignore timeout is accepted')
+    H.assert_eq(config.options.git.timeout_ms, 1000,
+      'changing the ignore deadline does not change the status deadline')
+    H.capture_messages()
+    H.assert_eq(config.setup({ git = { ignore_timeout_ms = 0 } }).git.ignore_timeout_ms,
+      200, 'an invalid ignore timeout leaves the default in place')
+    H.assert_notified('git.ignore_timeout_ms: expected a positive integer',
+      vim.log.levels.ERROR)
+    config.clear_mappings()
+  end)
+
   H.it('two setup() calls converge on the same options', function()
     local config = fresh_config()
     config.clear_mappings()

@@ -27,7 +27,8 @@
 
 ---@class direct.GitConfig
 ---@field enabled? boolean
----@field timeout_ms? integer Deadline for Git status and Git-ignore queries.
+---@field timeout_ms? integer Deadline for the background Git status query.
+---@field ignore_timeout_ms? integer Deadline for Git-ignore queries.
 ---@field show_symbols? boolean
 ---@field show_deleted? boolean
 ---@field symbols? table<direct.GitSymbolName, string>
@@ -88,6 +89,7 @@ local defaults = {
   git = {
     enabled = true,
     timeout_ms = 1000,
+    ignore_timeout_ms = 200,
     show_symbols = true,
     show_deleted = true,
     symbols = {
@@ -191,6 +193,12 @@ local function resolve_git_options(value)
     elseif key == 'timeout_ms' then
       if type(option) == 'number' and option >= 1 and option % 1 == 0 then
         result.timeout_ms = option
+      else
+        report_invalid_git_option(key, 'expected a positive integer')
+      end
+    elseif key == 'ignore_timeout_ms' then
+      if type(option) == 'number' and option >= 1 and option % 1 == 0 then
+        result.ignore_timeout_ms = option
       else
         report_invalid_git_option(key, 'expected a positive integer')
       end

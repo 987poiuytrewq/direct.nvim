@@ -244,7 +244,8 @@ require('direct').setup({
   },
   git = {
     enabled = true,       -- show Git status when its background query completes
-    timeout_ms = 1000,    -- Git status and ignore-query deadline
+    timeout_ms = 1000,    -- background Git status-query deadline
+    ignore_timeout_ms = 200, -- Git-ignore snapshot deadline
     show_symbols = true,  -- right-aligned status symbols
     show_deleted = true,  -- show rows for deleted tracked files
     symbols = {           -- one display cell each, or '' to hide
@@ -262,12 +263,13 @@ require('direct').setup({
 
 Git status is read in the background so it doesn't delay the initial listing.
 When the query completes, Direct adds the status decorations and deleted rows.
-`git.timeout_ms` sets the deadline in milliseconds. A timed-out status query
+`git.timeout_ms` sets the status-query deadline. A timed-out status query
 leaves the listing usable without status; a timed-out Git-ignore query leaves
 ignored entries visible for that listing, with an in-buffer warning. Saving
 retries the ignore query: it proceeds if the changed paths are still visible,
 and refuses if the query still times out or a changed path would be hidden. In
 that case, `gi` can turn the filter off without discarding the unsaved edits.
+`git.ignore_timeout_ms` sets the independent Git-ignore deadline (default `200` ms).
 
 You can call `setup()` more than once. Each call replaces the previous options,
 and unknown or invalid options are reported as errors instead of being silently
@@ -394,7 +396,7 @@ restore them.
   history step; the Git restore itself is not.
 - `gi` toggles ignore filtering. Filtering uses Git itself, so nested
   `.gitignore` files, `.git/info/exclude` and your global excludes file all
-  apply. Tracked files are never hidden. Ignore queries use `git.timeout_ms`;
+  apply. Tracked files are never hidden. Ignore queries use `git.ignore_timeout_ms`;
   a timeout leaves entries visible with an in-buffer warning. Saving retries the
   query and refuses only if it still times out or a changed entry would be
   hidden; `gi` can disable the filter without losing unsaved edits. Unreadable

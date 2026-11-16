@@ -504,11 +504,16 @@ function M.apply_retention(options)
   local directory = trash_dir()
   local cache_key = paths.canonical(directory)
   if not options.force and retention_checked[cache_key] then return true, { skipped = true } end
+  if not options.force and not fs.exists(directory) then
+    -- A no-op save should not initialize empty history merely to discover that
+    -- there is no trash to retain.
+    return true, { skipped = true }
+  end
   -- Automatic retention is expensive because it measures the whole trash and
   -- reads history references. Limit saves to one pass per data directory in
   -- this Neovim session. DirectTrash passes force to provide an explicit scan.
   retention_checked[cache_key] = true
-  return history.with_trash_references(function(references, state)
+  local function run_retention(references, state)
     local entries, err = M.entries({ include_reserved = true, history_state = state })
     if not entries then return nil, err end
     local total, candidates = 0, {}
@@ -524,7 +529,7 @@ function M.apply_retention(options)
     end)
 
     local removed, removed_ids = 0, {}
-    local function prune(entry)
+    local function prune_entry(entry)
       local ok, remove_err = remove_entry(entry.path)
       if not ok then return nil, remove_err end
       removed, total = removed + 1, total - entry.storage_size
@@ -537,7 +542,7 @@ function M.apply_retention(options)
       local cutoff = os.time() - max_age * 24 * 60 * 60
       for _, entry in ipairs(candidates) do
         if entry.deleted_at_epoch < cutoff then
-          local ok, prune_err = prune(entry)
+          local ok, prune_err = prune_entry(entry)
           if not ok then return nil, prune_err end
         end
       end
@@ -548,7 +553,7 @@ function M.apply_retention(options)
       for _, entry in ipairs(candidates) do
         if total <= max_size then break end
         if not removed_ids[entry.id] then
-          local ok, prune_err = prune(entry)
+          local ok, prune_err = prune_entry(entry)
           if not ok then return nil, prune_err end
         end
       end
@@ -570,7 +575,11 @@ function M.apply_retention(options)
       )
     end
     return true, { removed = removed, size_bytes = total }
-  end)
+  end
+  if options.history_state and type(options.references) == 'table' then
+    return run_retention(options.references, options.history_state)
+  end
+  return history.with_trash_references(run_retention)
 end
 
 function M.empty(force)

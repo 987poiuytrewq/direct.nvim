@@ -80,6 +80,32 @@ H.describe('register', function()
     H.assert_eq(reg.content(), sorted_dst(sb, { source }), 'the copy updates the register')
   end)
 
+  H.it('removes old register copies only after paste history stops referencing them', function()
+    local sb = H.sandbox()
+    local old_source = H.mkfile(sb.root, 'old.txt', { 'old' })
+    H.assert_true(reg.yank({ old_source }), 'the first source is yanked')
+    local old_register = reg.content()
+    local destination = H.mkdir(sb.root, 'destination')
+    H.assert_true(reg.paste(destination) ~= nil, 'the first register is pasted')
+    H.assert_true(history.undo() ~= nil, 'undoing the paste moves its dependency to redo')
+    H.assert_false(fs.exists(destination .. '/old.txt'), 'the pasted file was removed')
+
+    local new_source = H.mkfile(sb.root, 'new.txt', { 'new' })
+    H.assert_true(reg.yank({ new_source }), 'the register is replaced')
+    local new_register = reg.content()
+    H.assert_true(fs.exists(old_register), 'the paste undo record protects its source snapshot')
+    H.assert_true(fs.exists(new_register), 'the current register snapshot is retained')
+    H.assert_true(reg.size_bytes() > 0, 'register size includes stored snapshots')
+
+    H.assert_true(fs.exists(old_register), 'the redo record protects its source snapshot')
+    H.assert_true(history.redo() ~= nil, 'redo still copies from its referenced register snapshot')
+    H.assert_eq(vim.fn.readfile(destination .. '/old.txt'), { 'old' })
+
+    H.assert_true(history.drop_top('undo'), 'dropping the paste record commits history')
+    H.assert_false(fs.exists(old_register), 'the now-unreferenced snapshot is removed')
+    H.assert_true(fs.exists(new_register), 'the current register is never removed')
+  end)
+
   -- Yank destroys nothing, so an uncopyable entry should be skipped and reported
   -- rather than failing the yank or disappearing silently.
   H.it('a yank of a tree holding a symlink succeeds and reports the skipped entry', function()

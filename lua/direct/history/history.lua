@@ -17,6 +17,8 @@ local file_operations = require('direct.file_operations')
 local TRANSACTION_FORMAT = transaction_codec.FORMAT
 local TRANSACTION_VERSION = transaction_codec.VERSION
 local backup_sequence = 0
+local history_limit_notice_sent = false
+local trash_references
 
 local function identity_paths_equal(a, b)
   if type(a) ~= 'string' or type(b) ~= 'string' then return false end
@@ -544,14 +546,76 @@ local function recover_transaction(undo_path, redo_path, transaction_path)
   return clear_transaction(transaction_path)
 end
 
+local function trim_stack(lines, limit)
+  local first_record = math.max(2, #lines - limit + 1)
+  if first_record <= 2 then return lines, 0 end
+  local trimmed = { lines[1] }
+  for index = first_record, #lines do
+    trimmed[#trimmed + 1] = lines[index]
+  end
+  return trimmed, first_record - 2
+end
+
+local function after_stack_commit(undo_lines, redo_lines, dropped)
+  local register_ok, register = pcall(require, 'direct.register')
+  if register_ok and type(register.prune_unreferenced) == 'function' then
+    local called, pruned, prune_err = pcall(register.prune_unreferenced, undo_lines, redo_lines)
+    if not called then
+      prune_err, pruned = pruned, nil
+    end
+    if not pruned then
+      M.ui.notify('direct: could not clean old register copies: ' .. tostring(prune_err), vim.log.levels.WARN)
+    end
+  end
+
+  if dropped <= 0 then return end
+  if not history_limit_notice_sent then
+    history_limit_notice_sent = true
+    M.ui.notify(
+      string.format(
+        'direct: history limit reached; removed %d oldest undo/redo step%s',
+        dropped,
+        dropped == 1 and '' or 's'
+      ),
+      vim.log.levels.WARN
+    )
+  end
+
+  local trash_ok, trash = pcall(require, 'direct.trash')
+  if not trash_ok or type(trash.apply_retention) ~= 'function' then return end
+  local state = { undo_lines = undo_lines, redo_lines = redo_lines }
+  local references = trash_references and trash_references(state) or {}
+  local called, retained, retention_err = pcall(trash.apply_retention, {
+    force = true,
+    history_state = state,
+    references = references,
+  })
+  if not called then
+    retention_err, retained = retained, nil
+  end
+  if not retained then
+    M.ui.notify(
+      'direct: trash retention after history trimming was skipped: ' .. tostring(retention_err),
+      vim.log.levels.WARN
+    )
+  end
+end
+
 commit_stacks = function(undo_path, redo_path, transaction_path, undo_lines, redo_lines)
-  local ok, err = log_mod.write_raw_atomic(transaction_path, transaction_codec.stack_bytes(undo_lines, redo_lines))
+  local limit = require('direct.config').options.history_limit
+  local trimmed_undo, undo_dropped = trim_stack(undo_lines, limit)
+  local trimmed_redo, redo_dropped = trim_stack(redo_lines, limit)
+  local dropped = undo_dropped + redo_dropped
+  local ok, err = log_mod.write_raw_atomic(transaction_path, transaction_codec.stack_bytes(trimmed_undo, trimmed_redo))
   if not ok then return nil, err end
-  ok, err = write_stack(undo_path, undo_lines)
+  ok, err = write_stack(undo_path, trimmed_undo)
   if not ok then return nil, err end
-  ok, err = write_stack(redo_path, redo_lines)
+  ok, err = write_stack(redo_path, trimmed_redo)
   if not ok then return nil, err end
-  return clear_transaction(transaction_path)
+  ok, err = clear_transaction(transaction_path)
+  if not ok then return nil, err end
+  after_stack_commit(trimmed_undo, trimmed_redo, dropped)
+  return true
 end
 
 recovery = require('direct.history.recovery').new({
@@ -742,7 +806,7 @@ local function action_paths(action)
   return result
 end
 
-local function trash_references(state)
+trash_references = function(state)
   local references = {}
   local function add(path)
     if type(path) == 'string' and path ~= '' then references[M.paths.canonical(path)] = true end

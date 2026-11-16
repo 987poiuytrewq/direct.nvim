@@ -225,7 +225,8 @@ require('direct').setup({
   collapse_single_entry_directories = true, -- show `a/b/c/` chains as one row (toggle with `gC`)
   indent_size = 2,                   -- spaces per tree level (integer > 1)
   undo_confirm = 'elsewhere',        -- true, false, or confirm only outside this listing
-  trash_retention = false,           -- or { max_age_days = 30, max_size_bytes = 1e9 }
+  history_limit = 1000,              -- undo and redo steps per stack
+  trash_retention = { max_age_days = 90 }, -- or false, or add max_size_bytes
   directory_separator = package.config:sub(1, 1), -- '/' or '\\'
   max_recursive_expand_depth = false, -- limit for zO/zR; false = unlimited
   buffers = {
@@ -321,13 +322,21 @@ current listing in place: `require('direct').open({ split = 'horizontal' })`,
 prompts, `false` never prompts, and `'elsewhere'` (the default) prompts only if
 the affected paths are outside the current listing's directory.
 
-`trash_retention` is off by default. Set `max_age_days`, `max_size_bytes`, or
-both to prune old, unreferenced trash entries; history-referenced entries are
-kept unless explicitly forced through `:DirectTrash! empty`. Forced restore or
-empty asks first when it would discard undo/redo steps that depend on the trash
-payload, and reports the number of affected steps. Automatic retention runs at
-most once per Neovim session and data directory; opening `:DirectTrash` forces
-a fresh retention pass before showing the entries.
+`history_limit` bounds each undo/redo stack. When a commit exceeds the limit,
+the oldest steps are dropped and direct.vim warns once per Neovim session.
+`trash_retention` defaults to `{ max_age_days = 90 }`; set `max_age_days`,
+`max_size_bytes`, or both to change pruning, or use `false` to disable it.
+History-referenced trash is kept unless explicitly forced through
+`:DirectTrash! empty`. Forced restore or empty asks first when it would discard
+undo/redo steps that depend on the trash payload, and reports the number of
+affected steps. Automatic retention runs at most once per Neovim session and
+data directory during saves; history trimming forces a fresh pass. Opening
+`:DirectTrash` also forces a pass before showing the entries.
+
+`:checkhealth direct` reports undo/redo step counts and register size, and warns
+when register storage exceeds 1 GiB. Register snapshots that are neither the
+current yank nor referenced by undo/redo paste records are cleaned after
+register or history updates.
 
 When an older trash entry has no metadata sidecar, `:DirectTrash` looks for its
 delete action in history and reconstructs the original path and entry type,

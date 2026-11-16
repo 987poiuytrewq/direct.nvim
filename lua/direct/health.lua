@@ -1,5 +1,6 @@
 -- lua/direct/health.lua -- non-mutating diagnostics for :checkhealth direct.
 local M = {}
+local REGISTER_SIZE_WARNING_BYTES = 1024 * 1024 * 1024
 
 local function check_git()
   if vim.fn.executable('git') ~= 1 then
@@ -60,13 +61,14 @@ local function inspect_history(directory)
   local transaction_codec = require('direct.history.transaction')
   local lock = require('direct.history.lock')
   local history_dir = paths.join(directory, 'history')
+  local steps = {}
   local acquired, lock_err = lock.acquire()
   if not acquired then
     vim.health.warn('history could not be inspected because its lock is unavailable: ' .. tostring(lock_err))
     return
   end
 
-  local function inspect_stack(name)
+  local function inspect_stack(name, direction)
     local path = paths.join(history_dir, name)
     local bytes, read_err, exists = log.read_raw(path)
     if read_err then
@@ -75,11 +77,13 @@ local function inspect_history(directory)
     end
     if not exists or bytes == '' then
       vim.health.ok(name .. ': not initialized (fresh)')
+      steps[direction] = 0
       return
     end
     local state = format.classify(bytes, exists)
     if state.state == 'current' then
       vim.health.ok(name .. ': current history format')
+      steps[direction] = math.max(0, #state.lines - 1)
     elseif state.state == 'legacy' then
       vim.health.warn(name .. ': recognized legacy history; it will be backed up on use')
     else
@@ -88,8 +92,15 @@ local function inspect_history(directory)
   end
 
   local ok, inspect_err = xpcall(function()
-    inspect_stack('undo.log')
-    inspect_stack('redo.log')
+    inspect_stack('undo.log', 'undo')
+    inspect_stack('redo.log', 'redo')
+    if steps.undo ~= nil and steps.redo ~= nil then
+      local limit = require('direct.config').options.history_limit
+      vim.health.ok(string.format('history steps: undo=%d, redo=%d (limit=%d)', steps.undo, steps.redo, limit))
+      if steps.undo >= limit or steps.redo >= limit then
+        vim.health.warn('history_limit reached; the next change will drop the oldest step')
+      end
+    end
 
     local transaction_path = paths.join(history_dir, 'transaction.json')
     local bytes, read_err, exists = log.read_raw(transaction_path)
@@ -149,6 +160,15 @@ function M.check()
     vim.health.ok(string.format('trash size: %d bytes', trash_size))
   else
     vim.health.warn('trash size unavailable: ' .. tostring(trash_err))
+  end
+  local register_size, register_err = require('direct.register').size_bytes()
+  if register_size then
+    vim.health.ok(string.format('register size: %d bytes', register_size))
+    if register_size > REGISTER_SIZE_WARNING_BYTES then
+      vim.health.warn('register exceeds 1 GiB; unused copies are cleaned after register and history updates')
+    end
+  else
+    vim.health.warn('register size unavailable: ' .. tostring(register_err))
   end
   inspect_icons()
 end

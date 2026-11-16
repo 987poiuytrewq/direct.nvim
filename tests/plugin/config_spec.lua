@@ -98,10 +98,25 @@ H.describe('config', function()
     config.clear_mappings()
   end)
 
+  H.it('defaults history_limit to 1000 and validates positive integers', function()
+    local config = fresh_config()
+    config.clear_mappings()
+    H.assert_eq(config.defaults.history_limit, 1000,
+      'history is bounded to 1000 steps per stack by default')
+    H.assert_eq(config.setup({ history_limit = 3 }).history_limit, 3,
+      'a smaller positive integer limit is accepted')
+    H.capture_messages()
+    H.assert_eq(config.setup({ history_limit = 0 }).history_limit, 1000,
+      'an invalid limit retains the default')
+    H.assert_notified('history_limit must be a positive integer', vim.log.levels.ERROR)
+    config.clear_mappings()
+  end)
+
   H.it('validates optional trash retention limits', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_false(config.defaults.trash_retention, 'retention is off by default')
+    H.assert_eq(config.defaults.trash_retention, { max_age_days = 90 },
+      'age-based retention is enabled by default')
     H.assert_eq(config.setup({ trash_retention = {
       max_age_days = 30, max_size_bytes = 1024,
     } }).trash_retention, { max_age_days = 30, max_size_bytes = 1024 },

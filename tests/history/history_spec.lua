@@ -74,6 +74,52 @@ H.describe('history', function()
       { 'redo' }, 'the current direction prefix is respected')
   end)
 
+  H.it('trims the oldest undo records to history_limit and warns once', function()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    local config = require('direct.config')
+    config.setup({ history_limit = 3, trash_retention = false })
+    H.capture_messages()
+
+    for index = 1, 5 do
+      local path = ws .. '/file-' .. index .. '.txt'
+      H.mkfile(ws, 'file-' .. index .. '.txt', { tostring(index) })
+      H.assert_true(history.log(action.Touch(path)), 'history log ' .. index .. ' succeeds')
+    end
+
+    local undo = vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log'))
+    local redo = vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'redo.log'))
+    H.assert_eq(#undo, 4, 'the header and newest three undo records remain')
+    H.assert_eq(#redo, 1, 'a new save clears the redo stack')
+    H.assert_eq(action.deserialize(undo[2]).dst, ws .. '/file-3.txt', 'the oldest two records were dropped')
+    local messages = H.messages()
+    local _, notices = messages:gsub('history limit reached', '')
+    H.assert_eq(notices, 1, 'history trimming warns only once per session')
+    config.setup({})
+  end)
+
+  H.it('also trims the redo stack to the configured history_limit', function()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    local config = require('direct.config')
+    config.setup({ history_limit = 10, trash_retention = false, undo_confirm = false })
+    for index = 1, 5 do
+      local path = ws .. '/file-' .. index .. '.txt'
+      local create = action.Touch(path)
+      H.assert_true(create['do']() ~= nil, 'create file ' .. index)
+      H.assert_true(history.log(create), 'log file ' .. index)
+    end
+    for index = 5, 1, -1 do
+      H.assert_true(history.undo() ~= nil, 'undo file ' .. index)
+    end
+
+    config.setup({ history_limit = 3, trash_retention = false, undo_confirm = false })
+    H.assert_true(history.redo() ~= nil, 'redo applies one action from the full redo stack')
+    local redo = vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'redo.log'))
+    H.assert_eq(#redo, 4, 'redo keeps its header and newest three records')
+    config.setup({})
+  end)
+
   H.it('undo/redo round-trips per action type', function()
     local sb = H.sandbox()
     local ws = H.mkdir(sb.root, 'ws')

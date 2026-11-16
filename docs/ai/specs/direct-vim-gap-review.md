@@ -51,7 +51,7 @@ into each task below:
 | ID | Priority | Status | Task |
 |----|----------|--------|------|
 | A26 | P2 | Proposed | Stop history, trash and register from growing forever |
-| A27 | P2 | Proposed | Stop deletes on save from copying everything into the register first |
+| A27 | P2 | Complete | Stop deletes on save from copying everything into the register first |
 | A28 | P3 | Proposed | Define, document and test edits to collapsed rows |
 | A29 | P3 | Proposed | Handle a busy history lock from another Neovim instance clearly |
 | A30 | P4 | Complete | Release, coverage floor, wider CI and a stale comment |
@@ -109,6 +109,9 @@ unreferenced register copy is removed; the current one and one named by a
 paste record are kept. `:checkhealth` shows the step counts and register size.
 
 ### A27 — Deletes on save copy everything into the register first (P2)
+
+**Status: COMPLETE in #136.** Deletes now register trash payloads without
+copying them; explicit yanks copy asynchronously under the pending guard.
 
 **Problem.** Before a save that deletes rows changes anything, `sync_locked`
 (`lua/direct/buffer/sync.lua`, around line 819) calls `register.yank` on
@@ -281,7 +284,7 @@ name `git.ignore_timeout_ms`.
 
 ## Suggested order
 
-1. A27, then A26. A27 stops the biggest copies, and A26's register clean-up
-   builds on it.
+1. A27 is complete; A26 is next. A27 stops the biggest copies, and A26's
+   register clean-up builds on it.
 2. A29 and A28, in either order.
 3. A31 at any time; it only touches docs and the release notes.

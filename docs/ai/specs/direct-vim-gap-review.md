@@ -13,9 +13,9 @@ in a running Neovim. Each task's first step is to write a failing test that
 reproduces the problem, or to record that it can't be reproduced and drop the
 task.
 
-**Last checked:** `origin/master` at `91b2a1f` (16 November 2026). That check
-confirmed A30, including the `v0.3.0` tag (at `1a9b1a5`) and its published
-GitHub release, and added A31 from #133. A26–A29 remain proposed.
+**Last checked:** `origin/master` at `f929c2b` (16 November 2026). That check
+confirmed A27 (#136) in the code, and noted its effect on A26 and A29 in
+those tasks. A26, A28, A29 and A31 remain proposed.
 
 ## Decisions
 
@@ -74,9 +74,10 @@ into each task below:
   trimmed, every deleted file stays referenced, so even with
   `trash_retention` set, deleted files are kept forever. Retention is also off
   by default (`trash_retention = false` in `lua/direct/config.lua`).
-- **Register.** `M.yank` (`lua/direct/register.lua`, around line 66) copies
-  each new selection into `register/<digest>`. Nothing removes the old copies,
-  and every save that deletes rows adds one (see A27).
+- **Register.** Since A27, a save that deletes rows only writes a small
+  manifest under `register/<digest>`, but each explicit yank
+  (`register.yank_async`) still copies its selection there. Nothing removes
+  the old copies or manifests.
 - **Health.** `:checkhealth direct` reports the trash size, but not the
   register size or the number of history steps (`lua/direct/health.lua`).
 
@@ -158,6 +159,11 @@ asynchronous paste waits on its "already exists. Paste as:" prompt
 cross-filesystem move runs. So a second instance can fail just because the
 first is waiting for the user to type a name.
 
+Since A27, `yy` copies in the background, and `register.yank_async` holds
+the history lock until the whole copy finishes. So yanking a large folder in
+one instance now makes every save, undo and redo in the others fail for as
+long as the copy runs.
+
 **Change.**
 
 - When the lock is busy (`EWOULDBLOCK`, or Windows' lock violation), retry for
@@ -166,14 +172,18 @@ first is waiting for the user to type a name.
   using direct.vim's history, it may be waiting on a prompt, and the operation
   can be retried. Write the holder's process ID into the lock file, if that
   can be done safely, so the message can name it.
+- Don't hold the history lock for the whole background copy of a yank. The
+  copy only writes to a new register folder, so take the lock just to run the
+  preflight, and again to switch the register's `content` pointer at the end,
+  checking that nothing else changed the register in between.
 - Release the lock while an asynchronous paste waits on its prompt. After the
   answer, take the lock again, re-run the history preflight, and check that
   the destination is still free before copying. If anything changed, ask
   again or stop, without overwriting. Other instances can then save and undo
   while the prompt is open.
 
-**Tests.** While a paste prompt is open, another process can take and
-release the lock. If that process creates the chosen destination meanwhile,
+**Tests.** While a paste prompt is open, or a large yank is copying, another
+process can take and release the lock. If that process creates the chosen destination meanwhile,
 the paste asks again rather than overwriting. With the lock held by a second
 process, an operation in the first
 retries, then fails with the new message. If the second process releases it

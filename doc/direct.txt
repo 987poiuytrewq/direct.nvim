@@ -65,8 +65,8 @@ direct.vim is pure Lua and replaces |netrw| for directory buffers.
     - nvim-web-devicons, for icons that match each file's type (optional).
       See |direct-show_filetype_icons|.
 
-No Python is needed. To check the Neovim version and the
-data directory in use, run:
+No Python is needed. To check the Neovim version and the data directory in use,
+along with history counts, trash size and register size, run:
 >
     :checkhealth direct
 <
@@ -614,7 +614,8 @@ Calling `setup()` is optional. These are the defaults:
       collapse_single_entry_directories = true,
       indent_size = 2,
       undo_confirm = 'elsewhere',
-      trash_retention = false,
+      history_limit = 1000,
+      trash_retention = { max_age_days = 90 },
       directory_separator = package.config:sub(1, 1),
       max_recursive_expand_depth = false,
       buffers = {
@@ -735,14 +736,25 @@ undo_confirm             `true`, `false` or `'elsewhere'` (default)
     only when the affected paths are outside the current listing directory
     (`'elsewhere'`).
 
-                                                      *direct-trash_retention*
-trash_retention          `false` or a table (default: `false`)
-    Optionally prune old, unreferenced trash entries. Set `max_age_days`,
-    `max_size_bytes`, or both to positive integers. Entries referenced by undo
-    or redo history are protected, even when a retention limit is exceeded.
-    Automatic retention runs at most once per Neovim session and data directory
-    during saves. Opening |:DirectTrash| forces a fresh retention pass; health
-    diagnostics still scan current trash contents when reporting its size.
+                                                       *direct-history_limit*
+history_limit             positive integer (default: `1000`)
+    Maximum undo and redo steps kept in each stack. When a commit exceeds the
+    limit, the oldest steps are dropped. direct.vim warns once per Neovim
+    session when this first happens.
+
+                                                       *direct-trash_retention*
+trash_retention          `false` or a table (default: `{ max_age_days = 90 }`)
+    Prune old, unreferenced trash entries. Set `max_age_days`,
+    `max_size_bytes`, or both to positive integers; set `false` to disable
+    retention. Entries referenced by undo or redo history are protected, even
+    when a retention limit is exceeded. Automatic retention runs at most once
+    per Neovim session and data directory during saves. Dropping history steps
+    forces a fresh pass, as does opening |:DirectTrash|.
+
+    |:checkhealth| reports undo/redo step counts, trash size and register size;
+    it warns when register storage exceeds 1 GiB. Unreferenced register
+    snapshots are removed after register or history updates, except for the
+    current register and paths named by paste history.
 
                                                   *direct-directory_separator*
 directory_separator     `'/'` or `'\'` (default: the platform separator)

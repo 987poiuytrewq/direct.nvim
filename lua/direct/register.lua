@@ -140,6 +140,132 @@ function M.entry_names(dir)
   return names
 end
 
+local function register_snapshot_name(name)
+  if type(name) ~= 'string' then return false end
+  if #name ~= 64 then return false end
+  return name:match('^%x+$') ~= nil
+end
+
+-- prune_unreferenced(undo_lines, redo_lines) removes copied snapshots that are
+-- neither the current register nor named by a paste still on either stack.
+function M.prune_unreferenced(undo_lines, redo_lines)
+  local dir = M.paths.data_dir_path('register')
+  local names, list_err = M.fs.list_dir(dir)
+  if not names then
+    if not M.fs.exists(dir) then return true, 0 end
+    return nil, list_err or 'cannot list register directory'
+  end
+
+  local references = {}
+  local function add(path)
+    if type(path) == 'string' and path ~= '' then references[M.paths.canonical(path)] = true end
+  end
+  local function visit(current)
+    if type(current) ~= 'table' then return end
+    if current.name == 'p' then
+      add(current.src)
+    elseif current.name == 'up' then
+      add(current.dst)
+    end
+    for _, member in ipairs(current.actions or {}) do
+      visit(member)
+    end
+  end
+  for _, lines in ipairs({ undo_lines or {}, redo_lines or {} }) do
+    for index = 2, #lines do
+      local ok, parsed = pcall(M.action.deserialize, lines[index])
+      if ok and parsed then visit(parsed) end
+    end
+  end
+
+  local current = M.content()
+  local keep = {}
+  if current then keep[M.paths.canonical(current)] = true end
+  for path in pairs(references) do
+    keep[path] = true
+  end
+
+  local removed, first_err = 0, nil
+  local function remove(path, directory)
+    local ok, err
+    if directory then
+      ok, err = M.fs.rm_tree(path)
+    else
+      ok, err = M.fs.rm_file(path)
+    end
+    if not ok then
+      first_err = first_err or err or ('could not remove ' .. path)
+      return false
+    end
+    removed = removed + 1
+    return true
+  end
+
+  for _, name in ipairs(names) do
+    if register_snapshot_name(name) then
+      local path = M.paths.join(dir, name)
+      if not keep[M.paths.canonical(path)] then
+        local stat = vim.uv.fs_lstat(path)
+        if stat and stat.type == 'directory' and remove(path, true) then
+          local sidecar = manifest_path(path)
+          if M.fs.exists(sidecar) then remove(sidecar, false) end
+        end
+      end
+    else
+      local digest = name:match('^(%x+)%.manifest$')
+      if digest and #digest == 64 then
+        local base = M.paths.join(dir, digest)
+        local sidecar = M.paths.join(dir, name)
+        if not keep[M.paths.canonical(base)] and M.fs.exists(sidecar) then remove(sidecar, false) end
+      end
+    end
+  end
+  if first_err then return nil, first_err end
+  return true, removed
+end
+
+local function size_path(path)
+  local stat = vim.uv.fs_lstat(path)
+  if not stat then return nil, 'cannot inspect register path: ' .. tostring(path) end
+  if stat.type ~= 'directory' then return stat.size or 0 end
+  local scan, scan_err = vim.uv.fs_scandir(path)
+  if not scan then return nil, tostring(scan_err or ('cannot scan ' .. path)) end
+  local total = 0
+  while true do
+    local name = vim.uv.fs_scandir_next(scan)
+    if not name then break end
+    local child_size, child_err = size_path(M.paths.join(path, name))
+    if not child_size then return nil, child_err end
+    total = total + child_size
+  end
+  return total
+end
+
+-- size_bytes() includes snapshots, manifests and the current-content pointer.
+function M.size_bytes()
+  local dir = M.paths.data_dir_path('register')
+  local called, stat, stat_err, stat_code = pcall(vim.uv.fs_lstat, dir)
+  if not called then return nil, tostring(stat) end
+  if not stat then
+    if stat_code == 'ENOENT' then return 0 end
+    return nil, tostring(stat_err or stat_code or 'cannot inspect register directory')
+  end
+  if stat.type ~= 'directory' then return nil, 'register path is not a directory' end
+  local sized, total, size_err = pcall(size_path, dir)
+  if not sized then return nil, tostring(total) end
+  return total, size_err
+end
+
+local function cleanup_unreferenced(undo_lines, redo_lines)
+  local called, cleaned, clean_err = pcall(M.prune_unreferenced, undo_lines, redo_lines)
+  if not called then
+    clean_err, cleaned = cleaned, nil
+  end
+  if not cleaned then
+    M.ui.notify('direct: could not clean old register copies: ' .. tostring(clean_err), vim.log.levels.WARN)
+  end
+end
+
 -- yank(sources) -> true | nil, err. `sources` is a list of absolute paths.
 function M.yank(sources, options)
   options = options or {}
@@ -207,6 +333,7 @@ function M.yank(sources, options)
     end
     local ok, werr = M.log.write(M.paths.join(dir, 'content'), { dst })
     if not ok then return nil, werr end
+    cleanup_unreferenced(preflight.undo_lines, preflight.redo_lines)
     return true
   end)
 end
@@ -335,6 +462,7 @@ function M.yank_async(sources, callback)
     if index > #sources then
       local ok, werr = M.log.write(M.paths.join(dir, 'content'), { dst })
       if not ok then return finish(false, werr) end
+      cleanup_unreferenced(preflight.undo_lines, preflight.redo_lines)
       return finish(true)
     end
     local src = sources[index]
@@ -425,6 +553,7 @@ function M.yank_deleted(entries, options)
     if not written then return nil, write_err end
     local ok, werr = M.log.write(M.paths.join(dir, 'content'), { dst })
     if not ok then return nil, werr end
+    cleanup_unreferenced(preflight.undo_lines, preflight.redo_lines)
     for _, entry in ipairs(entries) do
       M.ui.notify('Yanked ' .. entry.src, vim.log.levels.INFO)
     end

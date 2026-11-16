@@ -25,14 +25,45 @@ H.describe('health: :checkhealth direct', function()
     H.assert_true(text:find('Git:', 1, true) ~= nil, 'the report includes Git availability/version')
     H.assert_true(text:find('undo.log: not initialized (fresh)', 1, true) ~= nil,
       'the report classifies fresh history')
+    H.assert_true(text:find('history steps: undo=0, redo=0 (limit=1000)', 1, true) ~= nil,
+      'the report includes both history step counts and their limit')
     H.assert_true(text:find('recovery journal: none', 1, true) ~= nil,
       'the report checks for interrupted transactions')
     H.assert_true(text:find('trash size: 0 bytes', 1, true) ~= nil,
       'the report includes the trash size')
+    H.assert_true(text:find('register size: 0 bytes', 1, true) ~= nil,
+      'the report includes the register size')
     H.assert_true(text:find('nvim-web-devicons:', 1, true) ~= nil,
       'the report notes optional icon-provider availability')
     H.assert_true(text:find('icons enabled:', 1, true) ~= nil,
       'the report includes current icon settings')
+  end)
+
+  H.it('warns when history reaches its limit or register storage exceeds 1 GiB', function()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    local source = H.mkfile(ws, 'source.txt', { 'register contents' })
+    local config = require('direct.config')
+    config.setup({ history_limit = 1, trash_retention = false })
+    H.assert_true(require('direct.register').yank({ source }), 'create a register snapshot')
+    local action = require('direct.action.action')
+    H.assert_true(require('direct.history.history').log(action.Touch(ws .. '/recorded.txt')),
+      'create one history step')
+
+    local register = require('direct.register')
+    local original_size = register.size_bytes
+    register.size_bytes = function() return 1024 * 1024 * 1024 + 1 end
+    vim.cmd('checkhealth direct')
+    register.size_bytes = original_size
+
+    local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+    H.assert_true(text:find('history steps: undo=1, redo=0 (limit=1)', 1, true) ~= nil,
+      'the one-step history size is reported')
+    H.assert_true(text:find('history_limit reached', 1, true) ~= nil,
+      'a full history stack is called out')
+    H.assert_true(text:find('register exceeds 1 GiB', 1, true) ~= nil,
+      'large register storage produces a warning')
+    config.setup({})
   end)
 
   H.it('reports damaged history without resetting it and flags a valid journal for recovery', function()

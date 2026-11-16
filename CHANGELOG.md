@@ -10,6 +10,9 @@ Notable changes to direct.vim are documented here. Versions follow
 - Keep deleted entries in trash and point the register at them instead of
   copying them; explicit yanks now copy in the background under the pending
   operation guard.
+- Limit undo and redo history to 1000 steps per stack and enable 90-day trash
+  retention by default; remove unreferenced old register copies and report
+  history counts and register size in `:checkhealth`.
 
 ## [0.3.0] - 2026-11-16
 

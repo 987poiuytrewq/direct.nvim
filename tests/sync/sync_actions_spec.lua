@@ -344,6 +344,43 @@ H.describe('sync: applying actions', function()
       'a replacement at the original path is not treated as the restored entry')
   end)
 
+  H.it('bounds save history and lets retention remove newly unreferenced trash', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'a-keep.txt', { 'keep' })
+    for index = 1, 5 do
+      H.mkfile(ws, 'file-' .. index .. '.txt', { tostring(index) })
+    end
+    local config = require('direct.config')
+    config.setup({
+      history_limit = 3,
+      trash_retention = { max_size_bytes = 1 },
+    })
+
+    local trash_paths = {}
+    for deleted = 5, 1, -1 do
+      local listing = buffer.list(ws)
+      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      H.assert_eq(lines[#lines], 'file-' .. deleted .. '.txt', 'delete the last visible file row')
+      vim.api.nvim_buf_set_lines(0, #lines - 1, #lines, false, {})
+      local ok, reason = listing:sync()
+      H.assert_true(ok == true, tostring(reason))
+
+      local entry = register.entries(register.content())[1]
+      trash_paths[deleted] = entry.path
+    end
+
+    local undo = history_lines('undo.log')
+    H.assert_eq(#undo, 4, 'the undo stack keeps its header and newest three saves')
+    H.assert_false(fs.exists(trash_paths[5]), 'retention removes the oldest unreferenced trash entry')
+    H.assert_false(fs.exists(trash_paths[4]), 'retention removes the next unreferenced trash entry')
+    for index = 1, 3 do
+      H.assert_true(fs.exists(trash_paths[index]), 'history still protects save ' .. index)
+    end
+    config.setup({})
+  end)
+
   H.it(':write on a clean listing reloads external filesystem changes', function()
     clean_buffers()
     local sb = H.sandbox()

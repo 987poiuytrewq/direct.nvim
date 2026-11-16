@@ -45,6 +45,7 @@
 ---@field collapse_single_entry_directories? boolean
 ---@field indent_size? integer
 ---@field undo_confirm? boolean|'elsewhere'
+---@field history_limit? integer
 ---@field trash_retention? false|direct.TrashRetention
 ---@field mappings? table<string, string|false>
 ---@field show_folder_icons? boolean
@@ -68,7 +69,8 @@ local defaults = {
   collapse_single_entry_directories = true,
   indent_size = 2,
   undo_confirm = 'elsewhere',
-  trash_retention = false,
+  history_limit = 1000,
+  trash_retention = { max_age_days = 90 },
   mappings = {},
   show_folder_icons = true,
   show_file_icons = true,
@@ -575,6 +577,8 @@ function M.setup(opts)
   for key, value in pairs(opts) do
     if defaults[key] == nil then
       require('direct.ui').notify(string.format("direct: unknown option '%s'", tostring(key)), vim.log.levels.ERROR)
+    elseif key == 'history_limit' and (type(value) ~= 'number' or value < 1 or value % 1 ~= 0) then
+      require('direct.ui').notify('direct: history_limit must be a positive integer', vim.log.levels.ERROR)
     elseif
       key == 'max_recursive_expand_depth'
       and value ~= false

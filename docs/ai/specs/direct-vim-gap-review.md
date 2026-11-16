@@ -1,6 +1,6 @@
 # Spec: direct.vim improvements, third review
 
-**Status:** PROPOSED. Five tasks, A26–A30; none has been started.
+**Status:** A30 is complete; A26–A29 remain proposed.
 
 **Source:** a third static review of `origin/master` at `ad25866`
 (12 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -13,7 +13,9 @@ in a running Neovim. Each task's first step is to write a failing test that
 reproduces the problem, or to record that it can't be reproduced and drop the
 task.
 
-**Last checked:** `origin/master` at `ad25866` (12 November 2026).
+**Last checked:** `origin/master` at `1a9b1a5` (16 November 2026). That check
+confirmed A30, including the `v0.3.0` tag and release, and found no new task IDs.
+A26–A29 remain proposed.
 
 ## Decisions
 
@@ -52,7 +54,7 @@ into each task below:
 | A27 | P2 | Proposed | Stop deletes on save from copying everything into the register first |
 | A28 | P3 | Proposed | Define, document and test edits to collapsed rows |
 | A29 | P3 | Proposed | Handle a busy history lock from another Neovim instance clearly |
-| A30 | P4 | Proposed | Release, coverage floor, wider CI and a stale comment |
+| A30 | P4 | Complete | Release, coverage floor, wider CI and a stale comment |
 
 ## Robustness and performance
 
@@ -217,6 +219,10 @@ uses a single separator and still renames correctly.
 
 ### A30 — Release, coverage floor, wider CI and a stale comment (P4)
 
+**Status: COMPLETE in #134.** `v0.3.0` is tagged and released. `make ci` now
+fails below 86% total coverage, latest stable Neovim runs on Linux, macOS and
+Windows, and the preflight comment matches the preserved-history behaviour.
+
 **Problem.**
 
 - 18 completed tasks are on `master` but not released (A7–A15, A22–A25),
@@ -245,8 +251,6 @@ uses a single separator and still renames correctly.
 
 ## Suggested order
 
-1. A30's `v0.3.0` release first. It's quick and gets A7–A25 to users.
-2. A27, then A26. A27 stops the biggest copies, and A26's register clean-up
+1. A27, then A26. A27 stops the biggest copies, and A26's register clean-up
    builds on it.
-3. A29 and A28, in either order.
-4. The rest of A30.
+2. A29 and A28, in either order.

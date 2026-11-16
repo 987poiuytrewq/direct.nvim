@@ -546,8 +546,11 @@ direct.vim is built so that a mistake can be undone:
   finished or reported after a crash.
 - Damaged or unknown history is preserved and blocks filesystem operations.
   `:DirectHistoryReset` first backs up readable history files before resetting.
-- Neovim instances on the same machine share a lock, so they don't change the
-  filesystem or the history at the same time.
+- Neovim instances on the same machine share a history lock. Busy locks are
+  retried for up to two seconds, and the error identifies the holder when
+  possible. The lock is released while a paste clash prompt is open or an
+  explicit yank copies in the background; on resume, the register, history and
+  destination are checked again.
 
 The lock file is stored at `<data>/direct/.direct-history.lock`. Do not run an
 older direct.vim version at the same time as this version: older versions use

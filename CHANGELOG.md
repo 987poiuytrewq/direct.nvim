@@ -13,6 +13,9 @@ Notable changes to direct.vim are documented here. Versions follow
 - Limit undo and redo history to 1000 steps per stack and enable 90-day trash
   retention by default; remove unreferenced old register copies and report
   history counts and register size in `:checkhealth`.
+- Retry busy history locks for up to two seconds with a clear message and holder
+  PID when available. Release the lock while paste prompts wait and explicit
+  yanks copy, then recheck the register, history and destination before resuming.
 
 ## [0.3.0] - 2026-11-16
 

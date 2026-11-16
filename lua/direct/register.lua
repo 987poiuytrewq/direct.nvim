@@ -25,6 +25,11 @@ function M.content()
   return lines[1]
 end
 
+local function content_identity()
+  local path = M.paths.join(M.paths.data_dir_path('register'), 'content')
+  return M.fs.entry_identity(path)
+end
+
 -- A delete-backed register keeps no copies. It stores a manifest next to the
 -- content directory that maps each yanked basename to its trash payload, so
 -- paste and the undo proof copy from trash instead of duplicating the tree.
@@ -367,9 +372,57 @@ function M._yank_one_async(dst, src, callback)
   return callback(false, 'cannot yank: unsupported entry type for ' .. tostring(src))
 end
 
+local async_yank_sequence = 0
+local function allocate_async_snapshot_dir(dir)
+  for _ = 1, 100 do
+    async_yank_sequence = async_yank_sequence + 1
+    local name = string.format('.direct-yank-%s-%d', tostring(vim.uv.os_getpid()), async_yank_sequence)
+    local path = M.paths.join(dir, name)
+    local made, err, code = M.fs.mkdir_exclusive(path, 448)
+    if made then return path end
+    if code ~= 'EEXIST' then return nil, err end
+  end
+  return nil, 'could not allocate a private register copy directory'
+end
+
+local function commit_async_snapshot(temp, dir, sorted_sources)
+  local digest = M.paths.digest(sorted_sources)
+  local pid = tostring(vim.uv.os_getpid())
+  for attempt = 0, 100 do
+    local name = digest
+    if attempt > 0 then
+      async_yank_sequence = async_yank_sequence + 1
+      name = M.paths.digest({
+        digest,
+        pid,
+        tostring(vim.uv.hrtime()),
+        tostring(async_yank_sequence),
+        tostring(attempt),
+      })
+    end
+    local path = M.paths.join(dir, name)
+    if not M.fs.exists(manifest_path(path)) then
+      local moved, err, code = M.fs.rename_noreplace(temp, path)
+      if moved then return path end
+      if code ~= 'EEXIST' then return nil, err end
+    end
+  end
+  return nil, 'could not allocate a unique register snapshot directory'
+end
+
+local function discard_async_snapshot(path)
+  if not path then return true end
+  local ok, err = M.fs.rm_tree(path)
+  if not ok then return nil, err end
+  local sidecar = manifest_path(path)
+  if M.fs.exists(sidecar) then return M.fs.rm_file(sidecar) end
+  return true
+end
+
 -- yank_async(sources[, callback]) -> true | nil, err. Explicit yanks keep a
--- copy because their source stays in place and may change. The copy runs in the
--- background under the pending guard; callback(ok, err) runs after it settles.
+-- copy because their source stays in place and may change. The history lock is
+-- held only for preflight and the final register-pointer switch; the private
+-- snapshot copy runs in the background under the pending guard.
 function M.yank_async(sources, callback)
   if M.pending.refuse('yank') then return nil, 'another direct operation is pending' end
   if type(sources) ~= 'table' then return nil, 'register.yank_async: a list of sources is required' end
@@ -400,27 +453,41 @@ function M.yank_async(sources, callback)
     M.ui.notify('direct: cannot yank: ' .. tostring(begin_err), vim.log.levels.WARN)
     return nil, begin_err
   end
-  local acquired, acquire_err = M.history.lock.acquire()
-  if not acquired then
-    M.pending.finish()
-    M.ui.notify('direct: cannot yank: ' .. tostring(acquire_err), vim.log.levels.ERROR)
-    return nil, acquire_err
+  local lock_held, finished, dst = false, false, nil
+  local previous_content, previous_identity
+  local copied_sources, skipped_sources = {}, {}
+
+  local function acquire_lock()
+    if lock_held then return true end
+    local acquired, err = M.history.lock.acquire()
+    if not acquired then return nil, err end
+    lock_held = true
+    return true
   end
 
-  local finished, lock_released = false, false
   local function release_lock()
-    if lock_released then return true end
-    lock_released = true
-    local ok, err = M.history.lock.release()
-    if not ok then
+    if not lock_held then return true end
+    lock_held = false
+    local released, err = M.history.lock.release()
+    if not released then
       M.ui.notify('direct: could not release the history lock: ' .. tostring(err), vim.log.levels.ERROR)
     end
-    return ok, err
+    return released, err
   end
-  local function finish(ok, err)
+
+  local function settle(ok, err)
     if finished then return end
     finished = true
     release_lock()
+    if not ok then
+      local removed, remove_err = discard_async_snapshot(dst)
+      if not removed then
+        M.ui.notify(
+          'direct: incomplete register copy preserved at ' .. tostring(dst) .. ': ' .. tostring(remove_err),
+          vim.log.levels.WARN
+        )
+      end
+    end
     M.pending.finish()
     if not ok and err ~= nil then M.ui.notify('direct: cannot yank: ' .. tostring(err), vim.log.levels.ERROR) end
     if type(callback) == 'function' then
@@ -429,54 +496,70 @@ function M.yank_async(sources, callback)
     end
   end
 
-  local preflight, preflight_err = M.history.preflight(sources)
-  if not preflight then
-    finish(false, preflight_err)
-    return nil, preflight_err
-  end
-  local dir, err = M.paths.ensure_data_dir('register')
-  if not dir then
-    finish(false, err)
+  local function fail_start(err)
+    settle(false, err)
     return nil, err
   end
+
+  local acquired, acquire_err = acquire_lock()
+  if not acquired then return fail_start(acquire_err) end
+  local initial_state, initial_preflight_err = M.history.preflight(sources)
+  if not initial_state then return fail_start(initial_preflight_err) end
+  previous_content = M.content()
+  previous_identity = content_identity()
+
+  local dir, dir_err = M.paths.ensure_data_dir('register')
+  if not dir then return fail_start(dir_err) end
   local sorted = vim.deepcopy(sources)
   table.sort(sorted)
-  local dst = M.paths.join(dir, M.paths.digest(sorted))
-  if not M.fs.exists(dst) then
-    local ok, merr = M.fs.mkdirp(dst)
-    if not ok then
-      finish(false, merr)
-      return nil, merr
-    end
-  end
-  if M.fs.exists(manifest_path(dst)) then
-    local ok, merr = M.fs.rm_file(manifest_path(dst))
-    if not ok then
-      finish(false, merr)
-      return nil, merr
-    end
-  end
+  dst, dir_err = allocate_async_snapshot_dir(dir)
+  if not dst then return fail_start(dir_err) end
+  local released, release_err = release_lock()
+  if not released then return fail_start(release_err) end
 
-  local index = 1
-  local function next_source()
-    if index > #sources then
-      local ok, werr = M.log.write(M.paths.join(dir, 'content'), { dst })
-      if not ok then return finish(false, werr) end
-      cleanup_unreferenced(preflight.undo_lines, preflight.redo_lines)
-      return finish(true)
+  local function switch_register()
+    local locked, lock_err = acquire_lock()
+    if not locked then return nil, lock_err end
+    local state, preflight_err = M.history.preflight(sources)
+    if not state then return nil, preflight_err end
+    local current_content = M.content()
+    local current_identity = content_identity()
+    if current_content ~= previous_content or not vim.deep_equal(current_identity, previous_identity) then
+      return nil, 'register changed while yank was copying; the newer register was kept'
     end
-    local src = sources[index]
-    index = index + 1
-    M._yank_one_async(dst, src, function(ok, skipped_or_err)
-      if not ok then return finish(false, skipped_or_err) end
+    local snapshot, rename_err = commit_async_snapshot(dst, dir, sorted)
+    if not snapshot then return nil, rename_err end
+    dst = snapshot
+    local written, write_err = M.log.write(M.paths.join(dir, 'content'), { dst })
+    if not written then return nil, write_err end
+    cleanup_unreferenced(state.undo_lines, state.redo_lines)
+    for _, src in ipairs(copied_sources) do
       M.ui.notify('Yanked ' .. src, vim.log.levels.INFO)
-      local n = skipped_or_err ~= nil and #skipped_or_err or 0
+      local skipped = skipped_sources[src]
+      local n = skipped ~= nil and #skipped or 0
       if n > 0 then
         M.ui.notify(
           'Skipped ' .. n .. ' ' .. (n == 1 and 'entry' or 'entries') .. ' that cannot be copied: ' .. src,
           vim.log.levels.WARN
         )
       end
+    end
+    return true
+  end
+
+  local index = 1
+  local function next_source()
+    if index > #sources then
+      local switched, switch_err = switch_register()
+      if not switched then return settle(false, switch_err) end
+      return settle(true)
+    end
+    local src = sources[index]
+    index = index + 1
+    M._yank_one_async(dst, src, function(ok, skipped_or_err)
+      if not ok then return settle(false, skipped_or_err) end
+      copied_sources[#copied_sources + 1] = src
+      if skipped_or_err ~= nil then skipped_sources[src] = skipped_or_err end
       next_source()
     end)
   end
@@ -686,26 +769,111 @@ function M.paste(dst, name, callback)
     M.ui.notify('direct: cannot paste: ' .. tostring(begin_err), vim.log.levels.WARN)
     return nil, begin_err
   end
-  local operation, lock_err = M.history.begin_paste(paste_action)
-  if not operation then
-    M.pending.finish()
-    M.ui.notify('direct: cannot paste: ' .. tostring(lock_err), vim.log.levels.ERROR)
-    return nil, lock_err
+  local operation
+  local paste_base_undo
+  local paste_segment_records = {}
+  local function begin_paste_segment()
+    if operation and operation.locked then return true end
+    local fresh, paste_begin_err = M.history.begin_paste(paste_action)
+    if not fresh then return nil, paste_begin_err end
+    operation = fresh
+    if paste_base_undo == nil then paste_base_undo = vim.deepcopy(fresh.transaction.base_undo) end
+
+    local current_register = M.content()
+    local current_names = current_register == src and M.entry_names(src) or nil
+    local current_entries = current_register == src and M.entries(src) or nil
+    local stable = current_register == src
+      and vim.deep_equal(current_names, names)
+      and vim.deep_equal(current_entries, entries)
+    if stable then
+      for _, entry_name in ipairs(pasteable) do
+        if not M.resolve(src, entry_name) then
+          stable = false
+          break
+        end
+      end
+    end
+    if not stable then
+      M.history.finish_paste(operation)
+      operation = nil
+      return nil, 'register changed while preparing paste; retry the operation'
+    end
+    return true
   end
-  local current_register = M.content()
-  local current_names = current_register == src and M.entry_names(src) or nil
-  if current_register ~= src or not vim.deep_equal(current_names, names) then
-    M.history.finish_paste(operation)
+
+  local function finish_paste_segment()
+    if not operation or not operation.locked then return true end
+    local completed_pairs = operation.transaction.completed or {}
+    local segment_record
+    if #completed_pairs > 0 then
+      local sources, destinations = {}, {}
+      for _, pair in ipairs(completed_pairs) do
+        sources[#sources + 1] = pair.src
+        destinations[#destinations + 1] = pair.dst
+      end
+      local action = M.action.Paste(src, dst, sources, destinations)
+      local serialize_err
+      segment_record, serialize_err = M.action.serialize(action)
+      if not segment_record then return nil, serialize_err end
+    end
+    local finished, finish_err = M.history.finish_paste(operation)
+    operation = nil
+    if not finished then return nil, finish_err end
+    if segment_record then paste_segment_records[#paste_segment_records + 1] = segment_record end
+    return true
+  end
+
+  local function coalesce_paste_segments()
+    if #paste_segment_records < 2 then return true end
+    local sources, destinations = {}, {}
+    for _, pair in ipairs(paste_action.renames or {}) do
+      sources[#sources + 1] = pair.src
+      destinations[#destinations + 1] = pair.dst
+    end
+    local merged = M.action.Paste(src, dst, sources, destinations)
+    local coalesced, err = M.history.coalesce_paste_segments(paste_base_undo, paste_segment_records, merged)
+    if not coalesced then
+      M.ui.notify('direct: pasted entries remain in separate undo steps: ' .. tostring(err), vim.log.levels.WARN)
+      return nil, err
+    end
+    return true
+  end
+
+  local segment_started, segment_lock_err = begin_paste_segment()
+  if not segment_started then
     M.pending.finish()
-    local message = 'register changed while preparing paste; retry the operation'
-    M.ui.notify('direct: cannot paste: ' .. message, vim.log.levels.WARN)
-    return nil, message
+    M.ui.notify('direct: cannot paste: ' .. tostring(segment_lock_err), vim.log.levels.ERROR)
+    return nil, segment_lock_err
+  end
+  paste_action._before_prompt = function()
+    local ready, ready_err = begin_paste_segment()
+    if not ready then return nil, ready_err end
+    return finish_paste_segment()
+  end
+  paste_action._after_prompt = function(pair, _source, answer)
+    pair.dst = answer
+    local ready, ready_err = begin_paste_segment()
+    if not ready then return nil, ready_err end
+    if M.fs.taken(M.paths.join(dst, answer)) then
+      local finished, finish_err = finish_paste_segment()
+      if not finished then return nil, finish_err end
+      return 'clash'
+    end
+    return true
   end
   paste_action._before_copy = function(pair, source, destination)
+    local ready, ready_err = begin_paste_segment()
+    if not ready then return nil, ready_err end
     return M.history.note_paste_pending(operation, pair, source, destination)
   end
-  paste_action._after_copy = function(pair) return M.history.note_paste_complete(operation, pair) end
-  paste_action._on_copy_conflict = function(pair) return M.history.cancel_paste_pending(operation, pair) end
+  paste_action._after_copy = function(pair)
+    if not operation or not operation.locked then return nil, 'paste history operation is not active' end
+    return M.history.note_paste_complete(operation, pair)
+  end
+  paste_action._on_copy_conflict = function(pair)
+    if not operation or not operation.locked then return nil, 'paste history operation is not active' end
+    return M.history.cancel_paste_pending(operation, pair)
+  end
   local completed, immediate_result, immediate_err = false, nil, nil
   local function finish(ok, result, execution_err)
     if completed then return end
@@ -722,8 +890,10 @@ function M.paste(dst, name, callback)
           local last = paste_action.renames[copied]
           if last then pasted_entry = M.paths.join(dst, last.dst) end
         end
-        local committed, commit_err = M.history.finish_paste(operation)
-        if not committed then M.ui.report_error('save paste history', commit_err) end
+        if operation and operation.locked then
+          local committed, commit_err = finish_paste_segment()
+          if not committed then M.ui.report_error('save paste history', commit_err) end
+        end
         if ok then
           M.ui.notify(M.action.summarize({ paste_action }), vim.log.levels.INFO)
         else
@@ -732,11 +902,14 @@ function M.paste(dst, name, callback)
       elseif not ok then
         M.ui.report_error('paste the entries', execution_err)
       else
-        local committed, commit_err = M.history.finish_paste(operation)
-        if not committed then M.ui.report_error('finish the paste operation', commit_err) end
+        if operation and operation.locked then
+          local committed, commit_err = finish_paste_segment()
+          if not committed then M.ui.report_error('finish the paste operation', commit_err) end
+        end
       end
+      if #paste_segment_records > 1 then coalesce_paste_segments() end
     end, debug.traceback)
-    if operation.locked then M.history.finish_paste(operation) end
+    if operation and operation.locked then finish_paste_segment() end
     M.pending.finish()
     if not final_ok then
       M.ui.report_error('finish the paste operation', final_err)

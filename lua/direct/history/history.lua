@@ -1036,6 +1036,36 @@ function M.with_trash_references(callback)
   end)
 end
 
+-- Coalesce paste segments committed around asynchronous prompts when no other
+-- history operation interleaved them. If history changed while the prompt was
+-- open, keep the independently undoable segments in their original order.
+function M.coalesce_paste_segments(base_undo, segment_records, merged_action)
+  if type(base_undo) ~= 'table' or type(segment_records) ~= 'table' or type(merged_action) ~= 'table' then
+    return nil, 'history.coalesce_paste_segments: invalid arguments'
+  end
+  if #segment_records < 2 then return true, false end
+  return M.with_lock(function()
+    local state, preflight_err = preflight_locked(action_paths(merged_action))
+    if not state then return nil, preflight_err end
+    if #state.undo_lines ~= #base_undo + #segment_records then return true, false end
+    if #state.redo_lines ~= 1 or state.redo_lines[1] ~= M.HEADER then return true, false end
+    for index, line in ipairs(base_undo) do
+      if state.undo_lines[index] ~= line then return true, false end
+    end
+    for index, record in ipairs(segment_records) do
+      if state.undo_lines[#base_undo + index] ~= record then return true, false end
+    end
+    local merged_record, serialize_err = M.action.serialize(merged_action)
+    if not merged_record then return nil, serialize_err end
+    local undo_lines = copy_lines(base_undo)
+    undo_lines[#undo_lines + 1] = merged_record
+    local committed, commit_err =
+      commit_stacks(state.undo_path, state.redo_path, state.transaction_path, undo_lines, { M.HEADER })
+    if not committed then return nil, commit_err end
+    return true, true
+  end)
+end
+
 -- Paths changed on disk by a reversal, excluding the private trash/register
 -- storage roots. These are the paths shown in the confirmation before an
 -- operation that is outside the current listing.

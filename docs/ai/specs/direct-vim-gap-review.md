@@ -1,6 +1,6 @@
 # Spec: direct.vim improvements, third review
 
-**Status:** A30 is complete; A26–A29 remain proposed.
+**Status:** A30 is complete; A26–A29 and A31 remain proposed.
 
 **Source:** a third static review of `origin/master` at `ad25866`
 (12 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -13,9 +13,9 @@ in a running Neovim. Each task's first step is to write a failing test that
 reproduces the problem, or to record that it can't be reproduced and drop the
 task.
 
-**Last checked:** `origin/master` at `1a9b1a5` (16 November 2026). That check
-confirmed A30, including the `v0.3.0` tag and release, and found no new task IDs.
-A26–A29 remain proposed.
+**Last checked:** `origin/master` at `91b2a1f` (16 November 2026). That check
+confirmed A30, including the `v0.3.0` tag (at `1a9b1a5`) and its published
+GitHub release, and added A31 from #133. A26–A29 remain proposed.
 
 ## Decisions
 
@@ -55,6 +55,7 @@ into each task below:
 | A28 | P3 | Proposed | Define, document and test edits to collapsed rows |
 | A29 | P3 | Proposed | Handle a busy history lock from another Neovim instance clearly |
 | A30 | P4 | Complete | Release, coverage floor, wider CI and a stale comment |
+| A31 | P4 | Proposed | Record the new Git-ignore deadline in the v0.3.0 changelog |
 
 ## Robustness and performance
 
@@ -249,8 +250,38 @@ Windows, and the preflight comment matches the preserved-history behaviour.
 **Tests.** None beyond CI itself: a deliberately lowered coverage figure fails
 `make ci` locally.
 
+### A31 — The v0.3.0 changelog leaves out the new Git-ignore deadline (P4)
+
+**Problem.** #133 (`b522cbb`) added `git.ignore_timeout_ms` and moved
+Git-ignore queries off `git.timeout_ms` (`ignore_timeout_ms()` in
+`lua/direct/git.lua`). So by default the ignore deadline drops from 1000 ms to
+200 ms. The change landed before the `v0.3.0` tag, so it shipped in v0.3.0, but
+neither the `[0.3.0]` section of `CHANGELOG.md` nor the GitHub release notes
+mention it.
+
+The new deadline also covers the retry a save makes after a timed-out listing,
+so in a slow repository the save refuses (`refuse_git_query` in
+`lua/direct/buffer/sync.lua`) at 200 ms instead of 1000 ms. Anyone upgrading
+who sees more "Git-ignore query timed out" warnings or refused saves has
+nothing in the release notes to explain them. They also won't know that
+`git.timeout_ms` no longer controls ignore queries.
+
+**Change.**
+
+- Add to `[0.3.0]` in `CHANGELOG.md`: under Added, the `git.ignore_timeout_ms`
+  option, default `200`; under Changed, that Git-ignore queries no longer use
+  `git.timeout_ms`, and that anyone who raised `git.timeout_ms` for a slow
+  repository should raise `git.ignore_timeout_ms` too.
+- Edit the v0.3.0 GitHub release notes to match.
+- Add a line to the README's release checklist: every merged pull request
+  since the last tag has a changelog entry.
+
+**Tests.** None. Check that the `[0.3.0]` section and the release notes both
+name `git.ignore_timeout_ms`.
+
 ## Suggested order
 
 1. A27, then A26. A27 stops the biggest copies, and A26's register clean-up
    builds on it.
 2. A29 and A28, in either order.
+3. A31 at any time; it only touches docs and the release notes.

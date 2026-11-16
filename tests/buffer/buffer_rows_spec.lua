@@ -206,11 +206,15 @@ H.describe('buffer: row identity and filtered rendering', function()
     H.assert_eq(listing:get_paths(2, 2), { ws .. '/sub/inside.txt' },
       'child path comes from its baseline, not root plus indentation')
     local register = require('direct.register')
-    local original_yank = register.yank
+    local original_yank_async = register.yank_async
     local yanked
-    register.yank = function(sources) yanked = vim.deepcopy(sources); return true end
+    register.yank_async = function(sources, callback)
+      yanked = vim.deepcopy(sources)
+      if callback then callback(true) end
+      return true
+    end
     local ok, err = pcall(direct.yank, 2, 2)
-    register.yank = original_yank
+    register.yank_async = original_yank_async
     if not ok then error(err) end
     H.assert_eq(yanked, { ws .. '/sub/inside.txt' }, 'DirectYank uses child identity')
 
@@ -218,6 +222,38 @@ H.describe('buffer: row identity and filtered rendering', function()
     H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/sub/inside.txt'),
       'open uses the child baseline path')
     H.assert_buf_eq({ 'inside' }, 0)
+  end)
+
+  H.it('DirectYank starts the copy in the background and holds the pending guard', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    local tree = H.mkdir(ws, 'tree')
+    H.mkfile(tree, 'inside.txt', { 'inside' })
+    local direct = require('direct')
+    direct.list(ws)
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    local register = require('direct.register')
+    local pending = require('direct.pending')
+    local test_fs = require('direct.fs')
+    local release
+    local restore = H.stub(test_fs, 'copy_tree_async', function(_, _, callback)
+      release = function() callback(true, {}) end
+      return true
+    end)
+
+    local before = register.content()
+    local ok, err = pcall(vim.cmd, 'DirectYank')
+    restore()
+
+    H.assert_true(ok, tostring(err))
+    H.assert_true(pending.is_pending(), 'the yank copy keeps the operation pending')
+    H.assert_eq(register.content(), before, 'the register waits for the copy')
+    H.assert_true(release ~= nil, 'the tree copy started')
+    release()
+    H.wait_for_direct()
+    H.assert_false(pending.is_pending(), 'the guard is released after the copy')
+    H.assert_not_nil(register.content(), 'the completed yank updates the register')
   end)
 
   H.it('preserves expanded root identity when refresh uses a resolved symlink alias', function()
@@ -277,11 +313,15 @@ H.describe('buffer: row identity and filtered rendering', function()
     -- b/. The real b/ row remains later in the buffer, making duplicate text.
     vim.api.nvim_buf_set_text(0, 0, 0, 0, 1, { 'b' })
     local register = require('direct.register')
-    local original_yank = register.yank
+    local original_yank_async = register.yank_async
     local yanked
-    register.yank = function(sources) yanked = vim.deepcopy(sources); return true end
+    register.yank_async = function(sources, callback)
+      yanked = vim.deepcopy(sources)
+      if callback then callback(true) end
+      return true
+    end
     local ok, err = pcall(vim.cmd, '4DirectYank')
-    register.yank = original_yank
+    register.yank_async = original_yank_async
     if not ok then error(err) end
 
     H.assert_eq(yanked, { ws .. '/unrelated.txt' },
@@ -311,11 +351,15 @@ H.describe('buffer: row identity and filtered rendering', function()
     -- make the first edited row eligible to inherit a/'s loaded expansion.
     vim.api.nvim_buf_set_lines(0, 2, 2, false, { 'b/' })
     local register = require('direct.register')
-    local original_yank = register.yank
+    local original_yank_async = register.yank_async
     local yanked
-    register.yank = function(sources) yanked = vim.deepcopy(sources); return true end
+    register.yank_async = function(sources, callback)
+      yanked = vim.deepcopy(sources)
+      if callback then callback(true) end
+      return true
+    end
     local ok, err = pcall(vim.cmd, '5DirectYank')
-    register.yank = original_yank
+    register.yank_async = original_yank_async
     if not ok then error(err) end
 
     H.assert_eq(yanked, { ws .. '/unrelated.txt' },
@@ -385,11 +429,15 @@ H.describe('buffer: row identity and filtered rendering', function()
     local before = H.fs_snapshot(ws)
 
     local register = require('direct.register')
-    local original_yank = register.yank
+    local original_yank_async = register.yank_async
     local yanked
-    register.yank = function(sources) yanked = vim.deepcopy(sources); return true end
+    register.yank_async = function(sources, callback)
+      yanked = vim.deepcopy(sources)
+      if callback then callback(true) end
+      return true
+    end
     local ok, err = pcall(vim.cmd, '4DirectYank')
-    register.yank = original_yank
+    register.yank_async = original_yank_async
     fs.path_identity = original_path_identity
     if not ok then error(err) end
 

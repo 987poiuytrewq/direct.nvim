@@ -779,6 +779,87 @@ local function async_callback(callback, ...)
   vim.schedule(function() callback(first, second, third) end)
 end
 
+-- copy_file_async(src, dst, callback) -> true. Copies asynchronously and calls
+-- callback(ok, err) on the main loop.
+function M.copy_file_async(src, dst, callback)
+  if type(callback) ~= 'function' then return nil, 'copy_file_async requires a callback' end
+  M.uv.fs_copyfile(src, dst, function(err)
+    vim.schedule(function() callback(err == nil, err and tostring(err) or nil) end)
+  end)
+  return true
+end
+
+-- copy_tree_async(src, dst, callback[, progress]) -> true. Best-effort recursive
+-- copy for the register: regular files are copied asynchronously, directories are
+-- recreated, and symlinks/unsupported entries are reported through the skipped
+-- list instead of failing the whole copy. callback(ok, skipped, err).
+function M.copy_tree_async(src, dst, callback, progress)
+  if type(callback) ~= 'function' then return nil, 'copy_tree_async requires a callback' end
+  local skipped = {}
+  local directories, directory_index = {}, 1
+  local files, file_index = {}, 1
+  local copied_files, total_files = 0, 0
+
+  local function fail(err) async_callback(callback, false, nil, err) end
+
+  local function copy_next_file()
+    if file_index > #files then
+      async_callback(callback, true, skipped)
+      return
+    end
+    local file = files[file_index]
+    file_index = file_index + 1
+    M.copy_file_async(file.src, file.dst, function(ok, copy_err)
+      if not ok then return fail(copy_err) end
+      copied_files = copied_files + 1
+      if progress then progress(copied_files, total_files, file.src, file.dst) end
+      copy_next_file()
+    end)
+  end
+
+  local function scan_next_directory()
+    while directory_index <= #directories do
+      local directory = directories[directory_index]
+      directory_index = directory_index + 1
+      local made, mkdir_err = M.mkdirp(directory.dst)
+      if not made then return fail(mkdir_err) end
+      local names, list_err = M.list_dir(directory.src)
+      if not names then return fail('cannot list: ' .. tostring(list_err or directory.src)) end
+      for _, name in ipairs(names) do
+        local child_src, child_dst = M.join(directory.src, name), M.join(directory.dst, name)
+        local kind, itype = classify(child_src, {})
+        if kind ~= nil then
+          skipped[#skipped + 1] = { path = child_src, kind = kind }
+        elseif itype == 'directory' then
+          directories[#directories + 1] = { src = child_src, dst = child_dst }
+        elseif itype == 'file' then
+          files[#files + 1] = { src = child_src, dst = child_dst }
+        end
+      end
+    end
+    total_files = #files
+    copy_next_file()
+  end
+
+  local st = M.stat(src)
+  if not st then return async_callback(callback, false, nil, 'cannot stat source: ' .. tostring(src)) end
+  if st.type == 'file' then
+    return M.copy_file_async(src, dst, function(ok, err)
+      if ok then
+        callback(true, nil, nil)
+      else
+        callback(false, nil, err)
+      end
+    end)
+  end
+  if st.type ~= 'directory' then
+    return async_callback(callback, false, nil, 'cannot copy unsupported source type ' .. tostring(st.type))
+  end
+  directories[1] = { src = src, dst = dst }
+  scan_next_directory()
+  return true
+end
+
 local function same_tree_async_file(src, dst, callback)
   local uv = M.uv
   uv.fs_open(src, 'r', 0, function(open_src_err, src_fd)

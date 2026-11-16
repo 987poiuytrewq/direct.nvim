@@ -172,8 +172,8 @@ H.describe('sync: applying actions', function()
     H.assert_fs_eq(ws, { 'a.txt' }, 'b.txt is gone from the workspace')
     local content = register.content()
     H.assert_not_nil(content, 'the register content pointer was written by the auto-yank')
-    H.assert_eq(vim.fn.readfile(content .. '/b.txt'), { 'b' },
-      'the deleted file was copied into the register before removal')
+    H.assert_eq(vim.fn.readfile(register.resolve(content, 'b.txt')), { 'b' },
+      'the deleted file is available from its trash payload')
     H.assert_notified('Yanked ' .. ws .. '/b.txt', vim.log.levels.INFO)
     local undo = history_lines('undo.log')
     H.assert_eq(undo[1], HEADER, 'the JSONL header is first')
@@ -198,8 +198,8 @@ H.describe('sync: applying actions', function()
     H.assert_false(vim.bo.modified, 'successful sync clears modified state')
     local content = register.content()
     H.assert_not_nil(content, 'the deleted file was auto-yanked')
-    H.assert_eq(vim.fn.readfile(content .. '/only.txt'), { 'only entry' },
-      'the deleted file is preserved in the register')
+    H.assert_eq(vim.fn.readfile(register.resolve(content, 'only.txt')), { 'only entry' },
+      'the deleted file is available from its trash payload')
     local undo = history_lines('undo.log')
     H.assert_eq(undo[1], HEADER, 'the JSONL header is first')
     H.assert_eq(decode_record(undo, 2).src, ws .. '/only.txt',
@@ -221,8 +221,8 @@ H.describe('sync: applying actions', function()
     H.assert_fs_eq(ws, { 'a.txt' }, 'the sub tree is gone')
     local content = register.content()
     H.assert_not_nil(content, 'the directory was auto-yanked')
-    H.assert_eq(vim.fn.readfile(content .. '/sub/inner.txt'), { 'i' },
-      'the yanked directory keeps its contents')
+    H.assert_eq(vim.fn.readfile(register.resolve(content, 'sub') .. '/inner.txt'), { 'i' },
+      'the yanked directory contents come from trash')
     H.assert_notified('Yanked ' .. ws .. '/sub/', vim.log.levels.INFO)
     local undo = history_lines('undo.log')
     H.assert_eq(decode_record(undo, 2).op, 'rmdir', 'an rmdir record was logged')
@@ -257,6 +257,91 @@ H.describe('sync: applying actions', function()
     H.assert_fs_eq(dst, { 'a.txt' }, 'the deleted entry landed in the paste destination')
     H.assert_eq(vim.fn.readfile(dst .. '/a.txt'), { 'A' },
       'the entry content survived the delete/paste round trip')
+  end)
+
+  H.it('delete-backed registers point at trash instead of copying the entry', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'a.txt', { 'A' })
+    H.mkfile(ws, 'keep.txt', { 'k' })
+
+    local _, ok = list_edit_and_sync(ws, { 'keep.txt' })
+    H.assert_true(ok == true, 'sync applied')
+
+    local content = register.content()
+    local entries = register.entries(content)
+    H.assert_eq(#entries, 1, 'one deleted entry is registered')
+    H.assert_eq(entries[1].name, 'a.txt')
+    H.assert_false(fs.exists(content .. '/a.txt'),
+      'the register does not duplicate the deleted file')
+    H.assert_true(fs.exists(entries[1].path),
+      'the manifest points at the deleted file in trash')
+    H.assert_true(entries[1].path ~= content .. '/a.txt',
+      'the manifest path is the trash payload, not a register copy')
+  end)
+
+  H.it('pastes and unpastes a delete-backed entry without touching its trash payload', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'a.txt', { 'A' })
+    H.mkfile(ws, 'keep.txt', { 'k' })
+    local _, ok = list_edit_and_sync(ws, { 'keep.txt' })
+    H.assert_true(ok == true, 'sync applied')
+
+    local content = register.content()
+    local entry = register.entries(content)[1]
+    local dst = H.mkdir(sb.root, 'dst')
+    H.assert_true(register.paste(dst) ~= nil, 'the delete-backed entry pastes')
+    H.assert_eq(vim.fn.readfile(dst .. '/a.txt'), { 'A' })
+    H.assert_true(fs.exists(entry.path), 'the trash payload survives the paste')
+
+    H.assert_true(history.undo() ~= nil, 'undo removes the pasted copy')
+    H.assert_false(fs.exists(dst .. '/a.txt'), 'the pasted copy was removed')
+    H.assert_true(fs.exists(entry.path), 'the trash payload survives the unpaste')
+  end)
+
+  H.it('pastes the restored original after undoing a delete', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'a.txt', { 'A' })
+    H.mkfile(ws, 'keep.txt', { 'k' })
+    local _, ok = list_edit_and_sync(ws, { 'keep.txt' })
+    H.assert_true(ok == true, 'sync applied')
+
+    local content = register.content()
+    H.assert_true(history.undo() ~= nil, 'undo restores the deleted file')
+    H.assert_true(fs.exists(ws .. '/a.txt'))
+    H.assert_eq(register.resolve(content, 'a.txt'), ws .. '/a.txt',
+      'the restored original is the fallback source')
+
+    local dst = H.mkdir(sb.root, 'dst')
+    H.assert_true(register.paste(dst) ~= nil, 'the restored original is still pasteable')
+    H.assert_eq(vim.fn.readfile(dst .. '/a.txt'), { 'A' })
+  end)
+
+  H.it('reports and skips a delete-backed entry whose trash payload is gone', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'a.txt', { 'A' })
+    H.mkfile(ws, 'keep.txt', { 'k' })
+    local _, ok = list_edit_and_sync(ws, { 'keep.txt' })
+    H.assert_true(ok == true, 'sync applied')
+
+    local content = register.content()
+    local entry = register.entries(content)[1]
+    H.assert_true(fs.rm_tree(entry.path), 'remove the trash payload from the fixture')
+    H.mkfile(ws, 'a.txt', { 'replacement' })
+    H.capture_messages()
+    local dst = H.mkdir(sb.root, 'dst')
+    H.assert_nil(register.paste(dst), 'nothing is pasted')
+    H.assert_notified('no longer available', vim.log.levels.WARN)
+    H.assert_fs_eq(dst, {}, 'the destination stays empty')
+    H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'replacement' },
+      'a replacement at the original path is not treated as the restored entry')
   end)
 
   H.it(':write on a clean listing reloads external filesystem changes', function()

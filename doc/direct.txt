@@ -89,7 +89,7 @@ data directory in use, run:
     To...       Do this ~
     Rename      Change a name, e.g. `old.txt` to `new.txt`.
     Create      Add a line, e.g. `notes.md` or `reports/2026/summary.md`.
-    Delete      Delete the line. The entry is yanked, so `p` puts it back.
+    Delete      Delete the line. The entry goes to trash, so `p` can put it back.
     Move        Re-indent the line under another expanded directory.
 
 4. Press `u` to undo the filesystem change.
@@ -178,8 +178,9 @@ than pairing lines by position. A single save can mix:
 
     Rename      Change the text of an existing line.
     Create      Add new lines anywhere.
-    Delete      Delete lines. Deleted entries are yanked first, so you can
-                paste them back with `p`.
+    Delete      Delete lines. Deleted entries go to trash and the register
+                points there, so you can paste them back with `p` without
+                keeping a second copy.
 
 A mixed save is one history entry, so one `u` reverses all its filesystem
 actions. Two rows with the same destination are refused. Direct permits
@@ -192,9 +193,10 @@ suggest restoring it, re-listing, or choosing another destination.
 A row whose mark survives a text edit is a rename. An unmarked row is a create,
 and a marked row that disappears is a delete. Whole-line replacements such as
 `cc` or `S` may invalidate the mark: if so, direct.vim treats the old row as a
-delete and the new row as a create. The deleted entry is yanked first. If text
-undo/redo leaves an original row's identity unclear, the save is refused and
-the listing must be reviewed or re-listed. A duplicate line is always refused.
+delete and the new row as a create. The deleted entry is kept in trash and
+referenced by the register. If text undo/redo leaves an original row's identity
+unclear, the save is refused and the listing must be reviewed or re-listed. A
+duplicate line is always refused.
 
 Directories and files ~
                                                    *direct.vim-separator-rule*
@@ -243,8 +245,8 @@ a directory created in the same edit. Renamed and moved directories carry
 their contents and keep their visible expansions where possible.
 
 Deleting a directory row deletes its whole tree, including expanded
-descendants, and yanks it first. To keep some of the descendants, re-indent
-them under another directory in the same edit.
+descendants, and keeps it in trash for undo and register paste. To keep some of
+the descendants, re-indent them under another directory in the same edit.
 
 If you move or rename a directory and also edit its descendants, you may need
 to save the two changes separately. direct.vim refuses the save when it can't
@@ -344,8 +346,15 @@ Yanking ~
 the selected lines. Directories are yanked with all their contents. Entries
 inside expanded directories can be yanked too.
 
-The yank is copied into direct.vim's own register in the data directory, so it
-is shared between Neovim instances. It is separate from Vim's registers.
+The register is shared between Neovim instances and is separate from Vim's
+registers. An explicit yank (`yy`, `Y`, or visual `y`) copies the selected
+entries into the register because their sources remain in place. The copy runs
+in the background; other Direct operations are refused until it finishes.
+
+After a save deletes entries, the register points at their trash payloads
+instead of making another copy. `p` copies from trash. If undo restores a
+deleted entry, paste uses the restored original path; if the entry is no longer
+available, paste warns and skips it.
 
 Pasting ~
 

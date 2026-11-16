@@ -19,8 +19,9 @@ copies show a progress notification.
 - **Undo filesystem changes.** `u` and `<C-r>` undo and redo saved renames,
   creates, deletes and pastes. With unsaved listing edits, they undo or redo
   buffer text instead. The filesystem history survives restarts.
-- **Yank and paste files.** `yy` and `p` copy files and whole directory trees
-  from a clean listing; paste is refused while listing edits are unsaved.
+- **Yank and paste files.** `yy` copies files and whole directory trees in the
+  background; after a delete, the register uses the trash entry instead of a
+  second copy. Paste is refused while listing edits are unsaved.
 - **Git integration.** Status symbols and colours, a changed-files-only view,
   stage/reset/restore keys, and `.gitignore` filtering.
 - **No dependencies.** Pure Lua and no Python. Icons work without an icon
@@ -120,7 +121,7 @@ release notes. lazy.nvim users can select tagged releases with `version = '*'`.
 |--------|-------------------------------------------------------------|
 | Rename | Change a name, e.g. `old.txt` → `new.txt`                   |
 | Create | Add a line, e.g. `notes.md` or `reports/2026/summary.md`    |
-| Delete | Delete the line (the entry is yanked, so `p` puts it back)  |
+| Delete | Delete the line (the entry goes to trash, so `p` can put it back) |
 | Move   | Re-indent the line under another expanded directory         |
 
 4. Changed your mind? Press `u` to undo the filesystem change.
@@ -133,7 +134,7 @@ release notes. lazy.nvim users can select tagged releases with `version = '*'`.
 - **A save can mix root renames, creates and deletes.** Direct pairs edited
   rows by their row identities, not by line position. The whole save is one
   undoable history entry when it mixes change types; deleted entries are
-  yanked before removal.
+  kept in trash and referenced by the register.
 - **A row's identity decides whether an edit is a rename.** Editing its name
   while the row mark survives is a rename. An unmarked row is a create, and a
   marked row that disappears is a delete. If a whole-line edit such as `cc` or

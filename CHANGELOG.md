@@ -5,6 +5,12 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- Keep deleted entries in trash and point the register at them instead of
+  copying them; explicit yanks now copy in the background under the pending
+  operation guard.
+
 ## [0.3.0] - 2026-11-16
 
 ### Changed

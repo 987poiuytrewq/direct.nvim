@@ -55,6 +55,31 @@ H.describe('register', function()
     H.assert_eq(count, 2, 'exactly one Yanked line per source')
   end)
 
+  H.it('async yank returns while the copy is pending and holds the guard', function()
+    local sb = H.sandbox()
+    local tree = H.mkdir(sb.root, 'tree')
+    H.mkfile(tree, 'a.txt', { 'a' })
+    local source = tree .. '/'
+    local pending = reg.pending
+    local release
+    local restore = H.stub(fs, 'copy_tree_async', function(_, _, callback)
+      release = function() callback(true, {}) end
+      return true
+    end)
+
+    local before = reg.content()
+    local started, start_err = reg.yank_async({ source })
+    restore()
+
+    H.assert_true(started == true, tostring(start_err))
+    H.assert_true(pending.is_pending(), 'the copy keeps the yank pending')
+    H.assert_eq(reg.content(), before, 'the register pointer waits for the copy')
+    H.assert_true(release ~= nil, 'the tree copy started')
+    release()
+    H.assert_false(pending.is_pending(), 'the guard is released after the copy')
+    H.assert_eq(reg.content(), sorted_dst(sb, { source }), 'the copy updates the register')
+  end)
+
   -- Yank destroys nothing, so an uncopyable entry should be skipped and reported
   -- rather than failing the yank or disappearing silently.
   H.it('a yank of a tree holding a symlink succeeds and reports the skipped entry', function()

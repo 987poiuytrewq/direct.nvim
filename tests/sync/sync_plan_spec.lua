@@ -90,8 +90,8 @@ H.describe('sync: mixed root edits', function()
       'an unmarked replacement is a new empty entry, not a positional rename')
     local content = register.content()
     H.assert_not_nil(content, 'the removed source is auto-yanked')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(content, 'old.txt')), { 'original contents' },
-      'the deleted contents remain available in the register')
+    H.assert_eq(vim.fn.readfile(register.resolve(content, 'old.txt')), { 'original contents' },
+      'the deleted contents remain available from trash')
     H.assert_eq(#history_lines('undo.log'), 2, 'delete and create are one history entry')
 
     require('direct').undo()
@@ -201,7 +201,7 @@ H.describe('sync: mixed root edits', function()
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'sub/child-renamed.txt')), { 'child' })
     local content = register.content()
     H.assert_not_nil(content, 'the root deletion is auto-yanked')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(content, 'b-root.txt')), { 'root B' })
+    H.assert_eq(vim.fn.readfile(register.resolve(content, 'b-root.txt')), { 'root B' })
     H.assert_eq(#history_lines('undo.log'), 2,
       'the combined root and child save is one undo entry')
 
@@ -244,7 +244,7 @@ H.describe('sync: mixed root edits', function()
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sub, 'child-renamed.txt')), { 'child' })
     local content = register.content()
     H.assert_not_nil(content, 'the displaced destination is auto-yanked')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(content, 'a.txt')), { 'original a' })
+    H.assert_eq(vim.fn.readfile(register.resolve(content, 'a.txt')), { 'original a' })
     H.assert_eq(#history_lines('undo.log'), 2, 'the whole edit is one batch history entry')
 
     require('direct').undo()

@@ -849,9 +849,14 @@ H.describe('Git status display', function()
       yank_calls = yank_calls + 1
       return true
     end)
+    local restore_yank_async = H.stub(register, 'yank_async', function()
+      yank_calls = yank_calls + 1
+      return true
+    end)
     local deleted_row = 5
     H.assert_true(direct.yank(deleted_row, deleted_row), 'yanking a deleted row is ignored')
     restore_yank()
+    restore_yank_async()
     H.assert_eq(yank_calls, 0, 'deleted rows do not enter the yank register')
     vim.api.nvim_win_set_cursor(0, { deleted_row, 0 })
     H.assert_true(direct.paste(), 'pasting onto a deleted row is ignored')

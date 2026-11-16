@@ -13,9 +13,9 @@ in a running Neovim. Each task's first step is to write a failing test that
 reproduces the problem, or to record that it can't be reproduced and drop the
 task.
 
-**Last checked:** `origin/master` at `f929c2b` (16 November 2026). That check
-confirmed A27 (#136) in the code, and noted its effect on A26 and A29 in
-those tasks. A26, A28, A29 and A31 remain proposed.
+**Last checked:** `origin/master` at `271001d` (16 November 2026). That check
+confirmed A26 (#138) in the code and added A32, a slowdown it introduces once
+the history is full. A28, A29, A31 and A32 remain proposed.
 
 ## Decisions
 
@@ -56,6 +56,7 @@ into each task below:
 | A29 | P3 | Proposed | Handle a busy history lock from another Neovim instance clearly |
 | A30 | P4 | Complete | Release, coverage floor, wider CI and a stale comment |
 | A31 | P4 | Proposed | Record the new Git-ignore deadline in the v0.3.0 changelog |
+| A32 | P2 | Proposed | Stop a full history from making every save rescan the whole trash |
 
 ## Robustness and performance
 
@@ -193,6 +194,45 @@ process, an operation in the first
 retries, then fails with the new message. If the second process releases it
 within the retry window, the operation succeeds.
 
+### A32 — Once the history is full, every save rescans the whole trash (P2)
+
+**Problem.** A26 (#138) caps each stack at `history_limit` steps.
+`commit_stacks` (`lua/direct/history/history.lua`, around line 606) trims the
+stacks, then `after_stack_commit` (around line 559) runs two clean-ups:
+
+- **Trash retention, forced.** When any steps were dropped, it calls
+  `trash.apply_retention({ force = true, ... })`. `force` skips the
+  once-per-session limit that #113 added, because automatic retention is
+  expensive: `trash.entries` (`lua/direct/trash.lua`, around line 80) reads
+  every entry's metadata and measures its size recursively (`path_size`).
+  Once a stack holds 1000 steps, every new step drops the oldest one. So from
+  then on, every save, paste and redo makes a full trash scan, and that cost
+  grows with the size of the trash, which can be many gigabytes.
+- **Register pruning, every time.** `register.prune_unreferenced`
+  (`lua/direct/register.lua`, around line 151) runs after every commit, and
+  again after every yank. It deserializes every record on both stacks (up to
+  2000 with the default limit) to find paste references, on top of the parse
+  the operation itself already made (see A26's last point).
+
+Both run while the history lock is held, so other Neovim instances wait too
+(see A29).
+
+**Change.**
+
+- Don't force retention on each trim. Collect the trash paths that the dropped
+  records referred to, and check only those against the retention policy. Or
+  keep the once-per-session limit and only clear it when steps are dropped,
+  at most once per session.
+- Prune the register only when the set of paste references can have changed:
+  when a paste record is added or dropped, or when the register's `content`
+  pointer moves. Reuse the records the operation already parsed instead of
+  deserializing both stacks again.
+
+**Tests.** With `history_limit = 3` and a full history, five more saves make
+at most one full trash scan (count calls to `trash.entries`). A dropped
+record's trash entry older than `max_age_days` is still removed. A save with
+no paste records doesn't deserialize the stacks for register pruning.
+
 ## Features and usability
 
 ### A28 — Edits to collapsed rows aren't defined or tested (P3)
@@ -300,5 +340,6 @@ name `git.ignore_timeout_ms`.
 
 1. A27 and A26 are complete. A27 stops the biggest copies, and A26's register
    clean-up builds on it.
-2. A29 and A28, in either order.
-3. A31 at any time; it only touches docs and the release notes.
+2. A32, before the next release, since 1000 steps is the default.
+3. A29 and A28, in either order.
+4. A31 at any time; it only touches docs and the release notes.

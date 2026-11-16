@@ -517,7 +517,7 @@ Nested-repository discovery skips ignored and untracked folders; unreadable
 folders are skipped with a warning naming them.
 
 Git must be installed when the filter is on. Ignore queries use
-|direct-git.timeout_ms|. If one times out, the listing succeeds with Git-ignore
+|direct-git.ignore_timeout_ms|. If one times out, the listing succeeds with Git-ignore
 filtering omitted, ignored entries remain visible, and an in-buffer warning is
 shown. Other query errors still fail the listing rather than guessing.
 
@@ -625,6 +625,7 @@ Calling `setup()` is optional. These are the defaults:
       },
       git = {
         enabled = true,
+        ignore_timeout_ms = 200,
         show_symbols = true,
         show_deleted = true,
         symbols = {
@@ -783,12 +784,16 @@ git.enabled             boolean (default: `true`)
 
                                                        *direct-git.timeout_ms*
 git.timeout_ms           positive integer (default: `1000`)
-    Maximum time in milliseconds for Git status and Git-ignore queries. Status
-    runs in the background; a timeout leaves the listing usable without status.
-    A timed-out ignore query leaves ignored entries visible for that listing,
-    marks the listing unfiltered, and warns once per repository. Saving retries
-    the query; if it still times out or a changed entry would be hidden, use `gi`
-    to turn off filtering without discarding edits.
+    Maximum time in milliseconds for the background Git status query. A timeout
+    leaves the listing usable without status.
+
+                                                  *direct-git.ignore_timeout_ms*
+git.ignore_timeout_ms    positive integer (default: `200`)
+    Maximum time in milliseconds for Git-ignore queries. A timed-out query leaves
+    ignored entries visible for that listing, marks the listing unfiltered, and
+    warns once per repository. Saving retries the query; if it still times out
+    or a changed entry would be hidden, use `gi` to turn off filtering without
+    discarding edits.
 
                                                      *direct-git.show_symbols*
 git.show_symbols        boolean (default: `true`)

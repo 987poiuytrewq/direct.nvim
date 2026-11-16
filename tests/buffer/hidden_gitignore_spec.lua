@@ -378,7 +378,7 @@ H.describe('hidden and Git-ignore filtering', function()
 
   H.it('falls back to an unfiltered listing when Git-ignore queries time out', function()
     require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, timeout_ms = 40 } })
+      git = { enabled = false, ignore_timeout_ms = 40 } })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'timed-out-ignore-repo')
     H.mkfile(root, '.gitignore', '*.tmp\n')
@@ -422,7 +422,7 @@ H.describe('hidden and Git-ignore filtering', function()
       'repeated timeouts in one repository do not repeat the warning')
     vim.system = original_system
     require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, timeout_ms = 5000 } })
+      git = { enabled = false, ignore_timeout_ms = 5000 } })
 
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new.txt' })
     local ok, err = listing:sync()
@@ -433,7 +433,7 @@ H.describe('hidden and Git-ignore filtering', function()
 
   H.it('retries a timed-out ignore snapshot when Git is available again', function()
     require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, timeout_ms = 40 } })
+      git = { enabled = false, ignore_timeout_ms = 40 } })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'recovering-ignore-repo')
     H.mkfile(root, '.gitignore', '*.tmp\n')
@@ -455,7 +455,7 @@ H.describe('hidden and Git-ignore filtering', function()
     local listing = require('direct').list(root)
     vim.system = original_system
     require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, timeout_ms = 5000 } })
+      git = { enabled = false, ignore_timeout_ms = 5000 } })
     H.assert_not_nil(listing, 'initial timeout leaves a listing available')
     H.assert_true(vim.b.direct_gitignore_timed_out, 'unfiltered state is visibly marked')
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new.txt' })
@@ -468,7 +468,7 @@ H.describe('hidden and Git-ignore filtering', function()
 
   H.it('refuses a recovered save when an edited row would be Git-ignored', function()
     require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, timeout_ms = 40 } })
+      git = { enabled = false, ignore_timeout_ms = 40 } })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'edited-ignored-timeout-repo')
     H.mkfile(root, '.gitignore', '*.tmp\n')
@@ -491,7 +491,7 @@ H.describe('hidden and Git-ignore filtering', function()
     local listing = require('direct').list(root)
     vim.system = original_system
     require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, timeout_ms = 5000 } })
+      git = { enabled = false, ignore_timeout_ms = 5000 } })
     H.assert_true(vim.b.direct_gitignore_timed_out, 'the initial listing is unfiltered')
 
     local row = row_of(H.buf_lines(), 'ignored.tmp')
@@ -511,7 +511,7 @@ H.describe('hidden and Git-ignore filtering', function()
 
   H.it('keeps a repeated timeout visible, refuses save, and lets gi disable the filter', function()
     require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, timeout_ms = 40 } })
+      git = { enabled = false, ignore_timeout_ms = 40 } })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'persistent-timeout-ignore-repo')
     H.mkfile(root, '.gitignore', '*.tmp\n')

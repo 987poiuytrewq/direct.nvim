@@ -766,7 +766,7 @@ end
 
 local function ignore_timeout_ms()
   local config = require('direct.config')
-  return config.options.git.timeout_ms
+  return config.options.git.ignore_timeout_ms
 end
 
 local function timeout_message(err, timeout_ms)

@@ -1,36 +1,59 @@
-# Spec: direct.vim improvements, third review
+# Spec: direct.vim improvements, fourth review
 
-**Status:** A26–A32 are complete.
+**Status:** A33–A42 are open.
 
-**Source:** a third static review of `origin/master` at `ad25866`
-(12 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
-M1–M6 and A1–A25) is complete and has been removed from this doc; the previous
-version, with each task's history, is in git at `ad25866`. Numbering carries on
-from A25 so IDs stay unique.
+**Source:** a fourth static review of `origin/master` at `1af1402`
+(17 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
+M1–M6 and A1–A32) is complete and has been removed from this doc; the previous
+version, with each task's history, is in git at `1af1402`. Numbering carries on
+from A32 so IDs stay unique.
 
-As before, the findings come from reading the code; none has been reproduced
-in a running Neovim. Each task's first step is to write a failing test that
-reproduces the problem, or to record that it can't be reproduced and drop the
-task.
+This review is **static**. It was done by reading the code, running size and
+dependency scans over `lua/direct`, and reading the tests, CI and docs. Neovim
+was not available, so the suite was not run and no finding has been reproduced.
+Each task's first step is to confirm the problem: write a failing test, take a
+measurement, or record that it can't be reproduced and drop the task. The
+function-size figures come from a rough scan of top-level functions, so treat
+them as a guide to where to look, not as exact counts.
 
-**Last checked:** `origin/master` at `8ba41a4` (17 November 2026). That check
-confirms A31 (#147); all tasks in this review are complete.
+**Last checked:** `origin/master` at `1af1402` (17 November 2026).
 
-## Decisions
+## What this review found
 
-These were settled with the maintainer on 12 November 2026 and are written
-into each task below:
+The earlier reviews dealt with data safety, and it shows: the filesystem and
+history code is careful, journaled and heavily tested. What is left is mostly
+about **how the code is organised**, plus two places where work still happens
+on the editor's main thread.
 
-- **A26:** `history_limit` defaults to 1000 steps per stack, and trash
-  retention is on by default, removing unreferenced entries after 90 days.
-- **A27:** after a delete, the register points at the deleted entries in the
-  trash instead of copying them.
-- **A28:** deleting a collapsed row removes the whole chain it shows, but never
-  anything that wasn't visible.
-- **A29:** an asynchronous paste releases the history lock while its prompt
-  is open.
-- **A30:** the next release is `v0.3.0`, tagged now with A7–A25. A26–A29 go in
-  a later release.
+- **Structure.** `lua/direct` is about 20,000 lines in 48 files, and the tests
+  are about 22,000 lines. Fourteen modules are "splits" that take a context
+  table from their parent and install functions back into it. They are
+  separate files, but not separate modules (A37). The same operations are
+  written twice, as a synchronous and an asynchronous version (A35).
+- **Boundaries.** Several modules do jobs their names and header comments don't
+  describe: trash code in `action.lua`, a Git restore feature inside the
+  `init.lua` facade, LSP rename notifications and trash bookkeeping inside
+  `history.lua` (A36).
+- **Size.** By a rough scan, 15 functions are over 100 lines, one of them 341
+  (A38).
+- **Main thread.** Two paths still wait synchronously: Tab completion for
+  `--ref`, and the history lock's retry (A33, A34).
+- **Guard rails.** Lint covers `lua/direct` only, nothing checks that the
+  README and help match the code, and the repository has no contributing,
+  security or issue templates (A39–A41).
+
+## Open questions
+
+These need a maintainer's call before the task that depends on them starts.
+Each task below says what it assumes until then.
+
+- **A33:** how long may Tab completion wait for Git? The task assumes 150 ms,
+  with a short cache.
+- **A37:** is the maintainer happy with several small refactor PRs that change
+  no behaviour? The task assumes yes, one module per PR, with the existing
+  tests unchanged as the safety net.
+- **A42:** should upgrading users be told, before the first removal, that
+  90-day trash retention is now on? The task assumes a one-time notice.
 
 ## Conventions
 
@@ -39,326 +62,417 @@ into each task below:
 - Keep the existing guarantees: changes never overwrite an existing entry,
   history is journaled, unsaved listing edits are never discarded without an
   explicit `!`, and the repo's own test harness is used.
+- Refactor tasks (A35–A38) change no behaviour. The existing tests must pass
+  unchanged, and a test that has to change needs a sentence in the PR saying
+  why it was coupled to structure.
 - Update `README.md`, `doc/direct.txt` and `CHANGELOG.md` (under
   `[Unreleased]`) whenever behaviour, options or mappings change.
 - Priorities: **P1** can lose the user's work or data, **P2** is a safety,
-  robustness or release gap, **P3** is a usability or feature gap, **P4** is
-  project maturity.
+  robustness or release gap, **P3** is a maintainability or feature gap,
+  **P4** is project maturity.
 
 ## Task list
 
 | ID | Priority | Status | Task |
 |----|----------|--------|------|
-| A26 | P2 | Complete | Stop history, trash and register from growing forever |
-| A27 | P2 | Complete | Stop deletes on save from copying everything into the register first |
-| A28 | P3 | Complete | Define, document and test edits to collapsed rows |
-| A29 | P3 | Complete | Handle a busy history lock from another Neovim instance clearly |
-| A30 | P4 | Complete | Release, coverage floor, wider CI and a stale comment |
-| A31 | P4 | Complete | Record the new Git-ignore deadline in the v0.3.0 changelog |
-| A32 | P2 | Complete | Stop a full history from making every save rescan the whole trash |
+| A33 | P2 | Open | Stop `--ref` Tab completion from waiting on Git on the main thread |
+| A34 | P2 | Open | Stop the history lock's retry from blocking and re-entering the editor |
+| A35 | P3 | Open | Write each filesystem action once, not as sync and async copies |
+| A36 | P3 | Open | Move trash, Git-restore and LSP code out of modules that don't own it |
+| A37 | P3 | Open | Turn the context-injection "splits" into real modules |
+| A38 | P3 | Open | Break up the longest functions and stop new ones appearing |
+| A39 | P3 | Open | Split `config.lua` and check the README and help against the defaults |
+| A40 | P4 | Open | Lint all Lua, not only `lua/direct`, and clear stale comments |
+| A41 | P4 | Open | Add contributing, security and issue/PR templates |
+| A42 | P4 | Open | Release the A26–A32 defaults with an upgrade notice |
 
 ## Robustness and performance
 
-### A26 — History, trash and register grow forever (P2)
+### A33 — `--ref` Tab completion waits on Git on the main thread (P2)
 
-**Status: COMPLETE in #138.** History is capped at 1000 steps per stack,
-90-day trash retention is on by default, unused register snapshots are pruned,
-and `:checkhealth` reports history counts and register size.
+**Problem.** `ref_completions` in `lua/direct/git_commands.lua` (around line
+150) starts `git for-each-ref` and then calls `process:wait(timeout)` with
+`git.timeout_ms`, which defaults to 1000 ms. A completion function runs on the
+editor's main thread, so every Tab press on `--ref=` in `:DirectGitDiff`
+blocks Neovim until Git answers or a second passes. In a large repository, or
+on a slow disk or network mount, that is a visible freeze each time, and the
+list is rebuilt from scratch on every press.
+
+`directory_completions` in the same file also scans a directory with
+`fs_scandir` on every press. That is cheap for ordinary directories, but it
+has no bound either.
+
+**Change.**
+
+- Use a much shorter deadline for completion than for status, for example
+  150 ms, in a separate constant. On a timeout, return no candidates and do not
+  show an error.
+- Cache the ref list per repository root for a few seconds, so repeated Tab
+  presses and narrowing the prefix don't start a new `git` each time. Throw the
+  cache away when the root changes.
+- Optionally warm the cache in the background the first time the command line
+  is opened for `DirectGitDiff`, so the first Tab is instant.
+- Cap the number of candidates returned from a directory scan.
+
+**Tests.** With a stubbed `vim.system` that never finishes, completion returns
+an empty list within the deadline. A second call within the cache window
+doesn't start `git`. After the window, or after the root changes, it does.
+Candidates for a prefix are still filtered and sorted as before.
+
+### A34 — The history lock's retry blocks and re-enters the editor (P2)
+
+**Problem.** A29 made a busy lock retry for up to two seconds.
+`acquire_file_lock` in `lua/direct/history/lock.lua` (around line 64) does that
+with `vim.wait(RETRY_TIMEOUT_MS, ..., RETRY_INTERVAL_MS)`.
+
+- **The editor is stuck for up to two seconds** while another instance holds
+  the lock. Saves, undo and yank callers reach this from key mappings.
+- **`vim.wait` runs the event loop.** Timers, autocommands, scheduled
+  callbacks and further keypresses can run in the middle of the wait. That
+  includes other direct.vim code, such as a refresh scheduled by an earlier
+  operation. `acquire` is called before the caller has necessarily claimed
+  `pending`, so a second operation could start while the first is still
+  waiting for the lock.
+- The wait is used even by callers that are already asynchronous
+  (`apply_async`, `yank_async`), which could retry from a timer instead.
+
+**Change.**
+
+- In the asynchronous paths, replace the blocking wait with a `vim.uv` timer
+  that retries `acquire` every `RETRY_INTERVAL_MS`, and call back when it
+  succeeds or the window ends. Give `lock.acquire_async(callback)` the same
+  messages and the same two-second window as the blocking version.
+- Keep the blocking `acquire` for the genuinely synchronous callers, but take
+  the `pending` guard before it waits, so a re-entrant operation is refused
+  with the usual message.
+- Make sure nothing else in this module touches `depth`, `token` or
+  `held_path` while a wait is in progress.
+
+**Tests.** With the lock held by a second process, an asynchronous operation
+returns to the event loop immediately, and a timer scheduled during the wait
+still fires. A keypress-driven second operation during the wait is refused
+because the first is pending. If the other process releases within the window,
+the first operation succeeds. After the window it fails with the existing
+message.
+
+## Architecture and maintainability
+
+### A35 — Every filesystem action is written twice (P3)
+
+**Problem.** In `lua/direct/action/action.lua`, each action factory defines
+both `_execute` and `_execute_async` by hand:
+
+- `Remove` (around line 297) and `RemoveDirectory` (around line 402) are almost
+  line-for-line identical. The only differences are the `warn_cross_device_trash`
+  call and the name. The metadata-rollback block (clear the trash metadata,
+  warn if that fails) is copied four times in those two functions.
+- `Restore` (around line 492) and `RestoreDirectory` (around line 550) differ
+  only in whether the reservation marker is a file or a directory.
+- `Paste` (around line 660, 187 lines) and `Unpaste` (around line 928, 168
+  lines) each carry a synchronous and an asynchronous implementation of the
+  same state machine.
+
+Both modes are used in production: saves run `action_mod.execute_async`
+(`lua/direct/buffer/sync.lua`, around line 1057) and also `action_mod.execute`
+(around line 1084), and `lua/direct/trash.lua` uses the synchronous form. A fix
+to one copy can miss the other, and the A26–A32 work had to touch both.
+
+**Change.**
+
+- Extract the shared steps into helpers that both modes call: a
+  `trash_target(self)` that resolves and checks the trash destination, and a
+  `rollback_trash_metadata(self)` that holds the clear-and-warn block.
+- Build `Remove`/`RemoveDirectory` and `Restore`/`RestoreDirectory` from one
+  parameterised constructor each (kind, name, directory or file), so the pair
+  can't drift apart.
+- For `Paste` and `Unpaste`, write the sequence of steps once as a list of
+  small functions that each take a callback, and run it either in a
+  synchronous driver or an asynchronous one. Keep the existing hooks
+  (`_before_copy`, `_after_copy`, `_before_prompt`, `_after_prompt`,
+  `_on_copy_conflict`), but document them in one place as the contract between
+  actions and history.
+
+**Tests.** The existing action, paste, unpaste and history tests must pass
+unchanged. Add a table-driven spec that runs each remove, restore, paste and
+unpaste case in both modes and checks identical results, including the
+failure path: a failed move leaves no stale trash metadata, and a failed
+metadata cleanup warns once.
+
+### A36 — Several modules do jobs they don't own (P3)
+
+**Problem.** The headers describe each module's job, and several don't match
+the contents.
+
+- **`lua/direct/action/action.lua`** (about 1,100 lines) opens with filesystem
+  actions, but its first 130 lines are trash metadata (`write_trash_metadata`,
+  `recover_trash_metadata`, `write_trash_reservation`, `clear_trash_metadata`).
+  `lua/direct/trash.lua` requires `action`, and `lua/direct/init.lua` calls
+  `action.first_free_trash` and `action.write_trash_metadata` directly, so the
+  trash's file format lives in the module that depends on the trash.
+- **`lua/direct/init.lua`** says it is "public API facade; dispatch and the
+  direct-buffer guard", but it also contains `worktree_backups` (around line
+  43, copying changed files into the trash) and `restore_git` (around line
+  502, 96 lines with its own confirmation flow). That is a feature, not
+  dispatch, and it makes the facade the second-largest user of `fs`, `action`
+  and `paths`.
+- **`lua/direct/history/history.lua`** (about 1,500 lines) contains
+  `rename_files` (around line 28), which builds LSP `willRenameFiles` URIs, and
+  about 500 lines of trash-reference bookkeeping (`line_might_reference_trash`,
+  `history_mentions_path`, `unreferenced_dropped_trash`, `filter_trash_records`,
+  `plan_trash_history`, `apply_trash_history_plan`, around lines 563–1080).
+- **`lua/direct/register.lua`** (about 1,000 lines) holds the register's
+  storage (manifests, snapshots, pruning), the explicit and deleted-entry
+  yanks, and the paste orchestration in one file. `register.paste` (around line
+  727) validates the `name` argument near the top and then again before it
+  builds `dst_names`; the second check can't fail after the first passes.
+
+**Change.** Move code without changing it, one PR per bullet:
+
+- Trash metadata and the trash path helpers into `lua/direct/trash/` (for
+  example `trash/metadata.lua`), with `action.lua` and `init.lua` requiring it.
+  `trash.lua` then no longer needs `action` for these.
+- `worktree_backups` and `restore_git` into `lua/direct/git_restore.lua`;
+  `init.lua` keeps one-line wrappers that apply the guard and call it.
+- LSP URI building into `lua/direct/history/lsp.lua` (or into
+  `file_operations.lua`, which already owns `will_rename`), and the trash
+  bookkeeping into `lua/direct/history/trash_refs.lua`.
+- `lua/direct/register/store.lua` (storage and pruning), with `register.lua`
+  keeping the yank and paste entry points. Remove the duplicate name check.
+
+**Tests.** None new beyond keeping the suite green. Where a test stubs
+`action.write_trash_metadata`, `history.rename_files` or similar through a
+module field, move the stub to the new owner; list each one in the PR.
+
+### A37 — The "splits" are separate files, not separate modules (P3)
+
+**Problem.** Fourteen modules are written as `return function(context)` or
+`return function(M)`: `buffer/{list,sync,open,navigation,collapse,tree,
+row_state,undo_state,sync_plan}.lua`, `action/{moves,registry}.lua`,
+`history/{paste,reverse}.lua` and `fs/path_ops.lua`. The parent builds a table
+of its local helpers, passes it in, and the child installs methods back onto
+the parent. `lua/direct/buffer/sync.lua` starts with about 35 lines of
+`local x = context.x`, and `buffer/list.lua` pulls about 34; `buffer.lua`
+passes well over a hundred names across the whole directory. The header of
+`sync.lua` calls it "a code-only split".
+
+This keeps the file sizes down but nothing else:
+
+- A child can't be loaded, read or tested on its own; it needs the parent to
+  construct its context first.
+- The dependencies are invisible. A reader can't tell from the top of a file
+  what it needs, and a rename of a helper in `buffer.lua` breaks a file that
+  doesn't mention it.
+- Methods appear on `Buffer` from several files, so finding where
+  `Buffer:sync` is defined means searching.
+- It encourages the stubbing style the tests use: tests replace fields on the
+  parent (`M.fs`, `M.ui`, `M.paths`), and the code exposes those fields
+  (over 500 occurrences) so that it can be stubbed.
+
+**Change.** Convert one module per PR, starting with `buffer/sync.lua` and
+`buffer/list.lua`:
+
+- Make the module `return` a table of functions, and `require` the leaf
+  modules it uses (`fs`, `paths`, `git`, `history`, `ui`) at the top.
+- Move the shared state and small helpers the buffer modules all use (the
+  `states` and `pending_sync` tables, `is_dir_line`, `indent_size`, and so on)
+  into one `lua/direct/buffer/state.lua` that both the parent and the children
+  require. Where a real require cycle remains, break it with a lazy `require`
+  inside the function and a comment naming the cycle.
+- Have `buffer.lua` attach the child's functions to `Buffer` in one visible
+  place.
+- Stop adding new `M.fs = require(...)` style fields. Where a test needs to
+  replace a dependency, give the module a small `_set_dependencies` or accept
+  the dependency as an argument at that one call site.
+
+**Tests.** The suite passes unchanged after each conversion. Each converted
+module can be `require`d on its own in a new smoke test, without constructing
+a `Buffer`.
+
+### A38 — The longest functions are hard to review, and nothing stops new ones (P3)
+
+**Problem.** By a rough scan of top-level functions, there are 518, of which 43
+are over 60 lines and 15 over 100. The longest:
+
+| Lines | Function |
+|-------|----------|
+| 341 | `M.new` in `lua/direct/history/recovery.lua` (a closure holding the whole recovery state machine) |
+| 255 | `M.paste` in `lua/direct/register.lua` |
+| 194 | `M.parse` in `lua/direct/history/transaction.lua` |
+| 187 / 168 | `M.Paste` / `M.Unpaste` in `lua/direct/action/action.lua` |
+| 173 | `M.will_rename` in `lua/direct/file_operations.lua` |
+| 159 | `M.compare_snapshot` in `lua/direct/git.lua` |
+| 143 | `M.yank_async` in `lua/direct/register.lua` |
+
+These are the code paths that run after a crash, on every paste, and on every
+rename, so being able to read them in one screen matters. They also hold the
+long chains of `if not ok then return ... end` that make a missed early return
+easy to write.
+
+**Change.**
+
+- Break the nine worst functions up, one PR each, by naming the phases they
+  already have. For example `register.paste`: `validate_target`,
+  `load_pasteable_entries`, `build_paste_action`, `run_paste`. For
+  `recovery.new`, move each of its inner `local function`s to a module-level
+  function that takes `deps` as its first argument, so each can be read and
+  tested alone.
+- Add `scripts/check_function_length.py`, run from `make lint`, that fails if
+  a function is longer than 120 lines unless it is on a short, committed
+  allowlist. List today's offenders on it. Each refactor PR removes its entry,
+  and the allowlist may only shrink.
+
+**Tests.** None new for the refactors beyond a green suite. Give the script
+its own test (like `tests/test_changelog_release_gate.py`): a function over
+the limit fails it, one on the allowlist passes, and an allowlist entry that
+no longer exists also fails, so stale entries get removed.
+
+### A39 — `config.lua` does three jobs, and the docs can drift from it (P3)
 
 **Problem.**
 
-- **History.** The undo and redo stacks have no size limit. Every save, undo,
-  redo, paste and yank reads both files and deserializes every record
-  (`M.classify` in `lua/direct/history/format.lua`, around line 116), then
-  `commit_stacks` (`lua/direct/history/history.lua`, around line 543) rewrites
-  the journal and both stacks with a disk sync. So each operation gets slower
-  as the history grows, without bound.
-- **Trash.** `apply_retention` (`lua/direct/trash.lua`, around line 500) only
-  considers entries the history doesn't refer to. Since the history is never
-  trimmed, every deleted file stays referenced, so even with
-  `trash_retention` set, deleted files are kept forever. Retention is also off
-  by default (`trash_retention = false` in `lua/direct/config.lua`).
-- **Register.** Since A27, a save that deletes rows only writes a small
-  manifest under `register/<digest>`, but each explicit yank
-  (`register.yank_async`) still copies its selection there. Nothing removes
-  the old copies or manifests.
-- **Health.** `:checkhealth direct` reports the trash size, but not the
-  register size or the number of history steps (`lua/direct/health.lua`).
+- **Structure.** `lua/direct/config.lua` (about 650 lines) holds the defaults,
+  the validation of every option, and the whole key-mapping installation and
+  removal logic for global and buffer-local mappings. It requires
+  `direct.buffer.buffer` and `direct.folding` lazily from inside functions, and
+  repeats `require('direct.ui')` inline in each error path, although `ui` has
+  no dependencies and could be required once at the top.
+- **Validation style.** Each option has its own hand-written check and its own
+  `notify`. A bad `setup()` call reports its errors one at a time, in code
+  order, and each new option needs a new branch.
+- **Drift.** The README shows the defaults in a code block, `doc/direct.txt`
+  documents them again, and `CHANGELOG.md` records changes to them. No test
+  compares them with `config.options`. The only test that mentions the README
+  is `tests/plugin/highlight_spec.lua`. A26 changed two defaults in all three
+  places by hand.
 
 **Change.**
 
-- Add a `history_limit` option, defaulting to 1000 steps per stack. When a
-  commit would go over it, drop the oldest records. That's safe for the
-  A19 dependency rules, because nothing older depends on the oldest record.
-  Say once, the first time steps are dropped, that older undo steps were
-  removed.
-- Once records are dropped, their trash entries are unreferenced, so retention
-  can remove them. Turn retention on by default:
-  `trash_retention = { max_age_days = 90 }`. `false` still turns it off.
-  Record both new defaults under Changed in the changelog, and update the
-  README's defaults block and `doc/direct.txt`.
-- Remove register copies that no history record refers to and that aren't the
-  current register. A paste's redo copies from its register folder, so keep
-  any folder a paste record names.
-- Report history step counts and the register's size in `:checkhealth`, and
-  warn above a threshold.
-- Consider caching the parsed stacks between operations, re-reading only when
-  the files' size or modification time changes, so each operation doesn't
-  re-validate every record.
+- Split into `lua/direct/config/options.lua` (defaults and validation),
+  `lua/direct/config/mappings.lua` (installation and removal) and a small
+  `config.lua` that keeps today's public entry points (`setup`, `options`,
+  `mapping_lhs`, `install_buffer_mappings`, and so on), so callers don't change.
+- Describe the options with a small table (key, type or predicate, default,
+  message) and validate from it. Collect every error from one `setup()` call
+  before reporting, so a user fixes them all at once. Keep every existing
+  message text, since tests and users may match on them.
+- Add `tests/plugin/docs_sync_spec.lua`. It extracts the Lua block under
+  "These are the defaults" in `README.md`, evaluates it, and checks that each
+  key and value equals the same field of the real defaults, and that every
+  option name appears in `doc/direct.txt` with a `*direct-<name>*` help tag, the
+  form the help already uses (for example `*direct-history_limit*`).
 
-**Tests.** With the defaults, `require('direct.config').options` has
-`history_limit = 1000` and `trash_retention.max_age_days = 90`. With
-`history_limit = 3`, five saves leave three undo steps and
-the oldest trash entries unreferenced. Retention then removes them. An old,
-unreferenced register copy is removed; the current one and one named by a
-paste record are kept. `:checkhealth` shows the step counts and register size.
-
-### A27 — Deletes on save copy everything into the register first (P2)
-
-**Status: COMPLETE in #136.** Deletes now register trash payloads without
-copying them; explicit yanks copy asynchronously under the pending guard.
-
-**Problem.** Before a save that deletes rows changes anything, `sync_locked`
-(`lua/direct/buffer/sync.lua`, around line 819) calls `register.yank` on
-every deleted path, and `_yank_one` (`lua/direct/register.lua`) copies each
-one in full with `fs.copy_tree`. This runs synchronously, before the
-background moves added for R2. Then the originals are moved to the trash. So
-deleting a 5 GB `build/` folder:
-
-- copies 5 GB into `~/.local/share/direct/register/`, doubling the disk used;
-- freezes the editor for the whole copy;
-- leaves that copy behind for good (A26).
-
-`yy` on a large folder has the same freeze.
-
-**Change.**
-
-- For deleted rows, don't copy: point the register at the entries' trash
-  paths instead, and copy from there on `p`. If a trash entry is restored by
-  undo or removed by retention, fall back to its restored path or drop it from
-  the register, and say so on `p`.
-- Explicit yanks (`yy`, visual `y`) still copy, since the source stays in
-  place and may change. Run that copy in the background, under the existing
-  pending guard, so `yy` on a large folder doesn't freeze the editor.
-- Update `doc/direct.txt` (`direct.vim-yank`) to describe what the register
-  holds after a delete.
-
-**Tests.** Deleting a folder on save leaves no copy of it under `register/`,
-and `p` afterwards pastes it. After `u` restores it, `p` still works or says
-why not. `yy` on a large folder returns before the copy finishes and marks the
-operation pending.
-
-### A29 — A busy history lock gives a cryptic, immediate failure (P3)
-
-**Status: COMPLETE in #140.** Busy locks retry for up to two seconds and report
-the holder PID when available. Async paste prompts and explicit yanks release
-the lock while waiting/copying, then revalidate before continuing.
-
-**Problem.** The history lock doesn't wait. On Unix it is
-`flock(fd, LOCK_EX | LOCK_NB)` (`lua/direct/platform/unix.lua`, around line
-92), and on Windows `LockFileEx` with fail-immediately
-(`lua/direct/platform/windows.lua`, around line 173). While one Neovim
-instance holds it, a save, undo, redo or yank in another fails at once with
-`direct: history unavailable: flock failed (errno 11)`.
-
-The lock is held for the whole of an operation, including while an
-asynchronous paste waits on its "already exists. Paste as:" prompt
-(`lua/direct/action/action.lua`, around line 760), and while a long
-cross-filesystem move runs. So a second instance can fail just because the
-first is waiting for the user to type a name.
-
-Since A27, `yy` copies in the background, and `register.yank_async` holds
-the history lock until the whole copy finishes. So yanking a large folder in
-one instance now makes every save, undo and redo in the others fail for as
-long as the copy runs.
-
-**Change.**
-
-- When the lock is busy (`EWOULDBLOCK`, or Windows' lock violation), retry for
-  a short time, for example up to 2 seconds, before giving up.
-- Replace the errno text with a plain message: another Neovim instance is
-  using direct.vim's history, it may be waiting on a prompt, and the operation
-  can be retried. Write the holder's process ID into the lock file, if that
-  can be done safely, so the message can name it.
-- Don't hold the history lock for the whole background copy of a yank. The
-  copy only writes to a new register folder, so take the lock just to run the
-  preflight, and again to switch the register's `content` pointer at the end,
-  checking that nothing else changed the register in between.
-- Release the lock while an asynchronous paste waits on its prompt. After the
-  answer, take the lock again, re-run the history preflight, and check that
-  the destination is still free before copying. If anything changed, ask
-  again or stop, without overwriting. Other instances can then save and undo
-  while the prompt is open.
-
-**Tests.** While a paste prompt is open, or a large yank is copying, another
-process can take and release the lock. If that process creates the chosen destination meanwhile,
-the paste asks again rather than overwriting. With the lock held by a second
-process, an operation in the first
-retries, then fails with the new message. If the second process releases it
-within the retry window, the operation succeeds.
-
-### A32 — Once the history is full, every save rescans the whole trash (P2)
-
-**Status: COMPLETE in #143.** History trimming now checks only trash paths
-released by the dropped records for age retention; size retention performs at
-most one additional full scan per session after trimming and tracks later
-released paths incrementally.
-Register pruning skips unchanged paste-reference sets and runs when those
-references or the register content pointer change. The new tests cover scan
-counts, age-based removal and avoiding extra deserialization for ordinary
-records.
-
-**Problem.** A26 (#138) caps each stack at `history_limit` steps.
-`commit_stacks` (`lua/direct/history/history.lua`, around line 606) trims the
-stacks, then `after_stack_commit` (around line 559) runs two clean-ups:
-
-- **Trash retention, forced.** When any steps were dropped, it calls
-  `trash.apply_retention({ force = true, ... })`. `force` skips the
-  once-per-session limit that #113 added, because automatic retention is
-  expensive: `trash.entries` (`lua/direct/trash.lua`, around line 80) reads
-  every entry's metadata and measures its size recursively (`path_size`).
-  Once a stack holds 1000 steps, every new step drops the oldest one. So from
-  then on, every save, paste and redo makes a full trash scan, and that cost
-  grows with the size of the trash, which can be many gigabytes.
-- **Register pruning, every time.** `register.prune_unreferenced`
-  (`lua/direct/register.lua`, around line 151) runs after every commit, and
-  again after every yank. It deserializes every record on both stacks (up to
-  2000 with the default limit) to find paste references, on top of the parse
-  the operation itself already made (see A26's last point).
-
-Both run while the history lock is held, so other Neovim instances wait too
-(see A29).
-
-**Change.**
-
-- Don't force retention on each trim. Collect the trash paths that the dropped
-  records referred to, and check only those against the retention policy. Or
-  keep the once-per-session limit and only clear it when steps are dropped,
-  at most once per session.
-- Prune the register only when the set of paste references can have changed:
-  when a paste record is added or dropped, or when the register's `content`
-  pointer moves. Reuse the records the operation already parsed instead of
-  deserializing both stacks again.
-
-**Tests.** With `history_limit = 3` and a full history, five more saves make
-at most one full trash scan (count calls to `trash.entries`). A dropped
-record's trash entry older than `max_age_days` is still removed. A save with
-no paste records doesn't deserialize the stacks for register pruning.
-
-## Features and usability
-
-### A28 — Edits to collapsed rows aren't defined or tested (P3)
-
-**Status: COMPLETE in #145.** Deleting a collapsed chain removes its deepest
-directory and then only empty parents, as one undoable batch. The README and help
-document this behavior; tests cover hidden-parent preservation, yank, paste,
-moving a collapsed row, undo, and consistent Windows separators.
-
-**Problem.** Folder chains collapse by default since #95, so many listings now
-show rows like `a/b/c/`. Only renaming one is tested
-(`tests/buffer/buffer_rows_spec.lua`, around line 149), and the help only says
-"each path component remains editable".
-
-- **Delete.** Deleting the row `a/b/c/` goes through `build_actions` in
-  `lua/direct/buffer/sync_plan.lua` (around line 390), which removes only
-  `c/` and leaves `a/b/` behind as empty folders that the next listing shows
-  as `a/b/`. Someone deleting the visible row may expect all of it to go.
-- **Yank, paste, move.** Yanking a collapsed row, pasting onto one, and
-  re-indenting one under an expanded folder have no sync tests.
-- **Windows.** `render_chain` in `lua/direct/buffer/collapse.lua` joins
-  components with `/` but ends the row with the platform's folder marker, so
-  on Windows a row reads `a/b/c\`.
-
-**Change.**
-
-- Deleting a collapsed row removes the whole chain it shows. Remove the
-  deepest folder (with its contents, as a normal folder delete), then each
-  parent in the chain, deepest first, but only if it is now completely empty
-  on disk. A parent that still holds hidden or Git-ignored entries is kept, so
-  nothing that wasn't shown is deleted. Record all of it as one history step,
-  so one `u` restores everything.
-- Document this under `direct-collapse_single_entry_directories` and in the
-  README's "Rules for edits", and note it in the changelog.
-- Add sync tests for deleting, yanking, pasting onto and moving collapsed
-  rows, and for undoing each.
-- Use one separator in collapsed rows on Windows, the same one new nested
-  paths use.
-
-**Tests.** Deleting `a/b/c/` removes `a/`, `b/` and `c/` when they hold
-nothing else. With a hidden file in `a/`, only `b/` and `c/` go and `a/` stays.
-One `u` restores the whole chain. Plus the yank, paste and move cases above,
-each followed by `u`. On Windows, a collapsed row
-uses a single separator and still renames correctly.
+**Tests.** The existing config tests pass unchanged. The new spec passes on
+today's docs. Changing a default in `config`, or adding an option without
+documenting it, fails it with a message naming the option. Several invalid
+options in one `setup()` call produce one report that lists them all.
 
 ## Project maturity
 
-### A30 — Release, coverage floor, wider CI and a stale comment (P4)
-
-**Status: COMPLETE in #134.** `v0.3.0` is tagged and released. `make ci` now
-fails below 86% total coverage, latest stable Neovim runs on Linux, macOS and
-Windows, and the preflight comment matches the preserved-history behaviour.
+### A40 — Lint covers `lua/direct` only, and stale comments remain (P4)
 
 **Problem.**
 
-- 18 completed tasks are on `master` but not released (A7–A15, A22–A25),
-  including #95's change to the collapsing default, which changes how every
-  listing looks. The latest tag is `v0.2.1`.
-- CI publishes coverage (`make coverage`) but never fails on it, so coverage
-  can drop unnoticed.
-- Latest stable Neovim is tested only on Linux; macOS and Windows run only
-  0.11.7.
-- A comment above `preflight_locked` (`lua/direct/history/history.lua`, around
-  line 571) still says unsupported history formats are "silently reset".
-  Since S3 they are kept and block operations.
+- `make lint` runs `luacheck` and `stylua --check` on `lua/direct` only
+  (`Makefile`, `lint` target). `plugin/direct.lua` (225 lines),
+  `ftplugin/direct.lua`, `syntax/direct.vim` and all of `tests/` (about 22,000
+  lines, as much as the source) are not linted or format-checked. The tests are
+  where a vacuous assertion or an unused variable would hide.
+- LuaLS is run at `--checklevel=Warning` on four files and at `Error` on the
+  rest, so most of the tree is only checked for errors.
+- A few comments still describe the code's history instead of its behaviour:
+  `lua/direct/action/action.lua` (around lines 148 and 292) mentions "parity"
+  and "the Python `__init__`", and `lua/direct/action/moves.lua` (around line
+  11) says "measured on 0.12.5". An earlier review cleaned most of these up;
+  a search for "parity", "measured on" and similar finds a handful more.
 
 **Change.**
 
-- Tag `v0.3.0` now, with A7–A25, using the README's release checklist, and
-  publish its GitHub release. It's a minor bump because collapsing is now on
-  by default. A26–A29, which change more defaults, go in a later release.
-- Add a coverage floor near the current figure to `make ci`.
-- Add macOS and Windows to the stable-Neovim job, or run the full matrix on
-  stable weekly.
-- Correct the comment.
+- Add `plugin` and `ftplugin` to the existing `luacheck` and `stylua` lines.
+  Add `tests` with its own `.luacheckrc` section (globals for the harness,
+  longer lines allowed), and run `stylua --check tests` once the tests have
+  been formatted in a single mechanical PR.
+- Raise LuaLS to `--checklevel=Warning` for the next two or three modules each
+  PR (start with `fs.lua`, `paths.lua` and `register.lua`), fixing or
+  annotating what it reports.
+- Reword the remaining history-style comments to say what the code does and
+  why, and drop references to the Python version.
 
-**Tests.** None beyond CI itself: a deliberately lowered coverage figure fails
-`make ci` locally.
+**Tests.** None beyond `make lint` itself. Deliberately adding an unused local
+to a test file makes it fail.
 
-### A31 — The v0.3.0 changelog leaves out the new Git-ignore deadline (P4)
+### A41 — The repository has no contributing, security or issue templates (P4)
 
-**Status: COMPLETE in #147.** The `[0.3.0]` changelog and published GitHub
-release notes now document `git.ignore_timeout_ms` (default `200` ms), explain
-that it replaces `git.timeout_ms` for Git-ignore queries and sync retries, and
-advise users with slow repositories to raise the new option. The README release
-checklist now requires a changelog entry for every merged PR since the last tag.
+**Problem.** `.github/` holds only the workflow. There is no `CONTRIBUTING.md`,
+`SECURITY.md`, issue template or pull request template. The contributor
+instructions live in the README's Development section, in the middle of a
+document aimed at users.
 
-**Problem.** #133 (`b522cbb`) added `git.ignore_timeout_ms` and moved
-Git-ignore queries off `git.timeout_ms` (`ignore_timeout_ms()` in
-`lua/direct/git.lua`). So by default the ignore deadline drops from 1000 ms to
-200 ms. The change landed before the `v0.3.0` tag, so it shipped in v0.3.0, but
-neither the `[0.3.0]` section of `CHANGELOG.md` nor the GitHub release notes
-mention it.
-
-The new deadline also covers the retry a save makes after a timed-out listing,
-so in a slow repository the save refuses (`refuse_git_query` in
-`lua/direct/buffer/sync.lua`) at 200 ms instead of 1000 ms. Anyone upgrading
-who sees more "Git-ignore query timed out" warnings or refused saves has
-nothing in the release notes to explain them. They also won't know that
-`git.timeout_ms` no longer controls ignore queries.
+This is a plugin that deletes, moves and overwrites the user's files and runs
+shell commands from `:DirectRun` and `:DirectGit`. A data-loss report needs
+different handling from a feature request, and A31 showed what happens when a
+changelog entry is forgotten.
 
 **Change.**
 
-- Add to `[0.3.0]` in `CHANGELOG.md`: under Added, the `git.ignore_timeout_ms`
-  option, default `200`; under Changed, that Git-ignore queries no longer use
-  `git.timeout_ms`, and that anyone who raised `git.timeout_ms` for a slow
-  repository should raise `git.ignore_timeout_ms` too.
-- Edit the v0.3.0 GitHub release notes to match.
-- Add a line to the README's release checklist: every merged pull request
-  since the last tag has a changelog entry.
+- Add `SECURITY.md`: how to report a bug that can lose data, or a command that
+  runs unintended code, privately, and what response to expect.
+- Add `CONTRIBUTING.md` with the content of the README's Development and
+  Release checklist sections (leaving a short link behind), and the
+  conventions from this doc: tests first, one task per PR, a changelog entry.
+- Add `.github/ISSUE_TEMPLATE/bug_report.yml` asking for the Neovim version
+  and operating system, the output of `:checkhealth direct`, the plugin
+  version, and steps to reproduce on a throwaway directory; add a
+  `feature_request.yml`.
+- Add `.github/pull_request_template.md` with checkboxes for tests, `make
+  lint`, `CHANGELOG.md` under `[Unreleased]`, and README and help updates.
 
-**Tests.** None. Check that the `[0.3.0]` section and the release notes both
-name `git.ignore_timeout_ms`.
+**Tests.** None. A pull request shows the template, and the README's
+Development section links to `CONTRIBUTING.md`.
+
+### A42 — Release the A26–A32 defaults with an upgrade notice (P4)
+
+**Problem.** `[Unreleased]` in `CHANGELOG.md` now holds six changes, and two of
+them change defaults that affect existing users: undo history is capped at
+1000 steps per stack, and trash older than 90 days is removed by default
+(`trash_retention = { max_age_days = 90 }`). Decision A30 deferred these to a
+later release after `v0.3.0`; that release is now due.
+
+Someone who has used direct.vim for months upgrades, and the first save after
+the upgrade can remove trash entries older than 90 days. The only message is
+the one printed afterwards by `apply_retention` in `lua/direct/trash.lua`
+(around line 563): "trash retention removed N unreferenced entries". At that
+point the entries can't be recovered. The history limit already shows a notice
+the first time steps are dropped; retention has no equivalent warning before
+the first removal.
+
+**Change.**
+
+- On the first automatic retention pass that would remove anything, if the user
+  has never set `trash_retention` explicitly, show a one-time warning before
+  removing: how many entries and how old, that 90-day retention is on by
+  default, and how to turn it off or change it. Record in the data directory
+  that the notice was shown, so it isn't repeated. Removal then proceeds as
+  today. If the open question on this is answered "no notice", skip this part.
+- Tag the next release (`v0.4.0`, since defaults change) using the README's
+  release checklist. Lead its changelog section and the GitHub release notes
+  with the two changed defaults, how to restore the old behaviour
+  (`history_limit` large, `trash_retention = false`), and the lock file
+  location change that already appears in the README.
+
+**Tests.** With `trash_retention` unset and an entry older than 90 days, the
+first pass shows the notice before removing and doesn't show it again in the
+same or a later session. With `trash_retention = false`, or with it set
+explicitly, nothing is shown and nothing is removed. For the release, check
+that the `[0.4.0]` section names both defaults.
 
 ## Suggested order
 
-1. A26, A27, A28, A29, A30, A31 and A32 are complete.
+1. A33 and A34 first: both are small, and both stop the editor from waiting.
+2. A42's release and notice before the next release is cut.
+3. A35 and A36 next, since they remove duplication and mixed ownership that
+   the later refactors would otherwise have to carry along.
+4. A37 and A38 after that, one module or function per PR, starting with
+   `buffer/sync.lua` and `history/recovery.lua`.
+5. A39 and A40 together with, or just after, the refactors, since they add the
+   checks that keep the result from drifting back.
+6. A41 whenever convenient; it touches no code.

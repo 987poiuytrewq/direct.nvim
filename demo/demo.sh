@@ -104,11 +104,20 @@ create_fixture() {
     printf "describe('%s', function() end)\n" "$name" > "$root/tests/${name}_test.lua"
   done
 
-  git -C "$root" init -q
+  git -C "$root" init -q -b main
   git -C "$root" config user.name 'Demo'
   git -C "$root" config user.email 'demo@example.invalid'
   git -C "$root" add -A
   git -C "$root" commit -qm 'Initial commit'
+
+  # A feature branch with a commit of its own, for the committed-changes view
+  # (gd), which compares the branch with main.
+  git -C "$root" switch -q -c feature/health-check
+  printf 'return { check = function() end }\n' > "$root/lua/my-plugin/health.lua"
+  printf "require('my-plugin').setup()\nrequire('my-plugin.health').check()\n" > "$root/plugin/my-plugin.lua"
+  printf '*my-plugin.txt*  health check\n' > "$root/doc/my-plugin.txt"
+  git -C "$root" add -A
+  git -C "$root" commit -qm 'Add health check'
 
   # Ignored by .gitignore, so hidden from the listing.
   printf 'binary\n' > "$root/build/my-plugin.so"

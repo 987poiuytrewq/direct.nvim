@@ -290,9 +290,21 @@ find_row "re"
 key "ga"
 after 800
 
-# 9. Back to the full listing.
+# 9. Git: show everything the branch changed since main, committed work
+# included. gs toggles off first, so gd starts from the full listing.
 key "gs"
 wait_for {LICENSE}
+after 400
+caption "See everything the branch changed" "gd"
+after 400
+key "gd"
+wait_for {health\.lua}
+after 2200
+key "gd"
+wait_for {LICENSE}
+after 600
+
+# 10. Back to the full listing.
 caption "direct.vim: edit your filesystem like a buffer" ":help direct.vim" 1
 after 2000
 caption ""

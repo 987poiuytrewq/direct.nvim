@@ -30,7 +30,9 @@ keystroke overlay:
    "already exists" prompt names the copy `examples/advanced/`.
 8. **See what changed, and stage it.** `gs` shows only changed files, and `ga`
    stages `README.md`.
-9. **Back to the full listing**, with the title and `:help direct.vim`.
+9. **See everything the branch changed.** `gd` shows the files changed on the
+   `feature/health-check` branch since `main`, committed work included.
+10. **Back to the full listing**, with the title and `:help direct.vim`.
 
 Neovim starts inside the project, so messages show paths relative to it.
 Searches type only enough of a name to match one line.

@@ -42,18 +42,17 @@ on the editor's main thread.
   README and help match the code, and the repository has no contributing,
   security or issue templates (A39–A41).
 
-## Open questions
+## Decisions
 
-These need a maintainer's call before the task that depends on them starts.
-Each task below says what it assumes until then.
+These were settled with the maintainer on 17 November 2026 and are written
+into each task below:
 
-- **A33:** how long may Tab completion wait for Git? The task assumes 150 ms,
-  with a short cache.
-- **A37:** is the maintainer happy with several small refactor PRs that change
-  no behaviour? The task assumes yes, one module per PR, with the existing
-  tests unchanged as the safety net.
-- **A42:** should upgrading users be told, before the first removal, that
-  90-day trash retention is now on? The task assumes a one-time notice.
+- **A33:** Tab completion may wait up to 200 ms for Git, with a short cache.
+- **A37:** several small refactor PRs that change no behaviour are fine: one
+  module per PR, with the existing tests unchanged as the safety net.
+- **A42:** no upgrade notice or migration handling. The A26–A32 defaults have
+  not been released, so no user has them yet; they ship in the next release
+  like any other change.
 
 ## Conventions
 
@@ -84,7 +83,7 @@ Each task below says what it assumes until then.
 | A39 | P3 | Open | Split `config.lua` and check the README and help against the defaults |
 | A40 | P4 | Open | Lint all Lua, not only `lua/direct`, and clear stale comments |
 | A41 | P4 | Open | Add contributing, security and issue/PR templates |
-| A42 | P4 | Open | Release the A26–A32 defaults with an upgrade notice |
+| A42 | P4 | Open | Release the A26–A32 changes |
 
 ## Robustness and performance
 
@@ -104,8 +103,8 @@ has no bound either.
 
 **Change.**
 
-- Use a much shorter deadline for completion than for status, for example
-  150 ms, in a separate constant. On a timeout, return no candidates and do not
+- Use a much shorter deadline for completion than for status: 200 ms,
+  in a separate constant. On a timeout, return no candidates and do not
   show an error.
 - Cache the ref list per repository root for a few seconds, so repeated Tab
   presses and narrowing the prefix don't start a new `git` each time. Throw the
@@ -429,46 +428,33 @@ changelog entry is forgotten.
 **Tests.** None. A pull request shows the template, and the README's
 Development section links to `CONTRIBUTING.md`.
 
-### A42 — Release the A26–A32 defaults with an upgrade notice (P4)
+### A42 — Release the A26–A32 changes (P4)
 
-**Problem.** `[Unreleased]` in `CHANGELOG.md` now holds six changes, and two of
-them change defaults that affect existing users: undo history is capped at
-1000 steps per stack, and trash older than 90 days is removed by default
-(`trash_retention = { max_age_days = 90 }`). Decision A30 deferred these to a
-later release after `v0.3.0`; that release is now due.
-
-Someone who has used direct.vim for months upgrades, and the first save after
-the upgrade can remove trash entries older than 90 days. The only message is
-the one printed afterwards by `apply_retention` in `lua/direct/trash.lua`
-(around line 563): "trash retention removed N unreferenced entries". At that
-point the entries can't be recovered. The history limit already shows a notice
-the first time steps are dropped; retention has no equivalent warning before
-the first removal.
+**Problem.** `[Unreleased]` in `CHANGELOG.md` holds six changes, including two
+new defaults: undo history is capped at 1000 steps per stack, and trash older
+than 90 days is removed by default (`trash_retention = { max_age_days = 90 }`).
+Decision A30 deferred these until after `v0.3.0`, which shipped without them,
+so no released version has these defaults. Nothing needs migrating; they just
+need releasing.
 
 **Change.**
 
-- On the first automatic retention pass that would remove anything, if the user
-  has never set `trash_retention` explicitly, show a one-time warning before
-  removing: how many entries and how old, that 90-day retention is on by
-  default, and how to turn it off or change it. Record in the data directory
-  that the notice was shown, so it isn't repeated. Removal then proceeds as
-  today. If the open question on this is answered "no notice", skip this part.
 - Tag the next release (`v0.4.0`, since defaults change) using the README's
-  release checklist. Lead its changelog section and the GitHub release notes
-  with the two changed defaults, how to restore the old behaviour
-  (`history_limit` large, `trash_retention = false`), and the lock file
-  location change that already appears in the README.
+  release checklist, and publish its GitHub release from the matching
+  changelog section.
+- Lead the `[0.4.0]` section and the release notes with the two new defaults
+  and how to change them (`history_limit`, `trash_retention = false`), so a
+  user choosing to install it sees them. Include the lock file location change
+  that already appears in the README.
 
-**Tests.** With `trash_retention` unset and an entry older than 90 days, the
-first pass shows the notice before removing and doesn't show it again in the
-same or a later session. With `trash_retention = false`, or with it set
-explicitly, nothing is shown and nothing is removed. For the release, check
-that the `[0.4.0]` section names both defaults.
+**Tests.** None beyond CI. Check that the `[0.4.0]` section and the release
+notes both name `history_limit` and `trash_retention`, and that every merged
+pull request since `v0.3.0` has a changelog entry (the A31 checklist line).
 
 ## Suggested order
 
 1. A33 and A34 first: both are small, and both stop the editor from waiting.
-2. A42's release and notice before the next release is cut.
+2. A42 whenever the maintainer wants to cut the release; it has no code.
 3. A35 and A36 next, since they remove duplication and mixed ownership that
    the later refactors would otherwise have to carry along.
 4. A37 and A38 after that, one module or function per PR, starting with

@@ -31,15 +31,7 @@ return function(context)
     return M.lock.release()
   end
 
-  -- begin_paste holds the same-host history lock until finish_paste. The initial
-  -- journal is durable before the async executor can create its first destination.
-  function M.begin_paste(action)
-    if type(action) ~= 'table' or action.name ~= 'p' then
-      return nil, 'history.begin_paste: a Paste action is required'
-    end
-    local record, serialize_err = M.action.serialize(action)
-    if not record then return nil, serialize_err end
-    local acquired, acquire_err = M.lock.acquire()
+  local function begin_paste_after_acquire(action, record, acquired, acquire_err)
     if not acquired then
       notify_unavailable(acquire_err)
       return nil, acquire_err
@@ -78,6 +70,31 @@ return function(context)
       return nil, write_err
     end
     return operation
+  end
+
+  -- begin_paste holds the same-host history lock until finish_paste. The initial
+  -- journal is durable before the async executor can create its first destination.
+  function M.begin_paste(action)
+    if type(action) ~= 'table' or action.name ~= 'p' then
+      return nil, 'history.begin_paste: a Paste action is required'
+    end
+    local record, serialize_err = M.action.serialize(action)
+    if not record then return nil, serialize_err end
+    local acquired, acquire_err = M.lock.acquire()
+    return begin_paste_after_acquire(action, record, acquired, acquire_err)
+  end
+
+  function M.begin_paste_async(action, callback)
+    if type(action) ~= 'table' or action.name ~= 'p' then
+      return nil, 'history.begin_paste_async: a Paste action is required'
+    end
+    if type(callback) ~= 'function' then return nil, 'history.begin_paste_async: a completion callback is required' end
+    local record, serialize_err = M.action.serialize(action)
+    if not record then return nil, serialize_err end
+    return M.lock.acquire_async(function(acquired, acquire_err)
+      local operation, begin_err = begin_paste_after_acquire(action, record, acquired, acquire_err)
+      callback(operation, begin_err)
+    end)
   end
 
   function M.note_paste_pending(operation, pair, source, destination)

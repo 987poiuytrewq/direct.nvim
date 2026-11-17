@@ -1109,49 +1109,54 @@ return function(context)
       ui.notify('direct: cannot sync while another operation is pending', vim.log.levels.WARN)
       return nil, token
     end
-    local acquired, acquire_err = history.lock.acquire()
-    if not acquired then
-      pending.finish(token)
-      ui.notify('direct: history unavailable: ' .. tostring(acquire_err), vim.log.levels.ERROR)
-      return nil, acquire_err
-    end
-
-    local operation = { finished = false }
-    local function complete(result, err)
-      if operation.finished then return end
-      operation.finished = true
-      local released, release_err = history.lock.release()
-      if not released and result ~= nil then
-        result = nil
-        err = 'could not release history lock: ' .. tostring(release_err)
-        ui.notify('direct: history unavailable: ' .. err, vim.log.levels.ERROR)
+    local started, start_err = history.lock.acquire_async(function(acquired, acquire_err)
+      if not acquired then
+        pending.finish(token)
+        ui.notify('direct: history unavailable: ' .. tostring(acquire_err), vim.log.levels.ERROR)
+        local called, callback_err = pcall(callback, nil, acquire_err)
+        if not called then ui.report_error('complete sync', callback_err) end
+        return
       end
-      if result then
-        local retained, retention_err = require('direct.trash').apply_retention()
-        if not retained and retention_err then
-          ui.notify('direct: trash retention was skipped: ' .. tostring(retention_err), vim.log.levels.WARN)
+
+      local operation = { finished = false }
+      local function complete(result, err)
+        if operation.finished then return end
+        operation.finished = true
+        local released, release_err = history.lock.release()
+        if not released and result ~= nil then
+          result = nil
+          err = 'could not release history lock: ' .. tostring(release_err)
+          ui.notify('direct: history unavailable: ' .. err, vim.log.levels.ERROR)
         end
+        if result then
+          local retained, retention_err = require('direct.trash').apply_retention()
+          if not retained and retention_err then
+            ui.notify('direct: trash retention was skipped: ' .. tostring(retention_err), vim.log.levels.WARN)
+          end
+        end
+        pending.finish(token)
+        local called, callback_err = pcall(callback, result, err)
+        if not called then ui.report_error('complete sync', callback_err) end
       end
-      pending.finish(token)
-      local called, callback_err = pcall(callback, result, err)
-      if not called then ui.report_error('complete sync', callback_err) end
-    end
 
-    local options = {
-      async_actions = true,
-      bypass_pending = true,
-      pending_token = token,
-      async_complete = complete,
-    }
-    local called, result, sync_err = xpcall(function() return sync_locked(self, options) end, debug.traceback)
-    if not called then
-      complete(nil, result)
-      ui.report_error('plan sync', result)
-      return nil, result
-    end
-    if not options.async_started then
-      complete(result, sync_err)
-      return result, sync_err
+      local options = {
+        async_actions = true,
+        bypass_pending = true,
+        pending_token = token,
+        async_complete = complete,
+      }
+      local called, result, sync_err = xpcall(function() return sync_locked(self, options) end, debug.traceback)
+      if not called then
+        complete(nil, result)
+        ui.report_error('plan sync', result)
+        return
+      end
+      if not options.async_started then complete(result, sync_err) end
+    end)
+    if not started then
+      pending.finish(token)
+      ui.notify('direct: history unavailable: ' .. tostring(start_err), vim.log.levels.ERROR)
+      return nil, start_err
     end
     return true
   end

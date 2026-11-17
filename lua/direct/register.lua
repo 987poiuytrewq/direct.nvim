@@ -496,12 +496,15 @@ function M.yank_async(sources, callback)
   local previous_content, previous_identity
   local copied_sources, skipped_sources = {}, {}
 
-  local function acquire_lock()
-    if lock_held then return true end
-    local acquired, err = M.history.lock.acquire()
-    if not acquired then return nil, err end
-    lock_held = true
-    return true
+  local function acquire_lock(on_acquired)
+    if lock_held then
+      on_acquired(true)
+      return true
+    end
+    return M.history.lock.acquire_async(function(acquired, err)
+      if acquired then lock_held = true end
+      on_acquired(acquired, err)
+    end)
   end
 
   local function release_lock()
@@ -540,69 +543,74 @@ function M.yank_async(sources, callback)
     return nil, err
   end
 
-  local acquired, acquire_err = acquire_lock()
-  if not acquired then return fail_start(acquire_err) end
-  local initial_state, initial_preflight_err = M.history.preflight(sources)
-  if not initial_state then return fail_start(initial_preflight_err) end
-  previous_content = M.content()
-  previous_identity = content_identity()
+  local started, start_err = acquire_lock(function(acquired, acquire_err)
+    if not acquired then return fail_start(acquire_err) end
+    local initial_state, initial_preflight_err = M.history.preflight(sources)
+    if not initial_state then return fail_start(initial_preflight_err) end
+    previous_content = M.content()
+    previous_identity = content_identity()
 
-  local dir, dir_err = M.paths.ensure_data_dir('register')
-  if not dir then return fail_start(dir_err) end
-  local sorted = vim.deepcopy(sources)
-  table.sort(sorted)
-  dst, dir_err = allocate_async_snapshot_dir(dir)
-  if not dst then return fail_start(dir_err) end
-  local released, release_err = release_lock()
-  if not released then return fail_start(release_err) end
+    local dir, dir_err = M.paths.ensure_data_dir('register')
+    if not dir then return fail_start(dir_err) end
+    local sorted = vim.deepcopy(sources)
+    table.sort(sorted)
+    dst, dir_err = allocate_async_snapshot_dir(dir)
+    if not dst then return fail_start(dir_err) end
+    local released, release_err = release_lock()
+    if not released then return fail_start(release_err) end
 
-  local function switch_register()
-    local locked, lock_err = acquire_lock()
-    if not locked then return nil, lock_err end
-    local state, preflight_err = M.history.preflight(sources)
-    if not state then return nil, preflight_err end
-    local current_content = M.content()
-    local current_identity = content_identity()
-    if current_content ~= previous_content or not vim.deep_equal(current_identity, previous_identity) then
-      return nil, 'register changed while yank was copying; the newer register was kept'
+    local function switch_register(callback_after_switch)
+      local switch_started, switch_start_err = acquire_lock(function(locked, lock_err)
+        if not locked then return callback_after_switch(nil, lock_err) end
+        local state, preflight_err = M.history.preflight(sources)
+        if not state then return callback_after_switch(nil, preflight_err) end
+        local current_content = M.content()
+        local current_identity = content_identity()
+        if current_content ~= previous_content or not vim.deep_equal(current_identity, previous_identity) then
+          return callback_after_switch(nil, 'register changed while yank was copying; the newer register was kept')
+        end
+        local snapshot, rename_err = commit_async_snapshot(dst, dir, sorted)
+        if not snapshot then return callback_after_switch(nil, rename_err) end
+        dst = snapshot
+        local written, write_err = M.log.write(M.paths.join(dir, 'content'), { dst })
+        if not written then return callback_after_switch(nil, write_err) end
+        cleanup_unreferenced(state.undo_lines, state.redo_lines)
+        for _, src in ipairs(copied_sources) do
+          M.ui.notify('Yanked ' .. src, vim.log.levels.INFO)
+          local skipped = skipped_sources[src]
+          local n = skipped ~= nil and #skipped or 0
+          if n > 0 then
+            M.ui.notify(
+              'Skipped ' .. n .. ' ' .. (n == 1 and 'entry' or 'entries') .. ' that cannot be copied: ' .. src,
+              vim.log.levels.WARN
+            )
+          end
+        end
+        callback_after_switch(true)
+      end)
+      if not switch_started then callback_after_switch(nil, switch_start_err) end
     end
-    local snapshot, rename_err = commit_async_snapshot(dst, dir, sorted)
-    if not snapshot then return nil, rename_err end
-    dst = snapshot
-    local written, write_err = M.log.write(M.paths.join(dir, 'content'), { dst })
-    if not written then return nil, write_err end
-    cleanup_unreferenced(state.undo_lines, state.redo_lines)
-    for _, src in ipairs(copied_sources) do
-      M.ui.notify('Yanked ' .. src, vim.log.levels.INFO)
-      local skipped = skipped_sources[src]
-      local n = skipped ~= nil and #skipped or 0
-      if n > 0 then
-        M.ui.notify(
-          'Skipped ' .. n .. ' ' .. (n == 1 and 'entry' or 'entries') .. ' that cannot be copied: ' .. src,
-          vim.log.levels.WARN
-        )
+
+    local index = 1
+    local function next_source()
+      if index > #sources then
+        return switch_register(function(switched, switch_err)
+          if not switched then return settle(false, switch_err) end
+          settle(true)
+        end)
       end
+      local src = sources[index]
+      index = index + 1
+      M._yank_one_async(dst, src, function(ok, skipped_or_err)
+        if not ok then return settle(false, skipped_or_err) end
+        copied_sources[#copied_sources + 1] = src
+        if skipped_or_err ~= nil then skipped_sources[src] = skipped_or_err end
+        next_source()
+      end)
     end
-    return true
-  end
-
-  local index = 1
-  local function next_source()
-    if index > #sources then
-      local switched, switch_err = switch_register()
-      if not switched then return settle(false, switch_err) end
-      return settle(true)
-    end
-    local src = sources[index]
-    index = index + 1
-    M._yank_one_async(dst, src, function(ok, skipped_or_err)
-      if not ok then return settle(false, skipped_or_err) end
-      copied_sources[#copied_sources + 1] = src
-      if skipped_or_err ~= nil then skipped_sources[src] = skipped_or_err end
-      next_source()
-    end)
-  end
-  next_source()
+    next_source()
+  end)
+  if not started then return fail_start(start_err) end
   return true
 end
 
@@ -724,7 +732,8 @@ end
 -- first pasted entry (the smallest source name, matching Paste's sorted
 -- `renames`) is pasted as `name` instead. `callback(result, err, succeeded, changed)`
 -- runs once the asynchronous operation settles.
-function M.paste(dst, name, callback)
+function M.paste(dst, name, callback, internal_options)
+  internal_options = internal_options or {}
   if M.pending.refuse('paste') then return nil, 'another direct operation is pending' end
   local valid, path_err = M.paths.validate_path(dst)
   if not valid then
@@ -740,8 +749,35 @@ function M.paste(dst, name, callback)
     end
   end
   dst = M.paths.root(dst)
-  local preflight, preflight_err = M.history.preflight({ dst })
-  if not preflight then return nil, preflight_err end
+  if not internal_options.preflighted then
+    local began, preflight_token = M.pending.begin('paste')
+    if not began then
+      M.ui.notify('direct: cannot paste: ' .. tostring(preflight_token), vim.log.levels.WARN)
+      return nil, preflight_token
+    end
+    local outer_returned, completed = false, false
+    local immediate_result, immediate_err
+    local started, start_err = M.history.preflight_async({ dst }, function(preflight, preflight_err)
+      M.pending.finish(preflight_token)
+      if not preflight then
+        immediate_result, immediate_err = nil, preflight_err
+      else
+        immediate_result, immediate_err = M.paste(dst, name, callback, { preflighted = true })
+      end
+      completed = true
+      if outer_returned and immediate_result ~= true and type(callback) == 'function' then
+        local called, callback_err = pcall(callback, immediate_result, immediate_err, false, false)
+        if not called then M.ui.report_error('refresh after pasting', callback_err) end
+      end
+    end)
+    if not started then
+      M.pending.finish(preflight_token)
+      return nil, start_err
+    end
+    outer_returned = true
+    if completed then return immediate_result, immediate_err end
+    return true
+  end
   local src, cerr = M.content()
   if src == nil then
     if cerr ~= nil then
@@ -811,10 +847,7 @@ function M.paste(dst, name, callback)
   local operation
   local paste_base_undo
   local paste_segment_records = {}
-  local function begin_paste_segment()
-    if operation and operation.locked then return true end
-    local fresh, paste_begin_err = M.history.begin_paste(paste_action)
-    if not fresh then return nil, paste_begin_err end
+  local function accept_paste_segment(fresh)
     operation = fresh
     if paste_base_undo == nil then paste_base_undo = vim.deepcopy(fresh.transaction.base_undo) end
 
@@ -838,6 +871,23 @@ function M.paste(dst, name, callback)
       return nil, 'register changed while preparing paste; retry the operation'
     end
     return true
+  end
+  local function begin_paste_segment()
+    if operation and operation.locked then return true end
+    local fresh, paste_begin_err = M.history.begin_paste(paste_action)
+    if not fresh then return nil, paste_begin_err end
+    return accept_paste_segment(fresh)
+  end
+  local function begin_paste_segment_async(on_ready)
+    if operation and operation.locked then
+      on_ready(true)
+      return true
+    end
+    return M.history.begin_paste_async(paste_action, function(fresh, paste_begin_err)
+      if not fresh then return on_ready(nil, paste_begin_err) end
+      local ready, ready_err = accept_paste_segment(fresh)
+      on_ready(ready, ready_err)
+    end)
   end
 
   local function finish_paste_segment()
@@ -878,27 +928,20 @@ function M.paste(dst, name, callback)
     return true
   end
 
-  local segment_started, segment_lock_err = begin_paste_segment()
-  if not segment_started then
-    M.pending.finish()
-    M.ui.notify('direct: cannot paste: ' .. tostring(segment_lock_err), vim.log.levels.ERROR)
-    return nil, segment_lock_err
-  end
-  paste_action._before_prompt = function()
-    local ready, ready_err = begin_paste_segment()
-    if not ready then return nil, ready_err end
-    return finish_paste_segment()
-  end
-  paste_action._after_prompt = function(pair, _source, answer)
+  paste_action._before_prompt = function() return finish_paste_segment() end
+  paste_action._after_prompt = function(pair, _source, answer, resumed)
     pair.dst = answer
-    local ready, ready_err = begin_paste_segment()
-    if not ready then return nil, ready_err end
-    if M.fs.taken(M.paths.join(dst, answer)) then
-      local finished, finish_err = finish_paste_segment()
-      if not finished then return nil, finish_err end
-      return 'clash'
-    end
-    return true
+    local started, start_err = begin_paste_segment_async(function(ready, ready_err)
+      if not ready then return resumed(nil, ready_err) end
+      if M.fs.taken(M.paths.join(dst, answer)) then
+        local finished, finish_err = finish_paste_segment()
+        if not finished then return resumed(nil, finish_err) end
+        return resumed('clash')
+      end
+      resumed(true)
+    end)
+    if not started then return nil, start_err end
+    return 'pending'
   end
   paste_action._before_copy = function(pair, source, destination)
     local ready, ready_err = begin_paste_segment()
@@ -970,11 +1013,22 @@ function M.paste(dst, name, callback)
       entry = pasted_entry,
     })
   end
-  local called, start_result, start_err = pcall(M.action.execute_async, paste_action, finish)
-  if not called then
-    finish(false, nil, start_result)
-  elseif start_result == nil then
-    finish(false, nil, start_err or 'could not start paste')
+  local started, start_err = begin_paste_segment_async(function(ready, ready_err)
+    if not ready then
+      M.ui.notify('direct: cannot paste: ' .. tostring(ready_err), vim.log.levels.ERROR)
+      return finish(false, nil, ready_err)
+    end
+    local called, start_result, execute_err = pcall(M.action.execute_async, paste_action, finish)
+    if not called then
+      finish(false, nil, start_result)
+    elseif start_result == nil then
+      finish(false, nil, execute_err or 'could not start paste')
+    end
+  end)
+  if not started then
+    M.pending.finish()
+    M.ui.notify('direct: cannot paste: ' .. tostring(start_err), vim.log.levels.ERROR)
+    return nil, start_err
   end
   if completed then return immediate_result, immediate_err end
   return true

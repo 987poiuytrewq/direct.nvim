@@ -795,17 +795,26 @@ function M.Paste(src, dst, src_names, dst_names)
             return
           end
           pair.dst = answer
-          if type(self._after_prompt) == 'function' then
-            local resumed_called, resumed, resume_err = pcall(self._after_prompt, pair, full_src, answer)
-            if not resumed_called then return fail(resumed) end
-            if resumed == 'clash' then return request_name(pair, full_src, st, attempts + 1) end
-            if not resumed then return fail(resume_err or 'could not reacquire the history lock after paste prompt') end
+          local resumed = false
+          local function continue_after_prompt(ready, resume_err)
+            if resumed then return end
+            resumed = true
+            if ready == 'clash' then return request_name(pair, full_src, st, attempts + 1) end
+            if not ready then return fail(resume_err or 'could not reacquire the history lock after paste prompt') end
+            local chosen = M.fs.join(self.dst, pair.dst)
+            if M.fs.taken(chosen) then
+              request_name(pair, full_src, st, attempts + 1)
+            else
+              copy_pair(pair, full_src, chosen, st)
+            end
           end
-          local chosen = M.fs.join(self.dst, pair.dst)
-          if M.fs.taken(chosen) then
-            request_name(pair, full_src, st, attempts + 1)
+          if type(self._after_prompt) == 'function' then
+            local resumed_called, ready, resume_err =
+              pcall(self._after_prompt, pair, full_src, answer, continue_after_prompt)
+            if not resumed_called then return fail(ready) end
+            if ready ~= 'pending' then continue_after_prompt(ready, resume_err) end
           else
-            copy_pair(pair, full_src, chosen, st)
+            continue_after_prompt(true)
           end
         end,
         function(input_err) fail(input_err) end

@@ -352,4 +352,4 @@ name `git.ignore_timeout_ms`.
 
 1. A27, A26, A29 and A32 are complete.
 2. A28.
-4. A31 at any time; it only touches docs and the release notes.
+3. A31 at any time; it only touches docs and the release notes.

@@ -120,6 +120,40 @@ H.describe('history', function()
     config.setup({})
   end)
 
+  H.it('does not deserialize ordinary stacks again for register pruning', function()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    local config = require('direct.config')
+    config.setup({ history_limit = 100, trash_retention = false })
+    for index = 1, 2 do
+      local path = ws .. '/file-' .. index .. '.txt'
+      local create = action.Touch(path)
+      H.assert_true(create['do']() ~= nil, 'create file ' .. index)
+      H.assert_true(history.log(create), 'log file ' .. index)
+    end
+
+    local undo_path = vim.fs.joinpath(history_dir(sb), 'undo.log')
+    local redo_path = vim.fs.joinpath(history_dir(sb), 'redo.log')
+    register.prune_unreferenced(vim.fn.readfile(undo_path), vim.fn.readfile(redo_path), true)
+    local original_deserialize = action.deserialize
+    local deserialize_calls = 0
+    action.deserialize = function(...)
+      deserialize_calls = deserialize_calls + 1
+      return original_deserialize(...)
+    end
+
+    local path = ws .. '/file-3.txt'
+    local create = action.Touch(path)
+    H.assert_true(create['do']() ~= nil, 'create the next file')
+    local logged = history.log(create)
+    action.deserialize = original_deserialize
+
+    H.assert_true(logged, 'the new save is logged')
+    H.assert_eq(deserialize_calls, 2,
+      'only history preflight decodes the two existing records; pruning skips non-paste records')
+    config.setup({})
+  end)
+
   H.it('undo/redo round-trips per action type', function()
     local sb = H.sandbox()
     local ws = H.mkdir(sb.root, 'ws')

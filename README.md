@@ -330,8 +330,10 @@ History-referenced trash is kept unless explicitly forced through
 `:DirectTrash! empty`. Forced restore or empty asks first when it would discard
 undo/redo steps that depend on the trash payload, and reports the number of
 affected steps. Automatic retention runs at most once per Neovim session and
-data directory during saves; history trimming forces a fresh pass. Opening
-`:DirectTrash` also forces a pass before showing the entries.
+data directory during saves. When history trimming releases trash paths,
+age-based retention checks those paths directly; size limits trigger at most
+one additional full scan per session. Opening `:DirectTrash` forces a fresh
+pass before showing the entries.
 
 `:checkhealth direct` reports undo/redo step counts and register size, and warns
 when register storage exceeds 1 GiB. Register snapshots that are neither the

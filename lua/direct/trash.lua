@@ -10,6 +10,7 @@ local log = require('direct.log')
 
 local metadata_suffix = '.direct-trash.json'
 local retention_checked = {}
+local retention_after_trim_checked = {}
 
 local function step_word(count) return count == 1 and 'step' or 'steps' end
 
@@ -516,9 +517,10 @@ function M.apply_retention(options)
   local function run_retention(references, state)
     local entries, err = M.entries({ include_reserved = true, history_state = state })
     if not entries then return nil, err end
-    local total, candidates = 0, {}
+    local total, candidates, known_paths = 0, {}, {}
     for _, entry in ipairs(entries) do
       total = total + entry.storage_size
+      known_paths[paths.canonical(entry.path)] = true
       if entry.deleted_at_epoch and not references[paths.canonical(entry.path)] then
         candidates[#candidates + 1] = entry
       end
@@ -574,12 +576,95 @@ function M.apply_retention(options)
         vim.log.levels.WARN
       )
     end
-    return true, { removed = removed, size_bytes = total }
+    return true, { removed = removed, size_bytes = total, known_paths = known_paths }
   end
   if options.history_state and type(options.references) == 'table' then
     return run_retention(options.references, options.history_state)
   end
   return history.with_trash_references(run_retention)
+end
+
+-- Called when a history-limit trim drops records. Age retention can inspect only
+-- the trash paths those records released; size retention needs one full scan per
+-- session to know which oldest unreferenced entries to prune.
+function M.needs_full_retention_scan_after_history_trim()
+  local retention = require('direct.config').options.trash_retention
+  if retention == false or not retention.max_size_bytes then return false end
+  local key = paths.canonical(trash_dir()) .. ':' .. tostring(retention.max_size_bytes)
+  return retention_after_trim_checked[key] == nil
+end
+
+function M.apply_retention_after_history_trim(options)
+  options = options or {}
+  local retention = require('direct.config').options.trash_retention
+  if retention == false then return true, { skipped = true } end
+
+  if retention.max_size_bytes then
+    local cache_key = paths.canonical(trash_dir()) .. ':' .. tostring(retention.max_size_bytes)
+    if not retention_after_trim_checked[cache_key] then
+      if not options.history_state or type(options.references) ~= 'table' then
+        return nil, 'history state is required for the retention size scan after trimming'
+      end
+      local ok, result = M.apply_retention({
+        force = true,
+        history_state = options.history_state,
+        references = options.references,
+      })
+      if ok then
+        retention_after_trim_checked[cache_key] = {
+          total = type(result) == 'table' and result.size_bytes or nil,
+          known_paths = type(result) == 'table' and result.known_paths or {},
+        }
+      end
+      return ok, result
+    end
+  end
+
+  local max_age = retention.max_age_days
+  if not max_age and not retention.max_size_bytes then return true, { skipped = true } end
+  local cutoff = max_age and (os.time() - max_age * 24 * 60 * 60) or nil
+  local size_key = retention.max_size_bytes
+    and (paths.canonical(trash_dir()) .. ':' .. tostring(retention.max_size_bytes))
+  local size_state = size_key and retention_after_trim_checked[size_key] or nil
+  local total, seen, removed = size_state and size_state.total, {}, 0
+  for _, path in ipairs(options.paths or {}) do
+    local key = paths.canonical(path)
+    if not seen[key] then
+      seen[key] = true
+      local metadata = decode_metadata(path)
+      local old = metadata and not metadata.reserved and cutoff and metadata.deleted_at_epoch < cutoff
+      local newly_seen = size_state and not size_state.known_paths[key]
+      local storage_size = 0
+      if newly_seen then
+        local payload_size, size_err = path_size(path)
+        if payload_size == nil then return nil, size_err end
+        local sidecar = lstat(action.trash_metadata_path(path))
+        storage_size = payload_size + (sidecar and sidecar.size or 0)
+        size_state.known_paths[key] = true
+        if total ~= nil then total = total + storage_size end
+      elseif total ~= nil then
+        local payload_size, size_err = path_size(path)
+        if payload_size == nil then return nil, size_err end
+        local sidecar = lstat(action.trash_metadata_path(path))
+        storage_size = payload_size + (sidecar and sidecar.size or 0)
+      end
+      local over_size = total ~= nil and retention.max_size_bytes and total > retention.max_size_bytes
+      if metadata and not metadata.reserved and (old or over_size) then
+        local ok, err = remove_entry(path)
+        if not ok then return nil, err end
+        removed = removed + 1
+        if total ~= nil then total = math.max(0, total - storage_size) end
+      end
+    end
+  end
+  if size_state then size_state.total = total end
+  if removed > 0 then
+    ui.notify(
+      string.format('direct: trash retention removed %d unreferenced entr%s', removed, removed == 1 and 'y' or 'ies'),
+      vim.log.levels.INFO
+    )
+  end
+  return true, { removed = removed }
 end
 
 function M.empty(force)

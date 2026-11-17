@@ -151,13 +151,49 @@ local function register_snapshot_name(name)
   return name:match('^%x+$') ~= nil
 end
 
+local cached_paste_signature
+
+local function line_has_paste_reference(line)
+  return type(line) == 'string'
+    and (
+      line:find('"op":"p"', 1, true) ~= nil
+      or line:find('"op":"up"', 1, true) ~= nil
+      or line:find('\\"op\\":\\"p\\"', 1, true) ~= nil
+      or line:find('\\"op\\":\\"up\\"', 1, true) ~= nil
+    )
+end
+
+local function paste_reference_signature(undo_lines, redo_lines)
+  local dir = M.paths.data_dir_path('register')
+  local content = M.content()
+  local parts = {
+    dir and M.paths.canonical(dir) or '',
+    content and M.paths.canonical(content) or '',
+  }
+  for stack_index, lines in ipairs({ undo_lines or {}, redo_lines or {} }) do
+    for index = 2, #lines do
+      local line = lines[index]
+      if line_has_paste_reference(line) then
+        parts[#parts + 1] = tostring(stack_index) .. ':' .. tostring(index) .. ':' .. line
+      end
+    end
+  end
+  return table.concat(parts, '\0')
+end
+
 -- prune_unreferenced(undo_lines, redo_lines) removes copied snapshots that are
--- neither the current register nor named by a paste still on either stack.
-function M.prune_unreferenced(undo_lines, redo_lines)
+-- neither the current register nor named by a paste still on either stack. It
+-- skips unchanged paste-reference sets and deserializes only paste-bearing lines.
+function M.prune_unreferenced(undo_lines, redo_lines, force)
+  local signature = paste_reference_signature(undo_lines, redo_lines)
+  if not force and signature == cached_paste_signature then return true, 0 end
   local dir = M.paths.data_dir_path('register')
   local names, list_err = M.fs.list_dir(dir)
   if not names then
-    if not M.fs.exists(dir) then return true, 0 end
+    if not M.fs.exists(dir) then
+      cached_paste_signature = signature
+      return true, 0
+    end
     return nil, list_err or 'cannot list register directory'
   end
 
@@ -178,8 +214,10 @@ function M.prune_unreferenced(undo_lines, redo_lines)
   end
   for _, lines in ipairs({ undo_lines or {}, redo_lines or {} }) do
     for index = 2, #lines do
-      local ok, parsed = pcall(M.action.deserialize, lines[index])
-      if ok and parsed then visit(parsed) end
+      if line_has_paste_reference(lines[index]) then
+        local ok, parsed = pcall(M.action.deserialize, lines[index])
+        if ok and parsed then visit(parsed) end
+      end
     end
   end
 
@@ -226,6 +264,7 @@ function M.prune_unreferenced(undo_lines, redo_lines)
     end
   end
   if first_err then return nil, first_err end
+  cached_paste_signature = signature
   return true, removed
 end
 
@@ -262,7 +301,7 @@ function M.size_bytes()
 end
 
 local function cleanup_unreferenced(undo_lines, redo_lines)
-  local called, cleaned, clean_err = pcall(M.prune_unreferenced, undo_lines, redo_lines)
+  local called, cleaned, clean_err = pcall(M.prune_unreferenced, undo_lines, redo_lines, true)
   if not called then
     clean_err, cleaned = cleaned, nil
   end

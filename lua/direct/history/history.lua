@@ -548,15 +548,89 @@ end
 
 local function trim_stack(lines, limit)
   local first_record = math.max(2, #lines - limit + 1)
-  if first_record <= 2 then return lines, 0 end
+  if first_record <= 2 then return lines, 0, {} end
   local trimmed = { lines[1] }
+  local dropped_records = {}
+  for index = 2, first_record - 1 do
+    dropped_records[#dropped_records + 1] = lines[index]
+  end
   for index = first_record, #lines do
     trimmed[#trimmed + 1] = lines[index]
   end
-  return trimmed, first_record - 2
+  return trimmed, first_record - 2, dropped_records
 end
 
-local function after_stack_commit(undo_lines, redo_lines, dropped)
+local function line_might_reference_trash(line)
+  if type(line) ~= 'string' then return false end
+  for _, op in ipairs({ 'rm', 'rmdir', 'rs', 'rsdir' }) do
+    if line:find('"op":"' .. op .. '"', 1, true) or line:find('\\"op\\":\\"' .. op .. '\\"', 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
+local function history_mentions_path(lines, path)
+  local candidates = { path, M.paths.canonical(path) }
+  for _, candidate in ipairs(candidates) do
+    local ok, encoded = pcall(vim.json.encode, candidate)
+    if ok and type(encoded) == 'string' then
+      local nested_ok, nested = pcall(vim.json.encode, encoded)
+      for _, line in ipairs(lines or {}) do
+        if
+          line:find(encoded, 1, true) ~= nil
+          or (nested_ok and type(nested) == 'string' and line:find(nested, 1, true) ~= nil)
+        then
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+
+local function unreferenced_dropped_trash(dropped_records, undo_lines, redo_lines)
+  local candidates, seen = {}, {}
+  local function add(path)
+    if type(path) ~= 'string' or path == '' then return end
+    local canonical = M.paths.canonical(path)
+    if not seen[canonical] then
+      seen[canonical] = true
+      candidates[#candidates + 1] = path
+    end
+  end
+  local function visit(action)
+    if type(action) ~= 'table' then return end
+    if action.name == 'rm' or action.name == 'rmdir' then
+      add(action.dst)
+    elseif action.name == 'rs' or action.name == 'rsdir' then
+      add(action.src)
+    end
+    for _, member in ipairs(action.actions or {}) do
+      visit(member)
+    end
+  end
+  for _, line in ipairs(dropped_records or {}) do
+    if line_might_reference_trash(line) then
+      local ok, action = pcall(M.action.deserialize, line)
+      if ok and action then visit(action) end
+    end
+  end
+
+  local remaining = {}
+  for _, lines in ipairs({ undo_lines or {}, redo_lines or {} }) do
+    for _, line in ipairs(lines) do
+      remaining[#remaining + 1] = line
+    end
+  end
+  local paths = {}
+  for _, path in ipairs(candidates) do
+    if not history_mentions_path(remaining, path) then paths[#paths + 1] = path end
+  end
+  return paths
+end
+
+local function after_stack_commit(undo_lines, redo_lines, dropped, dropped_records)
   local register_ok, register = pcall(require, 'direct.register')
   if register_ok and type(register.prune_unreferenced) == 'function' then
     local called, pruned, prune_err = pcall(register.prune_unreferenced, undo_lines, redo_lines)
@@ -581,15 +655,20 @@ local function after_stack_commit(undo_lines, redo_lines, dropped)
     )
   end
 
+  local paths = unreferenced_dropped_trash(dropped_records, undo_lines, redo_lines)
+  if #paths == 0 then return end
   local trash_ok, trash = pcall(require, 'direct.trash')
-  if not trash_ok or type(trash.apply_retention) ~= 'function' then return end
-  local state = { undo_lines = undo_lines, redo_lines = redo_lines }
-  local references = trash_references and trash_references(state) or {}
-  local called, retained, retention_err = pcall(trash.apply_retention, {
-    force = true,
-    history_state = state,
-    references = references,
-  })
+  if not trash_ok or type(trash.apply_retention_after_history_trim) ~= 'function' then return end
+  local options = { paths = paths }
+  if
+    type(trash.needs_full_retention_scan_after_history_trim) == 'function'
+    and trash.needs_full_retention_scan_after_history_trim()
+  then
+    local state = { undo_lines = undo_lines, redo_lines = redo_lines }
+    options.history_state = state
+    options.references = trash_references and trash_references(state) or {}
+  end
+  local called, retained, retention_err = pcall(trash.apply_retention_after_history_trim, options)
   if not called then
     retention_err, retained = retained, nil
   end
@@ -603,9 +682,12 @@ end
 
 commit_stacks = function(undo_path, redo_path, transaction_path, undo_lines, redo_lines)
   local limit = require('direct.config').options.history_limit
-  local trimmed_undo, undo_dropped = trim_stack(undo_lines, limit)
-  local trimmed_redo, redo_dropped = trim_stack(redo_lines, limit)
+  local trimmed_undo, undo_dropped, undo_dropped_records = trim_stack(undo_lines, limit)
+  local trimmed_redo, redo_dropped, redo_dropped_records = trim_stack(redo_lines, limit)
   local dropped = undo_dropped + redo_dropped
+  local dropped_records = {}
+  vim.list_extend(dropped_records, undo_dropped_records)
+  vim.list_extend(dropped_records, redo_dropped_records)
   local ok, err = log_mod.write_raw_atomic(transaction_path, transaction_codec.stack_bytes(trimmed_undo, trimmed_redo))
   if not ok then return nil, err end
   ok, err = write_stack(undo_path, trimmed_undo)
@@ -614,7 +696,7 @@ commit_stacks = function(undo_path, redo_path, transaction_path, undo_lines, red
   if not ok then return nil, err end
   ok, err = clear_transaction(transaction_path)
   if not ok then return nil, err end
-  after_stack_commit(trimmed_undo, trimmed_redo, dropped)
+  after_stack_commit(trimmed_undo, trimmed_redo, dropped, dropped_records)
   return true
 end
 

@@ -261,6 +261,90 @@ H.describe('Git branch diff filter', function()
       '--dir completion uses the current listing as its base')
   end)
 
+  H.it('bounds the Git wait used by ref completion', function()
+    local sb = H.sandbox()
+    local root = make_repo(sb)
+    require('direct').list(root)
+    local original_system = vim.system
+    local wait_timeout
+    vim.system = function()
+      return {
+        wait = function(_, timeout)
+          wait_timeout = timeout
+          return nil
+        end,
+      }
+    end
+
+    local refs = require('direct.git_commands').complete_diff(
+      'ma', 'DirectGitDiff --ref ma', #'DirectGitDiff --ref ma')
+    vim.system = original_system
+
+    H.assert_eq(refs, {}, 'a Git timeout returns no candidates')
+    H.assert_eq(wait_timeout, 200, 'completion uses the short independent deadline')
+  end)
+
+  H.it('caches sorted ref candidates briefly per repository root', function()
+    local sb = H.sandbox()
+    local root = make_repo(sb)
+    require('direct').list(root)
+    local original_system = vim.system
+    local original_hrtime = vim.uv.hrtime
+    local now, calls = 1000000000, 0
+    vim.uv.hrtime = function() return now end
+    vim.system = function()
+      calls = calls + 1
+      return {
+        wait = function()
+          return { code = 0, stdout = 'zeta\nmaster\nmain\nmain\n', stderr = '' }
+        end,
+      }
+    end
+
+    local commands = require('direct.git_commands')
+    local refs = commands.complete_diff('ma', 'DirectGitDiff --ref ma',
+      #'DirectGitDiff --ref ma')
+    local narrowed_refs = commands.complete_diff('z', 'DirectGitDiff --ref z',
+      #'DirectGitDiff --ref z')
+    H.assert_eq(refs, { 'main', 'master' }, 'matching refs are unique and sorted')
+    H.assert_eq(narrowed_refs, { 'zeta' }, 'prefix narrowing uses the cached refs')
+    H.assert_eq(calls, 1, 'a second completion in the cache window does not start Git')
+
+    now = now + 3000000001
+    commands.complete_diff('ma', 'DirectGitDiff --ref ma', #'DirectGitDiff --ref ma')
+    H.assert_eq(calls, 2, 'an expired ref cache is refreshed')
+
+    commands.complete_diff('ma', 'DirectGitDiff --dir=nested --ref ma',
+      #'DirectGitDiff --dir=nested --ref ma')
+    vim.system = original_system
+    vim.uv.hrtime = original_hrtime
+    H.assert_eq(calls, 3, 'a different repository root does not reuse the old cache')
+  end)
+
+  H.it('caps directory completion candidates', function()
+    local sb = H.sandbox()
+    local root = make_repo(sb)
+    require('direct').list(root)
+    local original_scandir = vim.uv.fs_scandir
+    local original_scandir_next = vim.uv.fs_scandir_next
+    local index = 0
+    vim.uv.fs_scandir = function() return true end
+    vim.uv.fs_scandir_next = function()
+      index = index + 1
+      if index > 205 then return nil end
+      return string.format('dir%03d', index), 'directory'
+    end
+
+    local directories = require('direct.git_commands').complete_status(
+      'dir', 'DirectGitStatus --dir dir', #'DirectGitStatus --dir dir')
+    vim.uv.fs_scandir = original_scandir
+    vim.uv.fs_scandir_next = original_scandir_next
+
+    H.assert_eq(#directories, 200, 'directory completion returns at most 200 candidates')
+    H.assert_eq(directories[1], 'dir001/', 'the capped results remain sorted')
+    H.assert_eq(directories[200], 'dir200/', 'the cap keeps the first sorted candidates')
+  end)
+
   H.it('unions uncommitted paths into DirectGitDiff when requested from another buffer', function()
     local sb = H.sandbox()
     local root = make_repo(sb)

@@ -1,6 +1,6 @@
 # Spec: direct.vim improvements, fourth review
 
-**Status:** A33–A48 are open.
+**Status:** A33–A58 are open.
 
 **Source:** a fourth static review of `origin/master` at `1af1402`
 (17 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -52,6 +52,26 @@ on the editor's main thread.
   README and help match the code, and the repository has no contributing,
   security or issue templates (A39–A41).
 
+A second pass on the same commit looked at the plugin from a user's side:
+how it behaves in everyday editing, how far it can be configured, and how it
+fails on systems it wasn't developed on.
+
+- **Everyday editing.** `:w` starts a background save. That is good for long
+  moves, but `:wq`, `:x`, `:wa` and quitting while a save runs look like they
+  don't do what a Vim user expects (A49). On a top-level row, the most common
+  rename gesture, `cc`, deletes the file and creates an empty one (A50).
+  Nothing previews or confirms a save that deletes (A51).
+- **When a save is refused.** The refusal messages are written in the code's
+  terms ("child materialization baseline is inconsistent") and don't point at
+  the line (A52). There is no in-listing key help (A53).
+- **Customisation.** Display, keys and Git are well covered. Sorting, hiding
+  rules, the icon provider and key actions beyond the built-in list are fixed
+  (A54–A56).
+- **Other systems.** Safe renames depend on a kernel feature that some
+  filesystems and operating systems don't have, and the failure is an
+  unexplained "Invalid argument" (A57). Large directories have no performance
+  budget; the only measurement is 1.3 s to re-list 20,000 entries (A58).
+
 ## Decisions
 
 These were settled with the maintainer on 17 November 2026 and are written
@@ -63,6 +83,16 @@ into each task below:
 - **A42:** no upgrade notice or migration handling. The A26–A32 defaults have
   not been released, so no user has them yet; they ship in the next release
   like any other change.
+
+## Open questions
+
+- **A51:** should a save that deletes something ask first by default? The
+  task assumes a `confirm` option defaulting to `'destructive'`, which asks
+  only when a save deletes entries or moves across filesystems. `false` would
+  keep today's behaviour as the default.
+- **A49:** should `:write` wait for the save to finish by default? The task
+  assumes yes, for up to a few seconds, then continues in the background as
+  today.
 
 ## Conventions
 
@@ -100,6 +130,16 @@ into each task below:
 | A46 | P3 | Open | Check undo and sync against a model with generated edit sequences |
 | A47 | P2 | Open | Keep golden fixtures for every on-disk format and test them |
 | A48 | P4 | Open | State what is stable before 1.0 and gather real-world use |
+| A49 | P2 | Open | Make `:wq`, `:x`, `:wa` and quitting work with background saves |
+| A50 | P2 | Open | Treat `cc` on a top-level row as a rename, as child rows already do |
+| A51 | P2 | Open | Preview and optionally confirm a save before it deletes anything |
+| A52 | P3 | Open | Rewrite refusal messages in plain language and point at the line |
+| A53 | P3 | Open | Add `g?` key help inside a listing |
+| A54 | P3 | Open | Let users choose the sort order and what is hidden |
+| A55 | P3 | Open | Support other icon providers and optional detail columns |
+| A56 | P3 | Open | Allow custom key actions and expose the entry under the cursor |
+| A57 | P2 | Open | Explain and probe filesystems without safe no-replace renames |
+| A58 | P3 | Open | Measure large-directory listing and set a performance budget |
 
 ## Robustness and performance
 
@@ -660,6 +700,331 @@ and neither the README nor the changelog says what may change before 1.0.
 **Tests.** None. Check that the README section exists and links the pinned
 issue.
 
+## Usability
+
+### A49 — `:wq`, `:x`, `:wa` and quitting don't fit background saves (P2)
+
+**Problem.** The listing's `BufWriteCmd` handler (`lua/direct/buffer/buffer.lua`,
+around line 443) refuses if any direct operation is pending, and otherwise
+runs `:DirectSync`. That starts the save in the background and returns. The
+README says the listing "stays modified until the filesystem changes and
+history are committed". From reading the code, that means:
+
+- **`:wq` and `:x`.** The write returns while the buffer is still modified, so
+  the quit half most likely fails with `E37: No write since last change`.
+  The user then reaches for `:q!`, which can stop the save midway.
+- **`:wa` and `:wqa`** with more than one modified listing. The first listing
+  starts its save, and every other one is refused with "another direct
+  operation is pending".
+- **Quitting during a save.** There is no `ExitPre` or `VimLeavePre` handler,
+  so `:qa!` during a long cross-filesystem move stops it without a word. The
+  journal finishes or reports it on the next start, by design, but the user is
+  not told at the time.
+- **Wiping the buffer.** The `BufWipeout` handler (around line 427) cancels a
+  pending save, so `:bw!` during a save also cancels it quietly.
+
+None of `:wq`, `:x` or `:wa` appear in the tests or the docs.
+
+**Change.** Confirm each case first with real processes (A45's runner), then:
+
+- Make `:write` on a listing wait for its save to finish, for up to a few
+  seconds, showing the existing progress notification. If it is still running
+  after that (a long cross-filesystem move, say), continue in the background
+  as today and say so. With that, `:wq` and `:x` work for ordinary saves.
+- Queue saves instead of refusing them when the pending operation is another
+  listing's save, so `:wa` saves every listing in turn.
+- Add an `ExitPre` handler. If a save is pending, say what it is doing and
+  wait for it, with `<C-c>` to stop waiting and quit anyway.
+- When `:bw!` cancels a save, say so, and say what the journal will do with it.
+- Document all of this in the help under `direct.vim-write`.
+
+**Tests.** In a real process: `:wq` after a rename applies the rename and
+exits with status 0. `:wa` with two modified listings saves both. `:qa` during
+a slow (stubbed) save waits and then exits, and the filesystem and history
+are complete. `:bw!` during a save reports the cancellation.
+
+### A50 — `cc` on a top-level row deletes the file instead of renaming it (P2)
+
+**Problem.** Rows know which entry they are from an extmark. A whole-line
+change such as `cc` or `S` invalidates that mark. For rows inside an expanded
+directory, `lua/direct/buffer/tree.lua` (around lines 399–411) re-attaches a
+lost identity when old and new rows pair one-for-one in the same slot, so
+`cc` there is a rename. That is tested in `tests/sync/sync_tree_edit_spec.lua`
+(around line 291).
+
+Top-level rows don't get that treatment. `tests/sync/sync_plan_spec.lua`
+(around line 76) asserts that replacing `old.txt` with `new.txt` deletes
+`old.txt` to the trash and creates a new **empty** `new.txt`. The README
+documents this ("the old entry is yanked and the new one is empty"). It can be
+undone, but `cc newname<Esc>:w` is one of the most common ways to rename in
+Vim. The result looks like the file's contents were lost, and it happens only
+at the top level, so a user can't predict it.
+
+It isn't confirmed which other gestures invalidate the mark the same way
+(`ciw` across the whole name, `:s/.*/new/`, `:normal`, pasting a line over
+another).
+
+**Change.**
+
+- List the gestures that lose the mark on top-level rows, with a test for each.
+- Apply the child-row pairing rule to top-level rows. Inside a run of rows
+  bounded by rows that kept their marks, if the removed and added rows pair
+  one-for-one with the same type (file or directory), treat each pair as a
+  rename. If the counts differ, keep today's refusal or delete-plus-create.
+- Update the README's "Rules for edits", which today describes the empty-file
+  outcome.
+
+**Tests.** `cc`, `S` and the other listed gestures on a top-level file and
+directory rename them with their contents. Two rows replaced by three still
+behave as today. The existing child-row tests still pass.
+
+### A51 — Nothing previews or confirms a save that deletes (P2)
+
+**Problem.** `:w` applies the plan at once. A save can delete a large tree,
+move a directory across filesystems (a long copy, with a warning only once it
+starts), or mix dozens of renames, creates and deletes in one step. All of it
+can be undone, but there is no way to see the plan first. oil.nvim, the
+closest alternative, asks before destructive changes by default. A user
+coming from it, or deleting the wrong `dd` range, has no safety step before
+the trash.
+
+The plan already exists as data before anything runs (`build_actions` in
+`lua/direct/buffer/sync_plan.lua`, then `action.summarize`), so showing it is
+cheap.
+
+**Change.**
+
+- Add a `confirm` option: `false` (today's behaviour), `'destructive'` (ask
+  only when the save deletes something or moves across filesystems) or `true`
+  (always ask). The default needs a decision (see Open questions); the task
+  assumes `'destructive'`.
+- Show the plan in a floating window, one line per action (`rename a → b`,
+  `delete build/ (12,340 entries)`, `move x/ to another filesystem`), with
+  keys to apply or cancel. Cancelling leaves the listing modified.
+- Add `:DirectPlan`, which shows the same window without applying, whatever
+  `confirm` is set to.
+- Skip the window for `:DirectSync!`, so scripts and mappings can opt out.
+
+**Tests.** With `confirm = 'destructive'`, a rename-only save doesn't ask and
+a save with a delete does. Cancelling changes nothing on disk or in history.
+Applying gives the same result as `confirm = false`. `:DirectPlan` changes
+nothing. `:DirectSync!` never asks.
+
+### A52 — Refusal messages use the code's terms and don't point at the line (P3)
+
+**Problem.** When a save is refused, the filesystem is left alone, which is
+right. But the message is often written for the developer. Among about forty
+distinct refusals in `lua/direct/buffer/sync_plan.lua`, `tree.lua` and
+`sync.lua`:
+
+- "child materialization baseline is inconsistent"
+- "child identity marks were lost outside an undo to their materialization
+  baseline"
+- "child rows cannot be uniquely associated with their root identity"
+- "root row identity is unavailable after text undo or redo; Direct cannot
+  safely identify this edit; restore the marked listing state or use
+  :DirectList! to discard it and redo the change"
+
+Most don't say which line caused the refusal, and the cursor is only moved on
+a successful save (`sync.lua`, around line 979). A user with a large edited
+listing can't tell what to fix, and the README's "row identity" and "marked
+listing state" are not ideas a user has.
+
+Some refusals are really limitations, such as "edit a moved directory and its
+new children in separate syncs". Those deserve to be listed so that users
+know about them before they hit them.
+
+**Change.**
+
+- Give every refusal a short code (for example `E-DIRECT-ROW-AMBIGUOUS`) and a
+  plain message that says what happened, on which line, and what to do. For
+  example: "Line 12 was replaced as a whole, and direct.vim can't tell whether
+  `old.txt` was renamed or replaced. Undo that change and rename with `ciw`,
+  or save it as a delete and create with `:DirectSync!`."
+- Move the cursor to the first offending line and mark it with a diagnostic
+  (`vim.diagnostic.set` in a direct namespace) so it shows in the sign column.
+  Clear it on the next change.
+- Add `:help direct-refusals`, listing every code with its cause and its fix,
+  and the limitations among them.
+
+**Tests.** A spec that triggers each refusal code checks the message names the
+line and the cursor is on it. A test fails if a refusal is added without a
+code or without a help entry.
+
+### A53 — There is no key help inside a listing (P3)
+
+**Problem.** A listing has about thirty buffer-local mappings, and some of
+them shadow common keys (the README warns about `gd`, `<leader>gr` and
+`<leader>gu`). Users can override them through `mappings`. But the only way to
+see what is active in a listing is to read the README or `:nmap <buffer>`.
+oil.nvim and most tree plugins have `g?`.
+
+**Change.** Add a `show_help` action, mapped to `g?` by default, that opens a
+floating window listing the active mappings from the same catalogue
+`config.lua` uses to install them (so it reflects overrides and disabled
+keys), with each action's description. Add it to the README table and the
+help.
+
+**Tests.** `g?` opens the window. An overridden mapping shows its new key. A
+disabled mapping is absent. Setting `show_help = false` in `mappings` removes
+`g?`.
+
+## Customisation
+
+### A54 — The sort order and the hiding rules are fixed (P3)
+
+**Problem.**
+
+- **Sort.** Listings show directories first, then files, each group sorted
+  byte-wise (`dirs_then_name` in `lua/direct/buffer/buffer.lua`, and the sorts
+  in `buffer/listing.lua`). So `B.txt` comes before `a.txt`, and `file10`
+  before `file2`. Neither can be changed.
+- **Hiding.** Entries are hidden for two reasons only, dotfiles
+  (`show_hidden`) and Git-ignore (`respect_gitignore`). There is no way to
+  hide `__pycache__/` or `*.o` outside Git, or to always show `.env` while
+  hiding other dotfiles.
+
+**Change.**
+
+- Add `sort`, accepting `'name'` (today's byte order, the default),
+  `'natural'` (case-insensitive, with numbers compared as numbers) or a
+  function `(a, b) -> boolean` over entry records (`name`, `type`). Add
+  `sort_directories_first` (default `true`).
+- Add `is_hidden`, a function `(name, path, type) -> boolean|nil`. Returning
+  `nil` falls back to today's rules, so users can add exceptions both ways.
+  The `gh` toggle shows everything this hides, as it does for dotfiles.
+- Confirm first that sync pairs rows by identity and never by position
+  (the README says it does), so a different display order can't change what a
+  save does. Add a test that saves a rename under each sort order.
+
+**Tests.** `'natural'` lists `file2` before `file10` and `a.txt` before
+`B.txt`. A custom sort function is used and errors in it are reported, not
+raised. `is_hidden` hides and un-hides as described, and `gh` shows hidden
+rows. Renames under each order give the same result on disk.
+
+### A55 — Only one icon provider, and no detail columns (P3)
+
+**Problem.** Filetype icons come only from nvim-web-devicons
+(`lua/direct/buffer/rows.lua`, around line 98). mini.icons, which many
+configurations now use instead, isn't supported, and neither is a user
+function. A row also can't show anything besides its name, icon and Git
+status, such as size, modification time or permissions, which oil.nvim offers
+as columns.
+
+**Change.**
+
+- Add `icons.provider`: `'auto'` (default: mini.icons if loaded, else
+  nvim-web-devicons, else the generic glyphs), `'mini'`, `'devicons'`,
+  `false`, or a function `(name, type) -> glyph, highlight`.
+- Optionally, as a second PR: a `columns` option for size and modification
+  time shown as virtual text to the right, like the Git symbols. Read the stat
+  data the listing already collects, and keep columns read-only, since they
+  aren't part of the editable text.
+
+**Tests.** With a stubbed mini.icons, `'auto'` uses it. A provider function's
+glyph and highlight are used. An error in the function falls back to the
+generic glyph and is reported once. Columns appear as virtual text and are not
+part of the line text, so they can't be edited or affect a save.
+
+### A56 — Custom keys can only call built-in actions (P3)
+
+**Problem.** `mappings` maps one of the built-in action names to a key
+(`config.lua`, `resolve_mappings`, around line 392), and `<Plug>` mappings
+exist for each action. A user who wants "open this entry in a terminal" or
+"copy its path" has to write a `FileType direct` autocommand and work out the
+path from the line, because `require('direct')` has no public function for
+the entry under the cursor. `:DirectRun` covers shell commands, but not Lua.
+
+**Change.**
+
+- Let `mappings` take a function as well as a key name:
+  `mappings = { ['<leader>y'] = function(entry) ... end }`. The function
+  receives `{ path, name, type, root, deleted }` for the row under the cursor.
+- Add `require('direct').current_entry()` returning the same table (or `nil`
+  outside a listing), and `require('direct').selected_entries()` for a visual
+  range.
+- Add two short recipes to the README: copy the path, and open a terminal in
+  the directory.
+
+**Tests.** A function mapping is installed buffer-local and receives the
+right entry for a file, a directory, a collapsed chain and a deleted row.
+`current_entry()` returns `nil` outside a listing. Errors in a user function
+are reported, not raised.
+
+## Reliability
+
+### A57 — Filesystems without no-replace renames fail with "Invalid argument" (P2)
+
+**Problem.** Every rename goes through `rename_noreplace` in
+`lua/direct/platform/unix.lua` (around line 48). It calls `renameat2` with
+`RENAME_NOREPLACE` on Linux and `renamex_np` with `RENAME_EXCL` on macOS,
+through LuaJIT FFI, and fails closed. Failing closed is right, since a plain
+rename could overwrite. But only `EEXIST` and `EXDEV` are given meaning. Every
+other error is passed on as the system's text. That includes:
+
+- `EINVAL` or `ENOTSUP` from filesystems that don't support the flag: NFS,
+  SMB/CIFS, many FUSE filesystems (sshfs among them), exFAT on macOS, and
+  older ZFS on Linux;
+- `ENOSYS` or `EPERM` where a container's seccomp profile blocks
+  `renameat2`;
+- on FreeBSD and other BSDs, which are neither `Linux` nor `Darwin`, every
+  rename fails with "atomic no-replace rename is unavailable on FreeBSD".
+
+So on those systems, every save fails with a message such as "Invalid
+argument" and no explanation. The README says network filesystems are "not
+guaranteed to work", but nothing tells the user that this is what happened.
+
+**Change.**
+
+- Map `EINVAL`, `ENOTSUP`/`EOPNOTSUPP`, `ENOSYS` and `EPERM` from these calls to
+  one message: this filesystem (name the mount point if it can be found)
+  doesn't support safe no-replace renames, so direct.vim won't rename here;
+  see `:help direct.vim-data`.
+- Remember the result per device (`st_dev`) for the session, so the message
+  is given once and later saves on that device are refused up front, before
+  anything is changed.
+- In `:checkhealth direct`, probe the data directory (inside it, never in a
+  user directory) and report whether safe renames work there.
+- List the supported operating systems and the known unsupported filesystems
+  in the README and help.
+- Consider, as a separate opt-in later, a fallback for regular files only:
+  `link()` then `unlink()`, where `link` fails with `EEXIST` atomically. Never
+  for directories.
+
+**Tests.** With the FFI call stubbed to return each errno, a save fails before
+changing anything, with the new message, once per device. A BSD `sysname`
+gives the same message. `:checkhealth` reports the probe result.
+
+### A58 — Large directories have no performance budget (P3)
+
+**Problem.** Listing is synchronous: `lua/direct/buffer/listing.lua` scans the
+directory with `fs_scandir` (around line 158), stats entries, sets an extmark
+and highlights for each row, and may wait up to `git.ignore_timeout_ms` for
+Git. The only measurement is historical: re-listing a 20,000-entry flat
+directory took about 1.3 s with Git status and icons off
+(`docs/performance/gitignore-benchmark.md`, 4 November 2026, before the
+current ignore snapshot). Expanding `node_modules/` or a build tree with
+`zR` can multiply that. There is no current figure, no budget and no
+benchmark in CI, so a slowdown can land unnoticed.
+
+**Change.**
+
+- Add `bench/listing.lua`, run with `nvim --headless -l`, that times a first
+  list, a re-list, a full `zR` expansion and a save of one rename, for flat
+  directories of 1,000, 10,000 and 50,000 entries and a deep tree, with Git
+  on and off.
+- Profile the 10,000-entry case and fix the largest costs found (for example
+  stat calls that the scan's type already answers, or one extmark call per
+  row where a batched form would do).
+- Set a budget (for example, listing 10,000 entries in under 300 ms on the CI
+  Linux runner) and run the benchmark in a non-blocking CI job that warns when
+  it is exceeded.
+- If 50,000 entries stay slow, consider listing the first screens at once and
+  the rest in the background, and say so in the help.
+
+**Tests.** The benchmark is the test. Record its figures in the PR and in
+`docs/performance/`.
+
 ## Suggested order
 
 1. A33 and A34 first: both are small, and both stop the editor from waiting.
@@ -677,3 +1042,8 @@ issue.
 8. A44 once a real coverage run has set the floors; A45 and A46 after that,
    as the safety net for A35–A38.
 9. A48 around the release in A42.
+10. A50 and A57 soon: both are small and stop a confusing or blocking failure.
+    A49 and A51 after the open questions on them are answered, using A45's
+    runner to confirm the current behaviour first.
+11. A52 and A53 together, since both are about what a user sees in a listing.
+12. A54–A56 and A58 in any order; A56 is the smallest.

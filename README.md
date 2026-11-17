@@ -618,6 +618,8 @@ the demo tour.
 
 1. Add user-visible changes to the `Unreleased` section of
    [`CHANGELOG.md`](CHANGELOG.md) and keep the README and help docs in sync.
+   Before release, check that every merged pull request since the last tag has
+   a changelog entry.
    Release PRs may edit a released section and should use the `release` label
    to skip the CI check that protects published release notes.
 2. Merge the release PR, then create and push an annotated `vX.Y.Z` tag on the

@@ -29,6 +29,8 @@ Notable changes to direct.vim are documented here. Versions follow
 - Treat unambiguous top-level whole-line file and directory replacements as
   renames, preserving their contents.
 - Use the configured directory separator between collapsed path components.
+- Explain unsupported safe no-replace renames and report the data-directory
+  capability in `:checkhealth`.
 
 ## [0.3.0] - 2026-11-16
 

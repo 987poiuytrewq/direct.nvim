@@ -6,6 +6,20 @@ local M = {}
 M.uv = vim.uv
 local platform = require('direct.platform')
 local temp_sequence = 0
+local unsupported_rename_devices = {}
+
+local function unsupported_rename_error(device)
+  local message = 'This filesystem does not support safe no-replace renames, so direct.vim will not rename here. '
+    .. 'See :help direct.vim-data.'
+  if device ~= nil then message = message .. ' (device ' .. tostring(device) .. ')' end
+  return message
+end
+
+local function device_for(path)
+  if not path or not M.uv.fs_lstat then return nil end
+  local ok, stat = pcall(M.uv.fs_lstat, path)
+  return ok and stat and stat.dev or nil
+end
 
 local function temp_candidate(parent, tag)
   temp_sequence = temp_sequence + 1
@@ -129,8 +143,86 @@ function M.rename_noreplace(src, dst, expected_source_identity)
       return nil, 'source identity changed: ' .. src, 'ESTALE'
     end
   end
-  return platform.rename_noreplace(src, dst, M.uv.os_uname().sysname)
+  local sysname = M.uv.os_uname().sysname
+  local device = device_for(src)
+  if device ~= nil and unsupported_rename_devices[tostring(device)] then
+    return nil, unsupported_rename_error(device), 'ENOREPLACE'
+  end
+
+  local ok, err, code = platform.rename_noreplace(src, dst, sysname)
+  if
+    code == 'ENOREPLACE'
+    or (platform.is_unsupported_rename_errno and platform.is_unsupported_rename_errno(code, sysname))
+  then
+    if device ~= nil then unsupported_rename_devices[tostring(device)] = true end
+    return nil, unsupported_rename_error(device), 'ENOREPLACE'
+  end
+  return ok, err, code
 end
+
+-- Check the actual no-replace guarantee using two exclusive probe files in
+-- Direct's own data directory. A free-target rename alone would not prove that
+-- an occupied path is protected from replacement.
+function M.probe_rename_noreplace(directory)
+  if type(directory) ~= 'string' or directory == '' then return nil, 'invalid probe directory' end
+  local src = M.unique_temp_path(directory, 'health-rename-src')
+  local dst = M.unique_temp_path(directory, 'health-rename-dst')
+
+  local function cleanup()
+    for _, path in ipairs({ src, dst }) do
+      local ok, removed = pcall(M.uv.fs_unlink, path)
+      if not ok or (not removed and M.uv.fs_lstat(path)) then
+        return nil, 'could not remove no-replace probe file: ' .. path
+      end
+    end
+    return true
+  end
+
+  local function create_probe(path, contents)
+    local fd, open_err = M.uv.fs_open(path, 'wx', 384)
+    if not fd then return nil, open_err end
+    local wrote, write_err = M.uv.fs_write(fd, contents, -1)
+    local closed, close_err = M.uv.fs_close(fd)
+    if not wrote or not closed then
+      pcall(M.uv.fs_unlink, path)
+      return nil, write_err or close_err or 'probe file could not be written'
+    end
+    return true
+  end
+
+  local source_created, source_err = create_probe(src, 'direct no-replace probe source')
+  if not source_created then
+    local _, cleanup_err = cleanup()
+    return nil, tostring(source_err) .. (cleanup_err and ('; ' .. cleanup_err) or '')
+  end
+  local target_created, target_err = create_probe(dst, 'direct no-replace probe target')
+  if not target_created then
+    local _, cleanup_err = cleanup()
+    return nil, tostring(target_err) .. (cleanup_err and ('; ' .. cleanup_err) or '')
+  end
+
+  local renamed, rename_err, rename_code = M.rename_noreplace(src, dst)
+  if not renamed and is_eexist(rename_err, rename_code) then
+    local cleaned, cleanup_err = cleanup()
+    if not cleaned then return nil, cleanup_err end
+    return true
+  end
+
+  if renamed then
+    local device = device_for(dst)
+    if device ~= nil then unsupported_rename_devices[tostring(device)] = true end
+    local _, cleanup_err = cleanup()
+    return nil, unsupported_rename_error(device) .. (cleanup_err and (' ' .. cleanup_err) or '')
+  end
+
+  local _, cleanup_err = cleanup()
+  if cleanup_err then rename_err = tostring(rename_err) .. '; ' .. cleanup_err end
+  return nil, rename_err or ('no-replace probe failed: ' .. tostring(rename_code))
+end
+
+-- The cache is session-scoped in production; this seam lets isolated tests
+-- verify a capability result without depending on test ordering.
+function M._reset_rename_capability_cache() unsupported_rename_devices = {} end
 
 -- copy_file(src, dst) -> true | nil, err, code (vim.uv.fs_copyfile preserves
 -- mode by default).

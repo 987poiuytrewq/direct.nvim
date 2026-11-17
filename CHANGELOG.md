@@ -7,6 +7,8 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ### Changed
 
+- Bound Git ref completion waits to 200 ms, cache refs briefly, and cap directory
+  completion candidates.
 - Keep deleted entries in trash and point the register at them instead of
   copying them; explicit yanks now copy in the background under the pending
   operation guard.

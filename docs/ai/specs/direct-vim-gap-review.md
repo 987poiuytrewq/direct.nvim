@@ -1,6 +1,6 @@
 # Spec: direct.vim improvements, third review
 
-**Status:** A26, A27, A29, A30 and A32 are complete; A28 and A31 remain proposed.
+**Status:** A26, A27, A28, A29, A30 and A32 are complete; A31 remains proposed.
 
 **Source:** a third static review of `origin/master` at `ad25866`
 (12 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -13,8 +13,8 @@ in a running Neovim. Each task's first step is to write a failing test that
 reproduces the problem, or to record that it can't be reproduced and drop the
 task.
 
-**Last checked:** `origin/master` at `068752a` (17 November 2026). That check
-confirms A32 (#143) and keeps A28 and A31 proposed.
+**Last checked:** `origin/master` at `4e8ed02` (17 November 2026). That check
+confirms A28 (#145) and keeps A31 proposed.
 
 ## Decisions
 
@@ -51,7 +51,7 @@ into each task below:
 |----|----------|--------|------|
 | A26 | P2 | Complete | Stop history, trash and register from growing forever |
 | A27 | P2 | Complete | Stop deletes on save from copying everything into the register first |
-| A28 | P3 | Proposed | Define, document and test edits to collapsed rows |
+| A28 | P3 | Complete | Define, document and test edits to collapsed rows |
 | A29 | P3 | Complete | Handle a busy history lock from another Neovim instance clearly |
 | A30 | P4 | Complete | Release, coverage floor, wider CI and a stale comment |
 | A31 | P4 | Proposed | Record the new Git-ignore deadline in the v0.3.0 changelog |
@@ -249,6 +249,11 @@ no paste records doesn't deserialize the stacks for register pruning.
 
 ### A28 — Edits to collapsed rows aren't defined or tested (P3)
 
+**Status: COMPLETE in #145.** Deleting a collapsed chain removes its deepest
+directory and then only empty parents, as one undoable batch. The README and help
+document this behavior; tests cover hidden-parent preservation, yank, paste,
+moving a collapsed row, undo, and consistent Windows separators.
+
 **Problem.** Folder chains collapse by default since #95, so many listings now
 show rows like `a/b/c/`. Only renaming one is tested
 (`tests/buffer/buffer_rows_spec.lua`, around line 149), and the help only says
@@ -350,6 +355,6 @@ name `git.ignore_timeout_ms`.
 
 ## Suggested order
 
-1. A27, A26, A29 and A32 are complete.
-2. A28.
-3. A31 at any time; it only touches docs and the release notes.
+1. A27, A26, A28, A29, A30 and A32 are complete.
+2. A31 remains: record the Git-ignore deadline in the v0.3.0 changelog and
+   release notes.

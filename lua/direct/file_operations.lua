@@ -664,7 +664,7 @@ function M.emit_actions(actions, applied, suppressed)
     if path and kind then kinds[canonical(path)] = kind end
   end
   local function add(action)
-    if action.name == 'g' then
+    if action.name == 'g' or action.name == 'batch' then
       local completed = action._completed_actions or action.actions or {}
       for _, member in ipairs(completed) do
         add(member)

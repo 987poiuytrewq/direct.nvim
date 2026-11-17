@@ -140,7 +140,7 @@ return function(deps)
       end
     end
 
-    local moves, removed, added, seen_ids, seen_lines = {}, {}, {}, {}, {}
+    local moves, removed, collapsed_removals, added, seen_ids, seen_lines = {}, {}, {}, {}, {}, {}
     for _, row in ipairs(current_rows or {}) do
       local line = row.line
       if type(line) ~= 'string' then return nil, 'root row identity is unavailable' end
@@ -208,12 +208,16 @@ return function(deps)
       end
     end
     for _, row in ipairs(original_rows or {}) do
-      if not row.deleted_kind and not seen_ids[row.id] then removed[#removed + 1] = row.name end
+      if not row.deleted_kind and not seen_ids[row.id] then
+        removed[#removed + 1] = row.name
+        if row.collapsed_components then collapsed_removals[row.name] = row.collapsed_components end
+      end
     end
     return {
       kind = 'IDENTITY',
       moves = moves,
       removed = dirs_then_name(removed),
+      collapsed_removals = collapsed_removals,
       added = dirs_then_name(added),
     }
   end
@@ -390,7 +394,39 @@ return function(deps)
       for _, line in ipairs(plan.removed) do
         local path = entry_path(root, line)
         yanks[#yanks + 1] = path
-        if is_dir_line(line) then
+        local collapsed = plan.collapsed_removals and plan.collapsed_removals[line]
+        if collapsed and #collapsed > 1 and is_dir_line(line) then
+          local component_paths, parent = {}, root
+          for _, component in ipairs(collapsed) do
+            parent = fs.join(parent, component.name)
+            if component.directory then parent = parent .. platform.separator end
+            component_paths[#component_paths + 1] = parent
+          end
+
+          local removals = { action_mod.RemoveDirectory(component_paths[#component_paths]) }
+          for index = #component_paths - 1, 1, -1 do
+            local directory = paths.strip_trailing_separator(component_paths[index])
+            local scan, scan_err = vim.uv.fs_scandir(directory)
+            if not scan then
+              return nil, nil, 'cannot inspect collapsed parent directory: ' .. directory .. ': ' .. tostring(scan_err)
+            end
+            local only_child = false
+            local other_child = false
+            local expected_child = collapsed[index + 1].name
+            while true do
+              local name = vim.uv.fs_scandir_next(scan)
+              if not name then break end
+              if name == expected_child and not only_child then
+                only_child = true
+              else
+                other_child = true
+              end
+            end
+            if not only_child or other_child then break end
+            removals[#removals + 1] = action_mod.RemoveDirectory(component_paths[index])
+          end
+          actions[#actions + 1] = #removals > 1 and action_mod.Batch(removals) or removals[1]
+        elseif is_dir_line(line) then
           actions[#actions + 1] = action_mod.RemoveDirectory(path)
         else
           actions[#actions + 1] = action_mod.Remove(path)
@@ -413,6 +449,7 @@ return function(deps)
       local removals, deleted_paths, remove_err = build_actions(root, {
         kind = 'DELETE',
         removed = plan.removed or {},
+        collapsed_removals = plan.collapsed_removals,
       })
       if not removals then return nil, nil, remove_err end
       local moves, _, move_err = build_actions(root, {
@@ -421,8 +458,17 @@ return function(deps)
       })
       if not moves then return nil, nil, move_err end
       local vacated = {}
+      local function add_vacated_sources(action)
+        if action.name == 'g' or action.name == 'batch' then
+          for _, member in ipairs(action.actions or {}) do
+            add_vacated_sources(member)
+          end
+        elseif action.src then
+          vacated[paths.canonical(action.src)] = true
+        end
+      end
       for _, act in ipairs(removals) do
-        if act.src then vacated[paths.canonical(act.src)] = true end
+        add_vacated_sources(act)
       end
       for _, act in ipairs(moves) do
         if act.src then vacated[paths.canonical(act.src)] = true end

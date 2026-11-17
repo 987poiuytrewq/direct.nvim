@@ -51,7 +51,8 @@ return function(deps)
         directory = is_directory,
       }
       local function append_current()
-        local line = table.concat(vim.tbl_map(function(item) return item.name end, next_components), '/')
+        local line =
+          table.concat(vim.tbl_map(function(item) return item.name end, next_components), paths.directory_separator())
         if is_directory then line = paths.mark_directory(line) end
         rendered[#rendered + 1] = line
         components_by_line[line] = next_components

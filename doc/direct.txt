@@ -725,11 +725,14 @@ respect_gitignore       boolean (default: `true`)
                                             *direct-collapse_single_entry_directories*
 collapse_single_entry_directories boolean (default: `true`)
     Display a chain of directories with one visible directory child as a single
-    slash-separated path, such as `foo/bar/`. Files are not
+    path, such as `foo/bar/`. Files are not
     absorbed into the path; expanding the final directory shows its files.
     Entry counts follow the current listing filters (including the Git-status-
     only view). Each path component remains editable as its corresponding
-    directory entry. `gC` (|:DirectToggleDirectoryCollapse|) toggles this in the
+    directory entry. Deleting a collapsed row removes the deepest directory with
+    its contents, then removes each parent only if it is empty; hidden, Git-ignored
+    or other unlisted entries keep their parent. One undo restores the removed
+    chain. `gC` (|:DirectToggleDirectoryCollapse|) toggles collapsing in the
     current listing.
 
                                                            *direct-indent_size*

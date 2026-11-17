@@ -19,6 +19,9 @@ Notable changes to direct.vim are documented here. Versions follow
 - When history drops steps, apply age retention to their trash paths without
   rescanning the whole trash; skip register pruning while paste references are
   unchanged.
+- Delete collapsed directory chains as one undoable action while keeping parents
+  that still contain hidden or otherwise unlisted entries.
+- Use the configured directory separator between collapsed path components.
 
 ## [0.3.0] - 2026-11-16
 

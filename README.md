@@ -131,6 +131,10 @@ release notes. lazy.nvim users can select tagged releases with `version = '*'`.
 - **Directories end with a separator, files don't.** `archive/` is a directory
   and `archive` is a file. On Windows the separator is `\`; you can change it
   with the `directory_separator` option.
+- **Deleting a collapsed directory chain removes the whole visible chain.**
+  Direct removes the deepest directory with its contents, then removes each
+  parent only if it is empty. A parent with hidden, Git-ignored, or other
+  unlisted entries is kept. The whole chain is one undo step.
 - **A save can mix root renames, creates and deletes.** Direct pairs edited
   rows by their row identities, not by line position. The whole save is one
   undoable history entry when it mixes change types; deleted entries are

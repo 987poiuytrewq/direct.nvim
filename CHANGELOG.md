@@ -22,6 +22,8 @@ Notable changes to direct.vim are documented here. Versions follow
 - Delete collapsed directory chains as one undoable action while keeping parents
   that still contain hidden or otherwise unlisted entries.
 - Use the configured directory separator between collapsed path components.
+- Explain unsupported safe no-replace renames and report the data-directory
+  capability in `:checkhealth`.
 
 ## [0.3.0] - 2026-11-16
 

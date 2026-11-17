@@ -142,11 +142,14 @@ release notes. lazy.nvim users can select tagged releases with `version = '*'`.
 - **A row's identity decides whether an edit is a rename.** Editing its name
   while the row mark survives is a rename. An unmarked row is a create, and a
   marked row that disappears is a delete. If a whole-line edit such as `cc` or
-  `S` loses its mark, Direct treats it as delete-plus-create; the old entry is
-  yanked and the new one is empty. If text undo/redo leaves an identity unclear,
-  the save is refused because Direct cannot safely identify the edit. Restore
-  the marked listing state, or use `:DirectList!` to discard the edits and redo
-  the change; re-listing alone will not preserve ambiguous edits.
+  `S` loses a top-level row's mark, Direct can still recognize a rename when
+  the rows between surviving identity marks pair one-for-one and each pair is
+  the same type (file or directory). The same rule applies to rows inside an
+  expanded directory. Different counts or file/directory types keep the
+  delete-plus-create behavior; an unclear identity after text undo/redo is
+  refused because Direct cannot safely identify the edit. Restore the marked
+  listing state, or use `:DirectList!` to discard the edits and redo the change;
+  re-listing alone will not preserve ambiguous edits.
 - **Unrelated disk changes are reconciled on save, including in expanded
   folders.** Entries added, removed or replaced outside edited rows and
   destinations are kept and shown after the successful save. A changed or

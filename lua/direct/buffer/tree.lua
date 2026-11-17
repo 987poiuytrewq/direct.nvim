@@ -356,6 +356,74 @@ return function(deps)
       previous_depth = depth
     end
 
+    -- Top-level rows use the same identity rule as expanded siblings: an
+    -- invalidated row can be recovered as a rename only within a one-for-one
+    -- interval bounded by surviving identities. Keep the old delete/create
+    -- interpretation when counts or file/directory types do not match.
+    local old_roots, current_roots = {}, {}
+    for _, id in ipairs(state.root_ids or {}) do
+      local rec = state.rows[id]
+      if rec and not rec.deleted_kind then old_roots[#old_roots + 1] = rec end
+    end
+    for _, node in ipairs(nodes) do
+      if node.depth == 0 then current_roots[#current_roots + 1] = node end
+    end
+    local current_root_index = {}
+    for index, node in ipairs(current_roots) do
+      if node.id then current_root_index[node.id] = index end
+    end
+    local root_anchors = {}
+    for old_index, rec in ipairs(old_roots) do
+      local new_index = current_root_index[rec.id]
+      if new_index then root_anchors[#root_anchors + 1] = { old = old_index, new = new_index } end
+    end
+    local roots_reordered = false
+    for index = 2, #root_anchors do
+      if root_anchors[index].new <= root_anchors[index - 1].new then
+        roots_reordered = true
+        break
+      end
+    end
+    if not roots_reordered then
+      local old_after, new_after = 0, 0
+      local function pair_root_interval(old_before, new_before)
+        local removed, inserted = {}, {}
+        for oi = old_after + 1, old_before - 1 do
+          local rec = old_roots[oi]
+          if invalid_ids[rec.id] and not nodes_by_id[rec.id] then removed[#removed + 1] = rec end
+        end
+        for ni = new_after + 1, new_before - 1 do
+          local node = current_roots[ni]
+          if not node.id then inserted[#inserted + 1] = node end
+        end
+        if #removed > 0 and #removed == #inserted then
+          local same_types = true
+          for pair = 1, #removed do
+            if
+              removed[pair].name == inserted[pair].name
+              or is_dir_line(removed[pair].name) ~= is_dir_line(inserted[pair].name)
+            then
+              same_types = false
+              break
+            end
+          end
+          if same_types then
+            for pair = 1, #removed do
+              local rec, node = removed[pair], inserted[pair]
+              node.id, node.rec = rec.id, rec
+              nodes_by_id[rec.id] = node
+              invalid_ids[rec.id] = nil
+            end
+          end
+        end
+      end
+      for _, anchor in ipairs(root_anchors) do
+        pair_root_interval(anchor.old, anchor.new)
+        old_after, new_after = anchor.old, anchor.new
+      end
+      pair_root_interval(#old_roots + 1, #current_roots + 1)
+    end
+
     -- Root classifier input excludes identity-preserving moves across the root
     -- boundary. A root moved into a child remains in its original virtual slot;
     -- a child moved to the root is handled by the tree Move action, not ADD.

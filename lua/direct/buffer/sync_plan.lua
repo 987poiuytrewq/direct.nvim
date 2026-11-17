@@ -14,7 +14,7 @@ return function(deps)
   -- Use extmark identities, not row position or set cardinality, to classify a
   -- root-level edit. `original_rows` are the rows captured at listing time;
   -- `current_rows` contains their surviving marks plus unmarked creates.
-  local function classify_identity(root, original_rows, current_rows, expected, text_undo_mode)
+  local function classify_identity(root, original_rows, current_rows, expected, text_undo_mode, invalid_root_ids)
     local expected_by_path, original_by_path, original_by_id = {}, {}, {}
     local expected_by_basename = {}
     local original_by_basename = {}
@@ -82,6 +82,69 @@ return function(deps)
         parent = fs.join(parent, target_name)
       end
       return moves
+    end
+
+    if not text_undo_mode and invalid_root_ids then
+      local old_roots, current_roots, current_by_id = {}, {}, {}
+      for _, row in ipairs(original_rows or {}) do
+        if not row.deleted_kind then old_roots[#old_roots + 1] = row end
+      end
+      for _, row in ipairs(current_rows or {}) do
+        current_roots[#current_roots + 1] = row
+        if row.id ~= nil then current_by_id[row.id] = true end
+      end
+      local current_index = {}
+      for index, row in ipairs(current_roots) do
+        if row.id ~= nil then current_index[row.id] = index end
+      end
+      local anchors = {}
+      for old_index, row in ipairs(old_roots) do
+        local new_index = current_index[row.id]
+        if new_index then anchors[#anchors + 1] = { old = old_index, new = new_index } end
+      end
+      local reordered = false
+      for index = 2, #anchors do
+        if anchors[index].new <= anchors[index - 1].new then
+          reordered = true
+          break
+        end
+      end
+      if not reordered then
+        local old_after, new_after = 0, 0
+        local function pair_interval(old_before, new_before)
+          local removed, inserted = {}, {}
+          for index = old_after + 1, old_before - 1 do
+            local row = old_roots[index]
+            if invalid_root_ids[row.id] and not current_by_id[row.id] then removed[#removed + 1] = row end
+          end
+          for index = new_after + 1, new_before - 1 do
+            local row = current_roots[index]
+            if row.id == nil then inserted[#inserted + 1] = row end
+          end
+          if #removed == 0 or #removed ~= #inserted then return end
+          for index = 1, #removed do
+            local old_name = removed[index].name
+            local new_name = inserted[index].line
+            local relative = paths.strip_directory_marker(new_name)
+            if
+              old_name == new_name
+              or is_dir_line(old_name) ~= is_dir_line(new_name)
+              or relative:find(directory_separator(), 1, true)
+              or (directory_separator() == '\\' and relative:find('/', 1, true))
+            then
+              return
+            end
+          end
+          for index, row in ipairs(inserted) do
+            row.id = removed[index].id
+          end
+        end
+        for _, anchor in ipairs(anchors) do
+          pair_interval(anchor.old, anchor.new)
+          old_after, new_after = anchor.old, anchor.new
+        end
+        pair_interval(#old_roots + 1, #current_roots + 1)
+      end
     end
 
     local current_by_id = {}

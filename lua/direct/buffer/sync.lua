@@ -14,6 +14,7 @@ return function(context)
   local pending = context.pending
   local file_operations = context.file_operations
   local states = context.states
+  local namespace = context.namespace
   local pending_sync = context.pending_sync
   local restore_deleted_rows = context.restore_deleted_rows
   local reconcile_undone_materialization = context.reconcile_undone_materialization
@@ -387,12 +388,18 @@ return function(context)
         }
       end
     end
+    local invalid_root_ids = {}
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, { details = true })) do
+      local rec = state.rows[mark[1]]
+      if rec and rec.kind == 'root' and mark[4] and mark[4].invalid then invalid_root_ids[mark[1]] = true end
+    end
     local plan, identity_err = classify_identity(
       self.root,
       original_root_rows,
       current_root_rows,
       expected,
-      vim.b[bufnr].direct_text_undo_mode == true
+      vim.b[bufnr].direct_text_undo_mode == true,
+      not subtree_edit and invalid_root_ids or nil
     )
     if not plan then
       vim.bo[bufnr].modified = true

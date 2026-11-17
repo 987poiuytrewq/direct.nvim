@@ -381,6 +381,65 @@ H.describe('sync: applying actions', function()
     config.setup({})
   end)
 
+  H.it('bounds full-trash scans while a full history releases old entries', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'a-keep.txt', { 'keep' })
+    for index = 1, 3 do
+      H.mkfile(ws, 'z-old-' .. index .. '.txt', { tostring(index) })
+    end
+    for index = 1, 5 do
+      H.mkfile(ws, 'b-new-' .. index .. '.txt', { tostring(index) })
+    end
+    local config = require('direct.config')
+    config.setup({ history_limit = 3, trash_retention = { max_age_days = 1 } })
+
+    local function delete_last(name)
+      local listing = buffer.list(ws)
+      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      H.assert_eq(lines[#lines], name, 'delete the last visible row')
+      vim.api.nvim_buf_set_lines(0, #lines - 1, #lines, false, {})
+      local ok, reason = listing:sync()
+      H.assert_true(ok == true, tostring(reason))
+      local entry = register.entries(register.content())[1]
+      local metadata_path = require('direct.action.action').trash_metadata_path(entry.path)
+      local metadata = vim.json.decode(vim.fn.readfile(metadata_path)[1])
+      metadata.deleted_at_epoch = os.time() - 2 * 86400
+      vim.fn.writefile({ vim.json.encode(metadata) }, metadata_path)
+      return entry.path
+    end
+
+    local old_paths = {}
+    for index = 3, 1, -1 do
+      old_paths[index] = delete_last('z-old-' .. index .. '.txt')
+    end
+    local trash = require('direct.trash')
+    local original_entries = trash.entries
+    local full_scans = 0
+    local restore_entries = H.stub(trash, 'entries', function(...)
+      full_scans = full_scans + 1
+      return original_entries(...)
+    end)
+
+    local new_paths = {}
+    for index = 5, 1, -1 do
+      new_paths[index] = delete_last('b-new-' .. index .. '.txt')
+    end
+    restore_entries()
+
+    H.assert_true(full_scans <= 1,
+      'five saves at a full history trigger at most one full trash scan')
+    for index = 1, 3 do
+      H.assert_false(fs.exists(old_paths[index]), 'trimmed old trash entry ' .. index .. ' is retained no longer')
+      H.assert_true(fs.exists(new_paths[index]), 'the newest history entry ' .. index .. ' remains protected')
+    end
+    for index = 4, 5 do
+      H.assert_false(fs.exists(new_paths[index]), 'trimmed newer trash entry ' .. index .. ' is pruned')
+    end
+    config.setup({})
+  end)
+
   H.it(':write on a clean listing reloads external filesystem changes', function()
     clean_buffers()
     local sb = H.sandbox()

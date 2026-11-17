@@ -4,6 +4,11 @@ local M = {}
 local ui = require('direct.ui')
 local paths = require('direct.paths')
 
+local REF_COMPLETION_TIMEOUT_MS = 200
+local REF_COMPLETION_CACHE_MS = 3000
+local MAX_DIRECTORY_COMPLETIONS = 200
+local ref_cache
+
 local function usage(command, reason)
   local message = 'usage: ' .. command
   if reason then message = message .. ' (' .. reason .. ')' end
@@ -132,7 +137,23 @@ local function directory_completions(arg_lead, cmdline, cursor_pos)
     end
   end
   table.sort(result)
+  while #result > MAX_DIRECTORY_COMPLETIONS do
+    result[#result] = nil
+  end
   return result
+end
+
+local function cached_refs(root)
+  if not ref_cache then return nil end
+  if ref_cache.root ~= root then
+    ref_cache = nil
+    return nil
+  end
+  if vim.uv.hrtime() / 1000000 >= ref_cache.expires_at then
+    ref_cache = nil
+    return nil
+  end
+  return ref_cache.refs
 end
 
 local function ref_completions(arg_lead, cmdline, cursor_pos)
@@ -144,24 +165,37 @@ local function ref_completions(arg_lead, cmdline, cursor_pos)
   local line = tostring(cmdline or ''):sub(1, cursor_pos or #tostring(cmdline or ''))
   local args = vim.split(line, '%s+', { trimempty = true })
   local root = command_root(option_value(args, 'dir'))
-  local timeout = require('direct.config').options.git.timeout_ms
-  local ok, process = pcall(
-    vim.system,
-    { 'git', '-C', root, 'for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes', 'refs/tags' },
-    { text = true }
-  )
-  if not ok or not process then return {} end
-  local waited, result = pcall(function() return process:wait(timeout) end)
-  if not waited or not result or result.code ~= 0 then return {} end
+  local refs = cached_refs(root)
+  if not refs then
+    local ok, process = pcall(
+      vim.system,
+      { 'git', '-C', root, 'for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes', 'refs/tags' },
+      { text = true }
+    )
+    if not ok or not process then return {} end
+    local waited, result = pcall(function() return process:wait(REF_COMPLETION_TIMEOUT_MS) end)
+    if not waited or not result or result.code ~= 0 then return {} end
 
-  local completions, seen = {}, {}
-  for ref in (result.stdout or ''):gmatch('[^\r\n]+') do
-    if ref:sub(1, #prefix) == prefix and not seen[ref] then
-      seen[ref] = true
-      completions[#completions + 1] = inline and ('--ref=' .. ref) or ref
+    refs = {}
+    local seen = {}
+    for ref in (result.stdout or ''):gmatch('[^\r\n]+') do
+      if not seen[ref] then
+        seen[ref] = true
+        refs[#refs + 1] = ref
+      end
     end
+    table.sort(refs)
+    ref_cache = {
+      root = root,
+      refs = refs,
+      expires_at = vim.uv.hrtime() / 1000000 + REF_COMPLETION_CACHE_MS,
+    }
   end
-  table.sort(completions)
+
+  local completions = {}
+  for _, ref in ipairs(refs) do
+    if ref:sub(1, #prefix) == prefix then completions[#completions + 1] = inline and ('--ref=' .. ref) or ref end
+  end
   return completions
 end
 

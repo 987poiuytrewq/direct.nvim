@@ -22,6 +22,8 @@ H.describe('health: :checkhealth direct', function()
       'the report names the resolved data directory')
     H.assert_true(text:find('data directory is writable:', 1, true) ~= nil,
       'the report checks that Direct can write its data directory')
+    H.assert_true(text:find('safe no-replace renames work in the data directory', 1, true) ~= nil,
+      'the report confirms the data-directory no-replace probe')
     H.assert_true(text:find('Git:', 1, true) ~= nil, 'the report includes Git availability/version')
     H.assert_true(text:find('undo.log: not initialized (fresh)', 1, true) ~= nil,
       'the report classifies fresh history')
@@ -132,5 +134,32 @@ H.describe('health: :checkhealth direct', function()
       'write probe failure is reported')
     H.assert_true(text:find('history checks skipped because the data directory is not writable',
       1, true) ~= nil, 'history checks do not create data files after failed write probe')
+  end)
+
+  H.it('probes safe renames only inside Direct data and reports unsupported filesystems', function()
+    local paths = require('direct.paths')
+    local constants = require('direct.constants')
+    local fs = require('direct.fs')
+    local directory = paths.join(paths.data_home(), constants.DATA_DIRECTORY)
+    local real_rename = fs.rename_noreplace
+    local probed = {}
+    fs.rename_noreplace = function(src, dst)
+      probed[#probed + 1] = { src, dst }
+      return nil, 'safe no-replace renames are not supported on this filesystem', 'ENOREPLACE'
+    end
+
+    vim.cmd('checkhealth direct')
+
+    fs.rename_noreplace = real_rename
+    local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+    H.assert_true(text:find('safe no-replace renames are unavailable in the data directory', 1, true) ~= nil,
+      'health identifies the unsupported capability')
+    H.assert_eq(#probed, 1, 'health performs one no-replace probe')
+    H.assert_true(probed[1][1]:sub(1, #directory + 1) == directory .. '/',
+      'probe source is inside Direct data')
+    H.assert_true(probed[1][2]:sub(1, #directory + 1) == directory .. '/',
+      'probe destination is inside Direct data')
+    H.assert_nil(vim.uv.fs_lstat(probed[1][1]), 'source probe file is removed')
+    H.assert_nil(vim.uv.fs_lstat(probed[1][2]), 'destination probe file is removed')
   end)
 end)

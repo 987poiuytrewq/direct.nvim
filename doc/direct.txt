@@ -57,7 +57,8 @@ direct.vim is pure Lua and replaces |netrw| for directory buffers.
 ==============================================================================
 2. Requirements                                      *direct.vim-requirements*
 
-    - Neovim 0.11.7 or later, on Linux, macOS or Windows.
+    - Neovim 0.11.7 or later, on Linux, macOS or Windows. Other operating
+      systems may run Neovim but are not supported for safe filesystem changes.
     - Git, for Git status and Git-ignore filtering (optional). Ignore
       filtering is on by default; see |direct-respect_gitignore|.
     - A Nerd Font with the Font Awesome glyphs, for the default icons
@@ -1260,7 +1261,9 @@ direct.vim keeps its state in:
        warning.
 
 The location is worked out each time it is used. `:checkhealth direct` shows
-the current one. It contains:
+the current one and probes safe no-replace renames inside that directory only.
+The probe uses temporary files there and removes them afterward; it never
+creates a probe in a user's working directory. It contains:
 
     `history/`               `undo.log`, `redo.log` and the transaction
                            journal
@@ -1333,11 +1336,23 @@ Filesystem changes ~
 direct.vim never overwrites an existing entry:
 
     - Moves and renames use the platform's atomic no-replace move (on Linux,
-      macOS and Windows). Platforms or filesystems without one are refused.
+      macOS and Windows). FreeBSD and other BSD systems currently have no
+      implementation and are refused. On supported systems, filesystems that
+      reject the no-replace operation are also refused. Direct never falls back
+      to a rename that could replace an existing entry.
     - New files are created exclusively, and creating a directory fails if
       the path exists.
     - Symlinks are recreated, not followed. FIFOs, sockets and device files
       can't be moved across filesystems.
+
+Some filesystems do not implement atomic no-replace renames, including some
+NFS, SMB/CIFS and FUSE mounts (for example sshfs), exFAT on macOS, and older
+ZFS on Linux. Exact support depends on the filesystem and mount options.
+When the operating system reports that the no-replace operation is unsupported,
+Direct gives an explanation, remembers the affected device for the session and
+refuses later renames on that device before changing anything. See
+`:checkhealth direct` for the data-directory probe result. Network and FUSE
+filesystems are not guaranteed to work.
 
 Moving across filesystems ~
                                                             *direct.vim-exdev*

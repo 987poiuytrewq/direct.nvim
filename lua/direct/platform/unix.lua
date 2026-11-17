@@ -1,6 +1,19 @@
 -- POSIX platform implementation for path and filesystem primitives.
 local M = {}
 local ffi
+local UNSUPPORTED_RENAME_ERRNOS = {
+  Linux = { [1] = true, [22] = true, [38] = true, [95] = true },
+  Darwin = { [1] = true, [22] = true, [45] = true, [78] = true },
+  FreeBSD = { [1] = true, [22] = true, [45] = true, [78] = true },
+  OpenBSD = { [1] = true, [22] = true, [78] = true, [91] = true },
+  NetBSD = { [1] = true, [22] = true, [78] = true, [86] = true },
+  DragonFly = { [1] = true, [22] = true, [45] = true, [78] = true },
+}
+
+function M.is_unsupported_rename_errno(code, sysname)
+  local errno_set = UNSUPPORTED_RENAME_ERRNOS[sysname]
+  return errno_set ~= nil and errno_set[tonumber(code)] == true
+end
 
 local function get_ffi()
   if ffi then return ffi end
@@ -46,17 +59,20 @@ function M.file_identity(_path, _nofollow) return nil end
 function M.create_symlink(target, link, _source_link) return vim.uv.fs_symlink(target, link) end
 
 function M.rename_noreplace(src, dst, sysname)
+  sysname = sysname or vim.uv.os_uname().sysname
+  if sysname ~= 'Darwin' and sysname ~= 'Linux' then
+    return nil, 'atomic no-replace rename is unavailable on ' .. tostring(sysname), 'ENOREPLACE'
+  end
+
   local ffi_lib = get_ffi()
   if not ffi_lib then return nil, 'atomic no-replace rename is unavailable (LuaJIT FFI unavailable)' end
 
-  sysname = sysname or vim.uv.os_uname().sysname
   local ok, result = pcall(function()
     if sysname == 'Darwin' then
       return ffi_lib.C.renamex_np(src, dst, 0x00000004) -- RENAME_EXCL
     elseif sysname == 'Linux' then
       return ffi_lib.C.renameat2(-100, src, -100, dst, 0x00000001) -- RENAME_NOREPLACE
     end
-    error('atomic no-replace rename is unavailable on ' .. tostring(sysname))
   end)
   if not ok then return nil, tostring(result) end
   if result == 0 then return true end
@@ -67,6 +83,9 @@ function M.rename_noreplace(src, dst, sysname)
     return nil, 'destination exists: ' .. dst, 'EEXIST'
   elseif code == 18 then
     return nil, 'EXDEV: ' .. tostring(message), 'EXDEV'
+  end
+  if M.is_unsupported_rename_errno(code, sysname) then
+    return nil, 'safe no-replace renames are not supported on this filesystem', 'ENOREPLACE'
   end
   return nil, tostring(message), code
 end

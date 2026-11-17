@@ -51,6 +51,12 @@ local function check_data_directory()
     return directory, false
   end
   vim.health.ok('data directory is writable: ' .. directory)
+  local safe_rename, rename_err = fs.probe_rename_noreplace(directory)
+  if safe_rename then
+    vim.health.ok('safe no-replace renames work in the data directory')
+  else
+    vim.health.warn('safe no-replace renames are unavailable in the data directory: ' .. tostring(rename_err))
+  end
   return directory, true
 end
 

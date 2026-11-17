@@ -75,8 +75,9 @@ the latest.
   that match each file's type (optional; without it, files use one generic
   icon)
 
-Run `:checkhealth direct` to check Neovim, Git, data-directory write access,
-history recovery state, trash size and icon configuration.
+Run `:checkhealth direct` to check Neovim, Git, data-directory write access and
+safe no-replace renames there, history recovery state, trash size and icon
+configuration.
 
 Register and trash paths use NUL-delimited SHA-256 keys. Neovim 0.11 rejects
 NUL-containing strings in `vim.fn.sha256()` (`E976`), so direct uses a byte-safe
@@ -567,6 +568,17 @@ version is running.
 
 Other programs don't use the lock, and network filesystems are not guaranteed
 to work. `:help direct.vim-data` explains exactly what is guaranteed.
+
+Direct's atomic no-replace rename is implemented for Linux, macOS and Windows.
+FreeBSD and other BSD systems currently fail closed because Direct has no native
+no-replace implementation for them. Even on supported operating systems, a
+filesystem may not support the required rename flag; this can happen on NFS,
+SMB/CIFS, FUSE filesystems such as sshfs, exFAT on macOS, or older ZFS on Linux.
+Direct never falls back to a replacing rename. `:checkhealth direct` tests this
+capability only inside Direct's own data directory. When a rename on another
+filesystem reports that the operation is unsupported, Direct remembers that
+device for the current session and refuses later renames there before changing
+anything. See `:help direct.vim-data`.
 
 ## Documentation
 

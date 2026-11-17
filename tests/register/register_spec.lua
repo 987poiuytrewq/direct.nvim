@@ -75,9 +75,69 @@ H.describe('register', function()
     H.assert_true(pending.is_pending(), 'the copy keeps the yank pending')
     H.assert_eq(reg.content(), before, 'the register pointer waits for the copy')
     H.assert_true(release ~= nil, 'the tree copy started')
+
+    local probe = H.mkfile(sb.root, 'probe_lock.lua', {
+      "local root = assert(vim.env.DIRECT_FRESH_ROOT)",
+      "package.path = root .. '/lua/?.lua;' .. package.path",
+      "local lock = require('direct.history.lock')",
+      "local ok, err = lock.acquire()",
+      "if ok then lock.release(); io.stdout:write('ACQUIRED')",
+      "else io.stdout:write('BLOCKED ' .. tostring(err)) end",
+    })
+    local output
+    H.with_env({ XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() }, function()
+      output = vim.fn.system({ vim.v.progpath, '--headless', '-l', probe })
+    end)
+    H.assert_true(output:find('ACQUIRED', 1, true) ~= nil,
+      'another Neovim can use history while this yank copies: ' .. output)
+
     release()
     H.assert_false(pending.is_pending(), 'the guard is released after the copy')
     H.assert_eq(reg.content(), sorted_dst(sb, { source }), 'the copy updates the register')
+  end)
+
+  H.it('does not replace a newer register after an asynchronous copy', function()
+    local sb = H.sandbox()
+    local original = H.mkfile(sb.root, 'original.txt', { 'original' })
+    local replacement = H.mkfile(sb.root, 'replacement.txt', { 'replacement' })
+    local tree = H.mkdir(sb.root, 'tree')
+    H.mkfile(tree, 'inside.txt', { 'inside' })
+    H.assert_true(reg.yank({ original }), 'seed the current register')
+
+    local release
+    local restore = H.stub(fs, 'copy_tree_async', function(_, _, copy_callback)
+      release = function() copy_callback(true, {}) end
+      return true
+    end)
+    local async_ok, async_err
+    H.assert_true(reg.yank_async({ tree .. '/' }, function(ok, err)
+      async_ok, async_err = ok, err
+    end), 'the long copy starts')
+    restore()
+
+    local script = H.mkfile(sb.root, 'yank_in_other_nvim.lua', {
+      "local root = assert(vim.env.DIRECT_FRESH_ROOT)",
+      "package.path = root .. '/lua/?.lua;' .. package.path",
+      "local register = require('direct.register')",
+      'local ok, err = register.yank({' .. string.format('%q', replacement) .. '})',
+      "io.stdout:write(ok and 'YANKED' or ('FAILED ' .. tostring(err)))",
+    })
+    local output
+    H.with_env({ XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() }, function()
+      output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script })
+    end)
+    H.assert_true(output:find('YANKED', 1, true) ~= nil,
+      'another Neovim can replace the register during the copy: ' .. output)
+    local replacement_register = reg.content()
+    H.assert_true(replacement_register ~= sorted_dst(sb, { original }),
+      'the other yank changed the current content pointer')
+
+    release()
+    H.assert_false(async_ok, 'the older asynchronous yank is refused')
+    H.assert_true(tostring(async_err):find('register changed', 1, true) ~= nil,
+      'the refusal explains the pointer change')
+    H.assert_eq(reg.content(), replacement_register,
+      'the completed old copy does not overwrite the newer register')
   end)
 
   H.it('removes old register copies only after paste history stops referencing them', function()

@@ -349,7 +349,10 @@ inside expanded directories can be yanked too.
 The register is shared between Neovim instances and is separate from Vim's
 registers. An explicit yank (`yy`, `Y`, or visual `y`) copies the selected
 entries into the register because their sources remain in place. The copy runs
-in the background; other Direct operations are refused until it finishes.
+in the background; other Direct operations in this Neovim are refused until it
+finishes. The history lock is released during the copy so other Neovim instances
+can continue. The register pointer changes only if it still matches the value
+captured when the yank began.
 
 After a save deletes entries, the register points at their trash payloads
 instead of making another copy. `p` copies from trash. If undo restores a
@@ -370,7 +373,10 @@ If an entry with the same name already exists, you are prompted for another
 name ("File already exists. Paste as:"). The prompt uses |vim.ui.input()|.
 Cancelling, giving an empty answer or giving an invalid name skips that entry.
 A name that still clashes is asked again, up to ten times. While a prompt is
-open, saves, pastes, undo and redo are refused.
+open, Direct operations in this Neovim are refused. The history lock is
+released so other Neovim instances can continue. After the answer, Direct
+rechecks history and the destination; if another instance took the chosen name,
+it prompts again rather than overwriting it.
 
 Entries pasted before a later one is skipped or fails are kept and recorded in
 the history. If every entry is skipped, nothing is recorded.
@@ -1258,12 +1264,20 @@ the current one. It contains:
     `register/`              the latest yank
     `.direct-history.lock`   the lock file shared by Neovim instances
                              (inside `direct/`)
+    `.direct-history.lock.owner`  holder PID for busy-lock diagnostics
 
 The lock coordinates current versions on the same machine. Older versions
 used `$XDG_DATA_HOME/.direct-history.lock` (or the equivalent data-home path),
 so do not run an old and a new version at the same time: they would use
 different locks. The old lock file is left in place and is harmless when no
 older version is running.
+
+Lock acquisition retries for up to two seconds. If another instance still owns
+it, Direct says the operation can be retried and names the holder's PID when
+available. The PID is advisory metadata in `.direct-history.lock.owner`; the
+platform lock remains authoritative. Async paste prompts and explicit yank
+copies release the lock while waiting; before continuing, Direct checks
+history and the paste destination again.
 
 History format ~
                                                    *direct.vim-history-format*

@@ -90,9 +90,11 @@ function M.acquire_file_lock(path)
   local fd, open_err = vim.uv.fs_open(path, 'a', 384)
   if not fd then return nil, tostring(open_err or 'could not open history lock') end
   if lib.C.flock(fd, 2 + 4) ~= 0 then
-    local err = 'flock failed (errno ' .. tostring(lib.errno()) .. ')'
+    local code = tonumber(lib.errno())
+    local err = 'flock failed (errno ' .. tostring(code) .. ')'
     vim.uv.fs_close(fd)
-    return nil, err
+    if code == 11 or code == 35 then return nil, err, 'EWOULDBLOCK' end
+    return nil, err, code
   end
   return { fd = fd }
 end

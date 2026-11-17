@@ -502,16 +502,16 @@ H.describe('history', function()
     H.assert_false(H.exists(sb.root, 'b.txt'), 'b.txt is gone')
   end)
 
-  H.it('the history lock excludes a second Neovim process sharing the data home', function()
+  H.it('a busy history lock retries and names its holder before failing', function()
     local sb = H.sandbox()
     H.assert_true(history.lock.acquire(), 'the first process takes the lock')
     local script = H.mkfile(sb.root, 'try_lock.lua', {
       "local root = assert(vim.env.DIRECT_FRESH_ROOT)",
       "package.path = root .. '/lua/?.lua;' .. package.path",
       "local lock = require('direct.history.lock')",
-      "local ok = lock.acquire()",
+      "local ok, err = lock.acquire()",
       "if ok then io.stdout:write('ACQUIRED\\n'); lock.release()",
-      "else io.stdout:write('BLOCKED\\n') end",
+      "else io.stdout:write('BLOCKED\\n' .. tostring(err) .. '\\n') end",
     })
     local output
     H.with_env({ XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() },
@@ -521,6 +521,43 @@ H.describe('history', function()
     H.assert_true(history.lock.release(), 'the first process releases the lock')
     H.assert_true(output:find('BLOCKED', 1, true) ~= nil,
       'the concurrent process fails closed instead of entering the critical section')
+    H.assert_true(output:find('another Neovim instance is using direct.vim', 1, true) ~= nil,
+      'the busy-lock error explains the cause')
+    H.assert_true(output:find(tostring(vim.uv.os_getpid()), 1, true) ~= nil,
+      'the busy-lock message names the holder PID')
+  end)
+
+  H.it('retries a busy lock until the other process releases it', function()
+    local sb = H.sandbox()
+    local marker = vim.fs.joinpath(sb.root, 'lock-held')
+    local script = H.mkfile(sb.root, 'hold_lock.lua', {
+      "local root = assert(vim.env.DIRECT_FRESH_ROOT)",
+      "package.path = root .. '/lua/?.lua;' .. package.path",
+      "local lock = require('direct.history.lock')",
+      "local ok, err = lock.acquire()",
+      "if not ok then io.stdout:write('BLOCKED ' .. tostring(err)); return end",
+      'vim.fn.writefile({"held"}, ' .. string.format('%q', marker) .. ')',
+      'vim.wait(350, function() return false end, 20)',
+      "lock.release()",
+      "io.stdout:write('RELEASED')",
+    })
+    local process = vim.system({ vim.v.progpath, '--headless', '-l', script }, {
+      env = {
+        XDG_DATA_HOME = sb.data_home,
+        DIRECT_FRESH_ROOT = vim.fn.getcwd(),
+      },
+      text = true,
+    })
+    H.assert_true(vim.wait(3000, function() return fs.exists(marker) end),
+      'the second process acquired the lock')
+
+    local acquired, acquire_err = history.lock.acquire()
+    H.assert_true(acquired == true, tostring(acquire_err))
+    H.assert_true(history.lock.release(), 'the waiting process releases the lock')
+    local result = process:wait(5000)
+    H.assert_eq(result.code, 0, tostring(result.stderr))
+    H.assert_true(result.stdout:find('RELEASED', 1, true) ~= nil,
+      'the holder released the lock inside the retry window')
   end)
 
   H.it('apply holds the process lock through filesystem execution and history commit', function()

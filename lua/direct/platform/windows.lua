@@ -171,9 +171,11 @@ function M.acquire_file_lock(path)
   end
   local overlapped = lib.new('direct_platform_OVERLAPPED[1]')
   if api.LockFileEx(handle, 3, 0, 1, 0, overlapped) == 0 then
-    local lock_err = 'LockFileEx failed (error ' .. tostring(api.GetLastError()) .. ')'
+    local code = tonumber(api.GetLastError())
+    local lock_err = 'LockFileEx failed (error ' .. tostring(code) .. ')'
     api.CloseHandle(handle)
-    return nil, lock_err
+    if code == 33 then return nil, lock_err, 'EWOULDBLOCK' end
+    return nil, lock_err, code
   end
   return { handle = handle, overlapped = overlapped }
 end

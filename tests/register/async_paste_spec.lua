@@ -61,6 +61,50 @@ H.describe('async paste prompts', function()
       'cancel emits no success notice')
   end)
 
+  H.it('releases the history lock during a prompt and rechecks the answered destination', function()
+    local sb = H.sandbox()
+    local source = H.mkfile(sb.root, 'source.txt', { 'REGISTER' })
+    H.assert_true(register.yank({ source }) == true, 'yank the source')
+    local dst = H.mkdir(sb.root, 'dest')
+    H.mkfile(dst, 'source.txt', { 'KEEP' })
+    local raced_destination = dst .. '/from-other.txt'
+    local script = H.mkfile(sb.root, 'take_lock.lua', {
+      'local root = assert(vim.env.DIRECT_FRESH_ROOT)',
+      'package.path = root .. "/lua/?.lua;" .. package.path',
+      'local lock = require("direct.history.lock")',
+      'local ok, err = lock.acquire()',
+      'if not ok then io.stdout:write("BLOCKED " .. tostring(err)); return end',
+      'vim.fn.writefile({"EXTERNAL"}, ' .. string.format('%q', raced_destination) .. ')',
+      'lock.release()',
+      'io.stdout:write("ACQUIRED")',
+    })
+    local calls, restore = input_spy()
+
+    register.paste(dst)
+
+    H.assert_true(pending.is_pending(), 'the paste awaits its conflict answer')
+    local output
+    H.with_env({ XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() }, function()
+      output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script })
+    end)
+    H.assert_true(output:find('ACQUIRED', 1, true) ~= nil,
+      'another Neovim process can take the history lock while input is open: ' .. output)
+    H.assert_eq(vim.fn.readfile(raced_destination), { 'EXTERNAL' },
+      'the other process creates the chosen path without the paste lock')
+
+    answer_next(calls, 'from-other.txt')
+    H.assert_eq(#calls, 1, 'the paste re-prompts when the answered destination was taken')
+    answer_next(calls, 'copied.txt')
+    restore()
+
+    H.assert_false(pending.is_pending(), 'the resumed paste releases its pending guard')
+    H.assert_eq(vim.fn.readfile(raced_destination), { 'EXTERNAL' }, 'the raced file was not overwritten')
+    H.assert_eq(vim.fn.readfile(dst .. '/copied.txt'), { 'REGISTER' }, 'the accepted name was pasted')
+    H.assert_true(history.undo() ~= nil, 'the successful paste remains undoable')
+    H.assert_eq(vim.fn.readfile(raced_destination), { 'EXTERNAL' }, 'undo keeps the other process file')
+    H.assert_nil(vim.uv.fs_lstat(dst .. '/copied.txt'), 'undo removes only the pasted file')
+  end)
+
   H.it('re-prompts asynchronously, skips a cancelled later entry, and records only partial success', function()
     local sb = H.sandbox()
     local a, b = H.mkfile(sb.root, 'a.txt', { 'A' }), H.mkfile(sb.root, 'b.txt', { 'B' })

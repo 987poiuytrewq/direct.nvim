@@ -777,6 +777,13 @@ function M.Paste(src, dst, src_names, dst_names)
       end
       local current = M.fs.join(self.dst, pair.dst)
       local entry_type = M.fs.is_file(current) and 'File' or 'Directory'
+      if type(self._before_prompt) == 'function' then
+        local called, released, release_err = pcall(self._before_prompt, pair, full_src, current)
+        if not called or not released then
+          fail(called and release_err or released or 'could not release the history lock for paste prompt')
+          return
+        end
+      end
       local called, started, start_err = pcall(
         M.ui.input,
         entry_type .. ' already exists. Paste as: ',
@@ -788,6 +795,12 @@ function M.Paste(src, dst, src_names, dst_names)
             return
           end
           pair.dst = answer
+          if type(self._after_prompt) == 'function' then
+            local resumed_called, resumed, resume_err = pcall(self._after_prompt, pair, full_src, answer)
+            if not resumed_called then return fail(resumed) end
+            if resumed == 'clash' then return request_name(pair, full_src, st, attempts + 1) end
+            if not resumed then return fail(resume_err or 'could not reacquire the history lock after paste prompt') end
+          end
           local chosen = M.fs.join(self.dst, pair.dst)
           if M.fs.taken(chosen) then
             request_name(pair, full_src, st, attempts + 1)

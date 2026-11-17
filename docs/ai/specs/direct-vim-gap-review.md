@@ -1,6 +1,6 @@
 # Spec: direct.vim improvements, third review
 
-**Status:** A26, A27, A29 and A30 are complete; A28, A31 and A32 remain proposed.
+**Status:** A26, A27, A29, A30 and A32 are complete; A28 and A31 remain proposed.
 
 **Source:** a third static review of `origin/master` at `ad25866`
 (12 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -13,8 +13,8 @@ in a running Neovim. Each task's first step is to write a failing test that
 reproduces the problem, or to record that it can't be reproduced and drop the
 task.
 
-**Last checked:** `origin/master` at `01bb269` (17 November 2026). That check
-confirms A29 (#140) and keeps A28, A31 and A32 proposed.
+**Last checked:** `origin/master` at `068752a` (17 November 2026). That check
+confirms A32 (#143) and keeps A28 and A31 proposed.
 
 ## Decisions
 
@@ -55,7 +55,7 @@ into each task below:
 | A29 | P3 | Complete | Handle a busy history lock from another Neovim instance clearly |
 | A30 | P4 | Complete | Release, coverage floor, wider CI and a stale comment |
 | A31 | P4 | Proposed | Record the new Git-ignore deadline in the v0.3.0 changelog |
-| A32 | P2 | Proposed | Stop a full history from making every save rescan the whole trash |
+| A32 | P2 | Complete | Stop a full history from making every save rescan the whole trash |
 
 ## Robustness and performance
 
@@ -199,6 +199,15 @@ within the retry window, the operation succeeds.
 
 ### A32 — Once the history is full, every save rescans the whole trash (P2)
 
+**Status: COMPLETE in #143.** History trimming now checks only trash paths
+released by the dropped records for age retention; size retention performs at
+most one additional full scan per session after trimming and tracks later
+released paths incrementally.
+Register pruning skips unchanged paste-reference sets and runs when those
+references or the register content pointer change. The new tests cover scan
+counts, age-based removal and avoiding extra deserialization for ordinary
+records.
+
 **Problem.** A26 (#138) caps each stack at `history_limit` steps.
 `commit_stacks` (`lua/direct/history/history.lua`, around line 606) trims the
 stacks, then `after_stack_commit` (around line 559) runs two clean-ups:
@@ -341,7 +350,6 @@ name `git.ignore_timeout_ms`.
 
 ## Suggested order
 
-1. A27, A26 and A29 are complete.
-2. A32, before the next release, since 1000 steps is the default.
-3. A28.
+1. A27, A26, A29 and A32 are complete.
+2. A28.
 4. A31 at any time; it only touches docs and the release notes.

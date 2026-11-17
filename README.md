@@ -552,8 +552,9 @@ direct.vim is built so that a mistake can be undone:
   explicit yank copies in the background; on resume, the register, history and
   destination are checked again.
 
-The lock file is stored at `<data>/direct/.direct-history.lock`. Do not run an
-older direct.vim version at the same time as this version: older versions use
+The lock file is stored at `<data>/direct/.direct-history.lock`; a companion
+`.owner` file records the holder PID for diagnostics. Do not run an older
+direct.vim version at the same time as this version: older versions use
 `<data>/.direct-history.lock`, so the two versions would not coordinate with
 each other. The old lock file is left untouched and is harmless once no older
 version is running.

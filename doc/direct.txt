@@ -1264,6 +1264,7 @@ the current one. It contains:
     `register/`              the latest yank
     `.direct-history.lock`   the lock file shared by Neovim instances
                              (inside `direct/`)
+    `.direct-history.lock.owner`  holder PID for busy-lock diagnostics
 
 The lock coordinates current versions on the same machine. Older versions
 used `$XDG_DATA_HOME/.direct-history.lock` (or the equivalent data-home path),
@@ -1273,9 +1274,10 @@ older version is running.
 
 Lock acquisition retries for up to two seconds. If another instance still owns
 it, Direct says the operation can be retried and names the holder's PID when
-available. Async paste prompts and explicit yank copies release the lock while
-waiting; before continuing, Direct checks history and the paste destination
-again.
+available. The PID is advisory metadata in `.direct-history.lock.owner`; the
+platform lock remains authoritative. Async paste prompts and explicit yank
+copies release the lock while waiting; before continuing, Direct checks
+history and the paste destination again.
 
 History format ~
                                                    *direct.vim-history-format*

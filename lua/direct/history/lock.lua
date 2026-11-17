@@ -11,6 +11,8 @@ local held_path
 local RETRY_TIMEOUT_MS = 2000
 local RETRY_INTERVAL_MS = 50
 
+local function owner_path(path) return path .. '.owner' end
+
 local function lock_path()
   local paths = require('direct.paths')
   local fs = require('direct.fs')
@@ -22,7 +24,9 @@ local function lock_path()
 end
 
 local function write_owner(path, pid)
-  local fd, err = M.uv.fs_open(path, 'r+', 384)
+  -- Windows' byte-range lock also blocks reads of the lock file, so keep the
+  -- advisory PID in a separate same-directory file instead of touching it.
+  local fd, err = M.uv.fs_open(owner_path(path), 'w', 384)
   if not fd then return nil, err end
   local bytes = pid and (tostring(pid) .. '\n') or ''
   if bytes ~= '' then
@@ -32,15 +36,13 @@ local function write_owner(path, pid)
       return nil, write_err
     end
   end
-  local truncated, truncate_err = M.uv.fs_ftruncate(fd, #bytes)
   local closed, close_err = M.uv.fs_close(fd)
-  if not truncated then return nil, truncate_err end
   if not closed then return nil, close_err end
   return true
 end
 
 local function read_owner(path)
-  local fd = M.uv.fs_open(path, 'r', 0)
+  local fd = M.uv.fs_open(owner_path(path), 'r', 0)
   if not fd then return nil end
   local bytes = M.uv.fs_read(fd, 128, 0)
   M.uv.fs_close(fd)

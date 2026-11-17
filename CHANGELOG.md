@@ -27,9 +27,10 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ### Changed
 
-- Use `git.ignore_timeout_ms` for Git-ignore queries and their sync-time retries
-  instead of `git.timeout_ms`. If you raised `git.timeout_ms` to accommodate a
-  slow repository, raise `git.ignore_timeout_ms` as well.
+- Use `git.ignore_timeout_ms` for Git-ignore queries, including sync-time retries
+  after a timed-out listing, instead of `git.timeout_ms`. If you raised
+  `git.timeout_ms` to accommodate a slow repository, raise
+  `git.ignore_timeout_ms` as well.
 - Collapse chains of single-child directories into one row, such as
   `src/main/java/`, by default. Set `collapse_single_entry_directories = false`
   to keep one row per directory.

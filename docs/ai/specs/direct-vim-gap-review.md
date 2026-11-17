@@ -1,6 +1,6 @@
 # Spec: direct.vim improvements, third review
 
-**Status:** A26, A27, A28, A29, A30 and A32 are complete; A31 remains proposed.
+**Status:** A26–A32 are complete.
 
 **Source:** a third static review of `origin/master` at `ad25866`
 (12 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -13,8 +13,8 @@ in a running Neovim. Each task's first step is to write a failing test that
 reproduces the problem, or to record that it can't be reproduced and drop the
 task.
 
-**Last checked:** `origin/master` at `4e8ed02` (17 November 2026). That check
-confirms A28 (#145) and keeps A31 proposed.
+**Last checked:** `origin/master` at `8ba41a4` (17 November 2026). That check
+confirms A31 (#147); all tasks in this review are complete.
 
 ## Decisions
 
@@ -54,7 +54,7 @@ into each task below:
 | A28 | P3 | Complete | Define, document and test edits to collapsed rows |
 | A29 | P3 | Complete | Handle a busy history lock from another Neovim instance clearly |
 | A30 | P4 | Complete | Release, coverage floor, wider CI and a stale comment |
-| A31 | P4 | Proposed | Record the new Git-ignore deadline in the v0.3.0 changelog |
+| A31 | P4 | Complete | Record the new Git-ignore deadline in the v0.3.0 changelog |
 | A32 | P2 | Complete | Stop a full history from making every save rescan the whole trash |
 
 ## Robustness and performance
@@ -326,6 +326,12 @@ Windows, and the preflight comment matches the preserved-history behaviour.
 
 ### A31 — The v0.3.0 changelog leaves out the new Git-ignore deadline (P4)
 
+**Status: COMPLETE in #147.** The `[0.3.0]` changelog and published GitHub
+release notes now document `git.ignore_timeout_ms` (default `200` ms), explain
+that it replaces `git.timeout_ms` for Git-ignore queries and sync retries, and
+advise users with slow repositories to raise the new option. The README release
+checklist now requires a changelog entry for every merged PR since the last tag.
+
 **Problem.** #133 (`b522cbb`) added `git.ignore_timeout_ms` and moved
 Git-ignore queries off `git.timeout_ms` (`ignore_timeout_ms()` in
 `lua/direct/git.lua`). So by default the ignore deadline drops from 1000 ms to
@@ -355,6 +361,4 @@ name `git.ignore_timeout_ms`.
 
 ## Suggested order
 
-1. A27, A26, A28, A29, A30 and A32 are complete.
-2. A31 remains: record the Git-ignore deadline in the v0.3.0 changelog and
-   release notes.
+1. A26, A27, A28, A29, A30, A31 and A32 are complete.

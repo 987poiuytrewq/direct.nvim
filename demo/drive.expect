@@ -180,7 +180,7 @@ key "o"
 type_text "docs/guide/getting-started.md"
 key "\033" 600
 write_listing
-wait_for {getting-started\.md}
+wait_for {docs/guide/}
 after 800
 
 # 3. Delete: remove the line. Then undo and redo it, on disk.
@@ -205,7 +205,7 @@ key "zM" 800
 
 # 4. Open a file and a folder, going back up with - each time. ("/re" would
 # also match .gitignore, so search for "rea".)
-caption "Open files and folders, and go back with -" "/rea  Enter  -  /docs  Enter  -"
+caption "Open files and folders, and go back with -" "/rea  Enter  -  /docs  Enter  -  -"
 after 400
 find_row "rea"
 key "\r"
@@ -216,8 +216,11 @@ wait_for {LICENSE}
 after 400
 find_row "docs"
 key "\r"
-wait_for {guide/}
+wait_for {getting-started\.md}
 after 900
+key "-"
+wait_for {guide/}
+after 700
 key "-"
 wait_for {LICENSE}
 after 600

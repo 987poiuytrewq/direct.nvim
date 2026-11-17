@@ -95,6 +95,7 @@ create_fixture() {
   printf '# my-plugin\n\nA small Neovim plugin.\n' > "$root/README.md"
   printf '*my-plugin.txt*\n' > "$root/doc/my-plugin.txt"
   printf "require('my-plugin').setup()\n" > "$root/examples/minimal/init.lua"
+  printf '# Examples\n' > "$root/examples/README.md"
   printf 'return {}\n' > "$root/lua/my-plugin/init.lua"
   printf 'return { enabled = true }\n' > "$root/lua/my-plugin/config.lua"
   printf 'return {}\n' > "$root/lua/my-plugin/utils.lua"

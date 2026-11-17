@@ -34,6 +34,9 @@ keystroke overlay:
    `feature/health-check` branch since `main`, committed work included.
 10. **Back to the full listing**, with the title and `:help direct.vim`.
 
+The demo uses direct.vim's default of collapsing single-entry directory chains,
+so `docs/guide/` and `lua/my-plugin/` each show as one row.
+
 Neovim starts inside the project, so messages show paths relative to it.
 Searches type only enough of a name to match one line.
 

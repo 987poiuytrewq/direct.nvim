@@ -9,7 +9,7 @@
 local H = require('tests.support.harness')
 local fs = require('direct.fs')
 local platform = require('direct.platform')
-local unix_platform = require('direct.platform.unix')
+local unix_platform = not H.is_windows() and require('direct.platform.unix') or nil
 
 H.describe('fs', function()
   H.it('operations return true or nil, err and never raise; predicates are booleans', function()
@@ -593,21 +593,28 @@ H.describe('fs', function()
 
   H.it('rename_noreplace fails closed on unsupported platforms', function()
     local sb = H.sandbox()
-    H.mkfile(sb.root, 'src.txt', { 'SOURCE' })
+    local src, dst = H.mkfile(sb.root, 'src.txt', { 'SOURCE' }), sb.root .. '/dst.txt'
+    local calls = {}
+    local restore_platform = H.stub(platform, 'rename_noreplace', function(_, _, sysname)
+      calls[#calls + 1] = sysname
+      return nil, 'atomic no-replace rename is unavailable on ' .. tostring(sysname), 'ENOREPLACE'
+    end)
     for _, sysname in ipairs({ 'Plan9', 'FreeBSD' }) do
       fs._reset_rename_capability_cache()
       local restore = H.stub(fs, 'uv', {
         os_uname = function() return { sysname = sysname } end,
       })
-      local ok, err = fs.rename_noreplace(sb.root .. '/src.txt', sb.root .. '/dst.txt')
+      local ok, err = fs.rename_noreplace(src, dst)
       restore()
       H.assert_nil(ok, 'unsupported primitive refuses to guess on ' .. sysname)
       H.assert_true(tostring(err):find('safe no-replace renames', 1, true) ~= nil,
         sysname .. ': ' .. tostring(err))
+      H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, sysname .. ' preserves the source')
+      H.assert_nil(vim.uv.fs_lstat(dst), sysname .. ' leaves the destination absent')
     end
+    restore_platform()
     fs._reset_rename_capability_cache()
-    H.assert_eq(vim.fn.readfile(sb.root .. '/src.txt'), { 'SOURCE' }, 'source remains')
-    H.assert_nil(vim.uv.fs_lstat(sb.root .. '/dst.txt'), 'destination remains absent')
+    H.assert_eq(calls, { 'Plan9', 'FreeBSD' }, 'unsupported sysnames reach the stubbed adapter')
   end)
 
   H.it('explains unsupported no-replace rename errors and refuses before changing paths', function()
@@ -638,33 +645,36 @@ H.describe('fs', function()
       { 'FreeBSD', 1 }, { 'FreeBSD', 22 }, { 'FreeBSD', 45 }, { 'FreeBSD', 78 },
       { 'OpenBSD', 91 }, { 'NetBSD', 86 }, { 'DragonFly', 45 },
     }
-    for _, case in ipairs(errno_cases) do
-      H.assert_true(unix_platform.is_unsupported_rename_errno(case[2], case[1]),
-        string.format('errno %d is recognized on %s', case[2], case[1]))
-    end
-    H.assert_false(unix_platform.is_unsupported_rename_errno(13, 'Linux'),
-      'unrelated permission errors are not classified as unsupported')
-    local bsd_ok, bsd_err, bsd_code = unix_platform.rename_noreplace('/unused/source', '/unused/destination', 'FreeBSD')
-    H.assert_nil(bsd_ok, 'BSD does not guess at a safe rename primitive')
-    H.assert_eq(bsd_code, 'ENOREPLACE', 'BSD is classified as unsupported')
-    H.assert_true(tostring(bsd_err):find('unavailable on FreeBSD', 1, true) ~= nil, tostring(bsd_err))
-
     local sb = H.sandbox()
     if not H.is_windows() then
+      for _, case in ipairs(errno_cases) do
+        H.assert_true(unix_platform.is_unsupported_rename_errno(case[2], case[1]),
+          string.format('errno %d is recognized on %s', case[2], case[1]))
+      end
+      H.assert_false(unix_platform.is_unsupported_rename_errno(13, 'Linux'),
+        'unrelated permission errors are not classified as unsupported')
+      local bsd_ok, bsd_err, bsd_code =
+        unix_platform.rename_noreplace('/unused/source', '/unused/destination', 'FreeBSD')
+      H.assert_nil(bsd_ok, 'BSD does not guess at a safe rename primitive')
+      H.assert_eq(bsd_code, 'ENOREPLACE', 'BSD is classified as unsupported')
+      H.assert_true(tostring(bsd_err):find('unavailable on FreeBSD', 1, true) ~= nil, tostring(bsd_err))
+
       for index, case in ipairs(errno_cases) do
         local source = H.mkfile(sb.root, 'errno-' .. tostring(index) .. '.txt', { 'KEEP' })
+        local destination = sb.root .. '/errno-' .. tostring(index) .. '-dst.txt'
         fs._reset_rename_capability_cache()
         local restore_uname = H.stub(fs.uv, 'os_uname', function() return { sysname = case[1] } end)
         local restore_rename = H.stub(platform, 'rename_noreplace', function()
           return nil, 'simulated errno ' .. tostring(case[2]), case[2]
         end)
-        local result, result_err = fs.rename_noreplace(source, sb.root .. '/errno-' .. tostring(index) .. '-dst.txt')
+        local result, result_err = fs.rename_noreplace(source, destination)
         restore_rename()
         restore_uname()
         H.assert_nil(result, 'unsupported errno is refused')
         H.assert_true(tostring(result_err):find('safe no-replace renames', 1, true) ~= nil,
           string.format('%s errno %d is explained: %s', case[1], case[2], tostring(result_err)))
         H.assert_true(fs.exists(source), 'errno refusal preserves the source')
+        H.assert_nil(vim.uv.fs_lstat(destination), 'errno refusal leaves the destination absent')
       end
       fs._reset_rename_capability_cache()
     end

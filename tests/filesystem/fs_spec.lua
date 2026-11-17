@@ -621,6 +621,9 @@ H.describe('fs', function()
     local sb = H.sandbox()
     local src, dst = sb.root .. '/src.txt', sb.root .. '/dst.txt'
     H.mkfile(sb.root, 'src.txt', { 'SOURCE' })
+    local restore_classifier = H.stub(platform, 'is_unsupported_rename_errno', function(code)
+      return code == 22
+    end)
     local restore = H.stub(platform, 'rename_noreplace', function()
       return nil, 'Invalid argument', 22
     end)
@@ -628,6 +631,7 @@ H.describe('fs', function()
     local ok, err = fs.rename_noreplace(src, dst)
 
     restore()
+    restore_classifier()
     fs._reset_rename_capability_cache()
     H.assert_nil(ok, 'unsupported operation is refused')
     H.assert_true(tostring(err):find('safe no-replace renames', 1, true) ~= nil,

@@ -840,7 +840,7 @@ know about them before they hit them.
   plain message that says what happened, on which line, and what to do. For
   example: "Line 12 was replaced as a whole, and direct.vim can't tell whether
   `old.txt` was renamed or replaced. Undo that change and rename with `ciw`,
-  or save it as a delete and create with `:DirectSync!`."
+  or use `:DirectList!` to discard the edits."
 - Move the cursor to the first offending line and mark it with a diagnostic
   (`vim.diagnostic.set` in a direct namespace) so it shows in the sign column.
   Clear it on the next change.

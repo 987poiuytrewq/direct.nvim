@@ -224,6 +224,37 @@ H.describe('buffer: row identity and filtered rendering', function()
     H.assert_buf_eq({ 'inside' }, 0)
   end)
 
+  H.it('DirectYank resolves a collapsed row to its deepest directory path', function()
+    clean_buffers()
+    local config = require('direct.config')
+    config.setup({ collapse_single_entry_directories = true })
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'a/b/c/inside.txt', { 'inside' })
+    local before = H.fs_snapshot(ws)
+    local direct = require('direct')
+    direct.list(ws)
+    H.assert_buf_eq({ 'a/b/c/' }, 0, 'the chain has one visible row')
+
+    local register = require('direct.register')
+    local original_yank_async = register.yank_async
+    local yanked
+    register.yank_async = function(sources, callback)
+      yanked = vim.deepcopy(sources)
+      if callback then callback(true) end
+      return true
+    end
+    local ok, err = pcall(direct.yank, 1, 1)
+    register.yank_async = original_yank_async
+    if not ok then error(err) end
+
+    H.assert_eq(yanked, { ws .. '/a/b/c/' }, 'the visible collapsed row resolves to its leaf directory')
+    H.assert_eq(H.fs_snapshot(ws), before, 'yanking does not edit the filesystem')
+    local undo_path = paths.join(paths.data_dir_path('history'), 'undo.log')
+    H.assert_eq(vim.fn.filereadable(undo_path), 0, 'yanking does not add a filesystem history step')
+    config.setup({})
+  end)
+
   H.it('DirectYank starts the copy in the background and holds the pending guard', function()
     clean_buffers()
     local sb = H.sandbox()

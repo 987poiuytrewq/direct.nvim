@@ -136,21 +136,33 @@ return function(context)
     return signature
   end
 
+  local function visit_action_leaves(action, callback)
+    if action.name == 'g' or action.name == 'batch' then
+      for _, member in ipairs(action.actions or {}) do
+        visit_action_leaves(member, callback)
+      end
+    else
+      callback(action)
+    end
+  end
+
   local function action_paths_in_scope(actions, scope)
     scope = paths.canonical(scope)
     local prefix = scope:gsub('/+$', '') .. '/'
     local result, seen = {}, {}
     for _, action in ipairs(actions or {}) do
-      for _, field in ipairs({ 'src', 'dst' }) do
-        local path = action[field]
-        if type(path) == 'string' then
-          local normalized = paths.canonical(path)
-          if normalized:sub(1, #prefix) == prefix and not seen[normalized] then
-            seen[normalized] = true
-            result[#result + 1] = path
+      visit_action_leaves(action, function(member)
+        for _, field in ipairs({ 'src', 'dst' }) do
+          local path = member[field]
+          if type(path) == 'string' then
+            local normalized = paths.canonical(path)
+            if normalized:sub(1, #prefix) == prefix and not seen[normalized] then
+              seen[normalized] = true
+              result[#result + 1] = path
+            end
           end
         end
-      end
+      end)
     end
     return result
   end
@@ -346,7 +358,9 @@ return function(context)
     local expected_nested = {}
     if state.collapse_single_entry_directories then
       for _, line in ipairs(expected) do
-        if line:find('/', 1, true) then expected_nested[line] = true end
+        if line:find('/', 1, true) or line:find(paths.directory_separator(), 1, true) then
+          expected_nested[line] = true
+        end
       end
     end
     local unsafe = first_unsafe(self.root, actual, nested_added) or first_unsafe(self.root, expected, expected_nested)
@@ -558,15 +572,19 @@ return function(context)
     -- A visible directory row does not authorize moving its ignored contents.
     -- Refuse directory deletes and renames before yanking or other side effects.
     for _, act in ipairs(actions) do
-      if (act.name == 'rmdir' or act.name == 'mv') and is_real_directory(act.src) then
-        local hidden_path, inspect_err = hidden_descendant(act.src, snapshot, state)
-        if hidden_path or inspect_err then
-          local reason = hidden_path and ('directory contains hidden entry: ' .. hidden_path)
-            or ('cannot inspect directory descendants: ' .. tostring(inspect_err))
-          vim.bo[bufnr].modified = true
-          ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
-          return nil, reason
+      local hidden_path, inspect_err
+      visit_action_leaves(act, function(member)
+        if hidden_path or inspect_err then return end
+        if (member.name == 'rmdir' or member.name == 'mv') and is_real_directory(member.src) then
+          hidden_path, inspect_err = hidden_descendant(member.src, snapshot, state)
         end
+      end)
+      if hidden_path or inspect_err then
+        local reason = hidden_path and ('directory contains hidden entry: ' .. hidden_path)
+          or ('cannot inspect directory descendants: ' .. tostring(inspect_err))
+        vim.bo[bufnr].modified = true
+        ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
+        return nil, reason
       end
     end
 
@@ -580,18 +598,20 @@ return function(context)
       return vim.fs.normalize(path)
     end
     for _, act in ipairs(actions) do
-      if (act.name == 'mv' or act.name == 'rm' or act.name == 'rmdir') and fs.taken(act.src) then
-        vacated_sources[move_key(act.src)] = true
-        local identity = fs.entry_identity(act.src)
-        if identity and identity.inode then
-          local bucket = sources_by_inode[identity.inode]
-          if not bucket then
-            bucket = {}
-            sources_by_inode[identity.inode] = bucket
+      visit_action_leaves(act, function(member)
+        if (member.name == 'mv' or member.name == 'rm' or member.name == 'rmdir') and fs.taken(member.src) then
+          vacated_sources[move_key(member.src)] = true
+          local identity = fs.entry_identity(member.src)
+          if identity and identity.inode then
+            local bucket = sources_by_inode[identity.inode]
+            if not bucket then
+              bucket = {}
+              sources_by_inode[identity.inode] = bucket
+            end
+            bucket[#bucket + 1] = member.src
           end
-          bucket[#bucket + 1] = act.src
         end
-      end
+      end)
     end
     for _, act in ipairs(actions) do
       local destination = act.dst
@@ -749,12 +769,10 @@ return function(context)
     if #actions > 0 or #yanks > 0 then
       local inputs = {}
       for _, act in ipairs(actions) do
-        if type(act.src) == 'string' then inputs[#inputs + 1] = act.src end
-        if type(act.dst) == 'string' then inputs[#inputs + 1] = act.dst end
-        for _, member in ipairs(act.actions or {}) do
+        visit_action_leaves(act, function(member)
           if type(member.src) == 'string' then inputs[#inputs + 1] = member.src end
           if type(member.dst) == 'string' then inputs[#inputs + 1] = member.dst end
-        end
+        end)
       end
       for _, path in ipairs(yanks) do
         inputs[#inputs + 1] = path
@@ -818,9 +836,15 @@ return function(context)
     if #yanks > 0 then
       local trash_by_src = {}
       for _, act in ipairs(actions) do
-        if (act._kind == 'rm' or act._kind == 'rmdir') and type(act.src) == 'string' and type(act.dst) == 'string' then
-          trash_by_src[paths.canonical(act.src)] = act.dst
-        end
+        visit_action_leaves(act, function(member)
+          if
+            (member._kind == 'rm' or member._kind == 'rmdir')
+            and type(member.src) == 'string'
+            and type(member.dst) == 'string'
+          then
+            trash_by_src[paths.canonical(member.src)] = member.dst
+          end
+        end)
       end
       local deleted_entries, point_at_trash = {}, true
       for _, path in ipairs(yanks) do

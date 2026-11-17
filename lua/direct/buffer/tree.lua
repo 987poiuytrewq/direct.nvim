@@ -325,7 +325,7 @@ return function(deps)
       local rec = id and state.rows[id] or nil
 
       local reason
-      if depth == 0 and rec and rec.collapsed_components and nested_path_reason then
+      if rec and rec.collapsed_components and nested_path_reason then
         reason = nested_path_reason(name)
       else
         reason = component_reason(name)
@@ -584,6 +584,7 @@ return function(deps)
     end
 
     local creates, moves, removals, yanks = {}, {}, {}, {}
+    local planned_directories = {}
     local deleted_ids, moving_ids = {}, {}
     for id in pairs(root_ids) do
       local rec, node = state.rows[id], nodes_by_id[id]
@@ -659,6 +660,34 @@ return function(deps)
               return nil, 'cannot change the type of an expanded directory'
             end
             moving_ids[node.id] = true
+            if moved_from_root and rec.collapsed_components and #rec.collapsed_components > 1 then
+              local parent = nodes_by_key[node.parent_key]
+              local destination_parent = parent and target_path(parent)
+              if not destination_parent then return nil, 'child row has no destination directory' end
+              local marker = node.name:sub(-1)
+              local relative = strip_directory_marker(node.name)
+              if marker == '\\' then relative = relative:gsub('\\', '/') end
+              local names = {}
+              for part in (relative .. '/'):gmatch('(.-)/') do
+                names[#names + 1] = part
+              end
+              for index = 1, #names - 1 do
+                local directory = entry_path(destination_parent, names[index] .. marker)
+                local key = vim.fs.normalize(directory)
+                if not planned_directories[key] then
+                  if fs.taken(directory) then
+                    if not fs.is_dir(directory) then return nil, 'path parent is not a directory: ' .. directory end
+                  else
+                    creates[#creates + 1] = {
+                      depth = node.depth + index,
+                      action = action_mod.MakeDirectory(directory),
+                    }
+                    planned_directories[key] = true
+                  end
+                end
+                destination_parent = directory
+              end
+            end
             moves[#moves + 1] = { depth = node.depth, action = action_mod.Move(rec.path, node.path) }
           end
         end

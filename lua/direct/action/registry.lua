@@ -320,6 +320,7 @@ return function(M)
 
   function M.Batch(actions)
     local self = { name = 'batch', _kind = 'batch', actions = actions or {} }
+    function self.describe() return M.summarize(self.actions) end
     self._execute = function()
       local completed = {}
       for _, member in ipairs(self.actions) do

@@ -1,6 +1,6 @@
 # Spec: direct.vim improvements, third review
 
-**Status:** A30 is complete; A26–A29 and A31 remain proposed.
+**Status:** A26, A27, A29 and A30 are complete; A28, A31 and A32 remain proposed.
 
 **Source:** a third static review of `origin/master` at `ad25866`
 (12 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -13,9 +13,8 @@ in a running Neovim. Each task's first step is to write a failing test that
 reproduces the problem, or to record that it can't be reproduced and drop the
 task.
 
-**Last checked:** `origin/master` at `271001d` (16 November 2026). That check
-confirmed A26 (#138) in the code and added A32, a slowdown it introduces once
-the history is full. A28, A29, A31 and A32 remain proposed.
+**Last checked:** `origin/master` at `01bb269` (17 November 2026). That check
+confirms A29 (#140) and keeps A28, A31 and A32 proposed.
 
 ## Decisions
 
@@ -53,7 +52,7 @@ into each task below:
 | A26 | P2 | Complete | Stop history, trash and register from growing forever |
 | A27 | P2 | Complete | Stop deletes on save from copying everything into the register first |
 | A28 | P3 | Proposed | Define, document and test edits to collapsed rows |
-| A29 | P3 | Proposed | Handle a busy history lock from another Neovim instance clearly |
+| A29 | P3 | Complete | Handle a busy history lock from another Neovim instance clearly |
 | A30 | P4 | Complete | Release, coverage floor, wider CI and a stale comment |
 | A31 | P4 | Proposed | Record the new Git-ignore deadline in the v0.3.0 changelog |
 | A32 | P2 | Proposed | Stop a full history from making every save rescan the whole trash |
@@ -150,6 +149,10 @@ why not. `yy` on a large folder returns before the copy finishes and marks the
 operation pending.
 
 ### A29 — A busy history lock gives a cryptic, immediate failure (P3)
+
+**Status: COMPLETE in #140.** Busy locks retry for up to two seconds and report
+the holder PID when available. Async paste prompts and explicit yanks release
+the lock while waiting/copying, then revalidate before continuing.
 
 **Problem.** The history lock doesn't wait. On Unix it is
 `flock(fd, LOCK_EX | LOCK_NB)` (`lua/direct/platform/unix.lua`, around line
@@ -338,8 +341,7 @@ name `git.ignore_timeout_ms`.
 
 ## Suggested order
 
-1. A27 and A26 are complete. A27 stops the biggest copies, and A26's register
-   clean-up builds on it.
+1. A27, A26 and A29 are complete.
 2. A32, before the next release, since 1000 steps is the default.
-3. A29 and A28, in either order.
+3. A28.
 4. A31 at any time; it only touches docs and the release notes.

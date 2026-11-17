@@ -102,12 +102,18 @@ function M.acquire()
   if not began then return nil, wait_token end
   local last_err, last_code = acquire_err, code
   sync_waiting = true
-  vim.wait(RETRY_TIMEOUT_MS, function()
-    acquired, last_err, last_code = try_acquire(path)
-    return acquired ~= nil or last_code ~= 'EWOULDBLOCK'
-  end, RETRY_INTERVAL_MS)
+  local wait_ok, wait_err = pcall(function()
+    vim.wait(RETRY_TIMEOUT_MS, function()
+      acquired, last_err, last_code = try_acquire(path)
+      return acquired ~= nil or last_code ~= 'EWOULDBLOCK'
+    end, RETRY_INTERVAL_MS)
+  end)
   sync_waiting = false
   pending.finish(wait_token)
+  if not wait_ok then
+    if acquired then pcall(M.release) end
+    error(wait_err, 0)
+  end
   if acquired then return acquired end
   if last_code == 'EWOULDBLOCK' then return nil, busy_message(path) end
   return nil, last_err

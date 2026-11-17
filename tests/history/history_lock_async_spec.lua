@@ -33,6 +33,72 @@ local function start_holder(sb, duration_ms)
 end
 
 H.describe('async history lock', function()
+  H.it('claims pending before a scheduled history operation can re-enter a sync wait', function()
+    local sb = H.sandbox()
+    local process = start_holder(sb, 350)
+    local live_lock = require('direct.history.lock')
+    local live_history = require('direct.history.history')
+    local live_pending = require('direct.pending')
+    local messages = H.capture_messages()
+    local scheduled_callback, attempted, pending_during_wait, second_result = false, false, false, nil
+    local real_wait = vim.wait
+    local restore = H.stub(vim, 'wait', function(timeout, predicate, interval)
+      if not scheduled_callback then
+        vim.schedule(function()
+          scheduled_callback = true
+          attempted = true
+          pending_during_wait = live_pending.is_pending()
+          second_result = live_history.undo_async()
+        end)
+        H.assert_true(
+          real_wait(100, function() return scheduled_callback end, 1),
+          'the scheduled key callback runs while vim.wait is pumping the loop'
+        )
+      end
+      return real_wait(timeout, predicate, interval)
+    end)
+
+    local acquired, acquire_err = live_lock.acquire()
+    restore()
+    if acquired then live_lock.release() end
+    H.assert_true(acquired == true, tostring(acquire_err))
+    H.assert_true(scheduled_callback, 'the scheduled key operation ran during vim.wait')
+    H.assert_true(attempted and pending_during_wait, 'the key operation observed pending before vim.wait re-entered')
+    H.assert_nil(second_result, 'the re-entrant history operation is refused')
+    messages:assert('cannot undo while history lock is pending')
+    H.assert_false(live_pending.is_pending(), 'the synchronous wait clears its temporary guard')
+    local result = process:wait(3000)
+    H.assert_eq(result.code, 0, tostring(result.stderr))
+  end)
+
+  H.it('clears pending and sync-wait state when vim.wait is interrupted', function()
+    local sb = H.sandbox()
+    local process = start_holder(sb, 1000)
+    local live_lock = require('direct.history.lock')
+    local live_pending = require('direct.pending')
+    local wait_called = false
+    local restore = H.stub(vim, 'wait', function()
+      wait_called = true
+      error('injected wait interruption')
+    end)
+    local ok, wait_err = pcall(live_lock.acquire)
+    restore()
+
+    H.assert_false(ok, 'the injected wait exception propagates')
+    H.assert_true(
+      tostring(wait_err):find('injected wait interruption', 1, true) ~= nil,
+      'the original wait error is preserved'
+    )
+    H.assert_true(wait_called, 'the contested acquire entered the interrupted wait')
+    H.assert_false(live_pending.is_pending(), 'the temporary pending token is cleared')
+    local result = process:wait(3000)
+    H.assert_eq(result.code, 0, tostring(result.stderr))
+    local acquired, acquire_err = live_lock.acquire()
+    H.assert_true(acquired == true, tostring(acquire_err))
+    H.assert_false(live_pending.is_pending(), 'sync-wait state was also reset')
+    H.assert_true(live_lock.release(), 'the lock remains usable after interruption')
+  end)
+
   H.it('keeps the event loop responsive and acquires when the holder releases', function()
     local sb = H.sandbox()
     local target = vim.fs.joinpath(sb.root, 'target.txt')

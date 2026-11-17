@@ -60,7 +60,7 @@ fails on systems it wasn't developed on.
   moves, but `:wq`, `:x`, `:wa` and quitting while a save runs look like they
   don't do what a Vim user expects (A49). On a top-level row, the most common
   rename gesture, `cc`, deletes the file and creates an empty one (A50).
-  Nothing previews or confirms a save that deletes (A51).
+  There is no way to preview a save before applying it (A51).
 - **When a save is refused.** The refusal messages are written in the code's
   terms ("child materialization baseline is inconsistent") and don't point at
   the line (A52). There is no in-listing key help (A53).
@@ -83,16 +83,11 @@ into each task below:
 - **A42:** no upgrade notice or migration handling. The A26–A32 defaults have
   not been released, so no user has them yet; they ship in the next release
   like any other change.
-
-## Open questions
-
-- **A51:** should a save that deletes something ask first by default? The
-  task assumes a `confirm` option defaulting to `'destructive'`, which asks
-  only when a save deletes entries or moves across filesystems. `false` would
-  keep today's behaviour as the default.
-- **A49:** should `:write` wait for the save to finish by default? The task
-  assumes yes, for up to a few seconds, then continues in the background as
-  today.
+- **A49:** `:write` on a listing waits for its save to finish, showing
+  progress, so `:wq`, `:x` and `:wa` behave as in any other buffer.
+- **A51:** no confirmation before a save that deletes. `:w` keeps applying the
+  plan at once; deletes stay recoverable through the trash and undo. A51 is
+  reduced to an on-demand preview, `:DirectPlan`.
 
 ## Conventions
 
@@ -132,7 +127,7 @@ into each task below:
 | A48 | P4 | Open | State what is stable before 1.0 and gather real-world use |
 | A49 | P2 | Open | Make `:wq`, `:x`, `:wa` and quitting work with background saves |
 | A50 | P2 | Open | Treat `cc` on a top-level row as a rename, as child rows already do |
-| A51 | P2 | Open | Preview and optionally confirm a save before it deletes anything |
+| A51 | P3 | Open | Add `:DirectPlan` to preview a save without applying it |
 | A52 | P3 | Open | Rewrite refusal messages in plain language and point at the line |
 | A53 | P3 | Open | Add `g?` key help inside a listing |
 | A54 | P3 | Open | Let users choose the sort order and what is hidden |
@@ -727,10 +722,13 @@ None of `:wq`, `:x` or `:wa` appear in the tests or the docs.
 
 **Change.** Confirm each case first with real processes (A45's runner), then:
 
-- Make `:write` on a listing wait for its save to finish, for up to a few
-  seconds, showing the existing progress notification. If it is still running
-  after that (a long cross-filesystem move, say), continue in the background
-  as today and say so. With that, `:wq` and `:x` work for ordinary saves.
+- Make `:write` on a listing wait for its save to finish, showing the
+  existing progress notification, and return only once the filesystem and
+  history are committed and the listing is clean. This applies to long
+  cross-filesystem moves too. `:wq` and `:x` then work, because the buffer is
+  no longer modified when the quit runs. `<C-c>` stops waiting and leaves
+  the save running in the background, with a message saying so. The work
+  itself stays asynchronous, so progress keeps updating while `:write` waits.
 - Queue saves instead of refusing them when the pending operation is another
   listing's save, so `:wa` saves every listing in turn.
 - Add an `ExitPre` handler. If a save is pending, say what it is doing and
@@ -738,8 +736,10 @@ None of `:wq`, `:x` or `:wa` appear in the tests or the docs.
 - When `:bw!` cancels a save, say so, and say what the journal will do with it.
 - Document all of this in the help under `direct.vim-write`.
 
-**Tests.** In a real process: `:wq` after a rename applies the rename and
-exits with status 0. `:wa` with two modified listings saves both. `:qa` during
+**Tests.** In a real process: `:w` returns with the listing clean and the
+change on disk. `:wq` after a rename applies the rename and exits with status
+0, including for a slow (stubbed) cross-filesystem move. `<C-c>` during the
+wait returns, and the save still completes. `:wa` with two modified listings saves both. `:qa` during
 a slow (stubbed) save waits and then exits, and the filesystem and history
 are complete. `:bw!` during a save reports the cancellation.
 
@@ -778,15 +778,13 @@ another).
 directory rename them with their contents. Two rows replaced by three still
 behave as today. The existing child-row tests still pass.
 
-### A51 — Nothing previews or confirms a save that deletes (P2)
+### A51 — There is no way to preview a save (P3)
 
 **Problem.** `:w` applies the plan at once. A save can delete a large tree,
-move a directory across filesystems (a long copy, with a warning only once it
-starts), or mix dozens of renames, creates and deletes in one step. All of it
-can be undone, but there is no way to see the plan first. oil.nvim, the
-closest alternative, asks before destructive changes by default. A user
-coming from it, or deleting the wrong `dd` range, has no safety step before
-the trash.
+move a directory across filesystems, or mix dozens of renames, creates and
+deletes in one step. All of it can be undone, and by decision A51 a save
+won't ask before applying it. But there is also no way to look at the plan
+first, when a user wants to check a large edit.
 
 The plan already exists as data before anything runs (`build_actions` in
 `lua/direct/buffer/sync_plan.lua`, then `action.summarize`), so showing it is
@@ -794,21 +792,19 @@ cheap.
 
 **Change.**
 
-- Add a `confirm` option: `false` (today's behaviour), `'destructive'` (ask
-  only when the save deletes something or moves across filesystems) or `true`
-  (always ask). The default needs a decision (see Open questions); the task
-  assumes `'destructive'`.
-- Show the plan in a floating window, one line per action (`rename a → b`,
-  `delete build/ (12,340 entries)`, `move x/ to another filesystem`), with
-  keys to apply or cancel. Cancelling leaves the listing modified.
-- Add `:DirectPlan`, which shows the same window without applying, whatever
-  `confirm` is set to.
-- Skip the window for `:DirectSync!`, so scripts and mappings can opt out.
+- Add `:DirectPlan`, which builds the plan for the current listing and shows
+  it in a floating window, one line per action (`rename a → b`,
+  `delete build/ (12,340 entries)`, `move x/ to another filesystem`). It
+  changes nothing. If the save would be refused, it shows the refusal instead
+  (with A52's message).
+- Map it to nothing by default, and add a `plan` action to `mappings` so a
+  user can bind it.
+- Don't add a confirmation option or a prompt to `:w`.
 
-**Tests.** With `confirm = 'destructive'`, a rename-only save doesn't ask and
-a save with a delete does. Cancelling changes nothing on disk or in history.
-Applying gives the same result as `confirm = false`. `:DirectPlan` changes
-nothing. `:DirectSync!` never asks.
+**Tests.** `:DirectPlan` on a listing with a rename, a delete and a create
+lists all three and leaves the filesystem, history and listing unchanged. On
+a listing whose save would be refused, it shows the refusal. `:w` still
+applies without asking.
 
 ### A52 — Refusal messages use the code's terms and don't point at the line (P3)
 
@@ -1043,7 +1039,7 @@ benchmark in CI, so a slowdown can land unnoticed.
    as the safety net for A35–A38.
 9. A48 around the release in A42.
 10. A50 and A57 soon: both are small and stop a confusing or blocking failure.
-    A49 and A51 after the open questions on them are answered, using A45's
-    runner to confirm the current behaviour first.
+    A49 next, using A45's runner to confirm the current behaviour first.
+    A51 whenever convenient.
 11. A52 and A53 together, since both are about what a user sees in a listing.
 12. A54–A56 and A58 in any order; A56 is the smallest.

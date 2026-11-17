@@ -18,6 +18,9 @@ Notable changes to direct.vim are documented here. Versions follow
 - Retry busy history locks for up to two seconds with a clear message and holder
   PID when available. Release the lock while paste prompts wait and explicit
   yanks copy, then recheck the register, history and destination before resuming.
+- Retry contended history locks asynchronously for saves, undo/redo, yank, and
+  paste; synchronous waits guard against re-entrant operations and clean up if
+  interrupted.
 - When history drops steps, apply age retention to their trash paths without
   rescanning the whole trash; skip register pruning while paste references are
   unchanged.

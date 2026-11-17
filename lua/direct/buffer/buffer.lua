@@ -952,6 +952,7 @@ require('direct.buffer.sync')({
   file_operations = file_operations,
   states = states,
   pending_sync = pending_sync,
+  namespace = namespace,
   restore_deleted_rows = restore_deleted_rows,
   reconcile_undone_materialization = reconcile_undone_materialization,
   get_directory_snapshot = get_directory_snapshot,

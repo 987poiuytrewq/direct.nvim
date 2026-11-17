@@ -1,6 +1,6 @@
 # Spec: direct.vim improvements, fourth review
 
-**Status:** A33–A42 are open.
+**Status:** A33–A48 are open.
 
 **Source:** a fourth static review of `origin/master` at `1af1402`
 (17 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -38,6 +38,16 @@ on the editor's main thread.
   (A38).
 - **Main thread.** Two paths still wait synchronously: Tab completion for
   `--ref`, and the history lock's retry (A33, A34).
+- **Tests.** About 675 test cases in 44 spec files cover the safety-critical
+  paths well, including a real second Neovim process for the history lock.
+  The gaps are in how they are measured and what they model: one coverage
+  floor for the whole tree, crashes that are simulated rather than caused, no
+  generated edit sequences, and no fixtures for older on-disk formats
+  (A43–A46).
+- **Maturity.** The project is young: four tags in eight days, about 87% of
+  commits from one author, and no issues or pull requests on GitHub. The code
+  is more careful than its track record, so what is missing is a stability
+  promise and evidence from other people's use (A47, A48).
 - **Guard rails.** Lint covers `lua/direct` only, nothing checks that the
   README and help match the code, and the repository has no contributing,
   security or issue templates (A39–A41).
@@ -84,6 +94,12 @@ into each task below:
 | A40 | P4 | Open | Lint all Lua, not only `lua/direct`, and clear stale comments |
 | A41 | P4 | Open | Add contributing, security and issue/PR templates |
 | A42 | P4 | Open | Release the A26–A32 changes |
+| A43 | P2 | Open | Test crashes by killing a real process at each journal step |
+| A44 | P3 | Open | Enforce coverage per file, not only in total |
+| A45 | P3 | Open | Test a save, a restart and an undo across real Neovim processes |
+| A46 | P3 | Open | Check undo and sync against a model with generated edit sequences |
+| A47 | P2 | Open | Keep golden fixtures for every on-disk format and test them |
+| A48 | P4 | Open | State what is stable before 1.0 and gather real-world use |
 
 ## Robustness and performance
 
@@ -451,6 +467,199 @@ need releasing.
 notes both name `history_limit` and `trash_retention`, and that every merged
 pull request since `v0.3.0` has a changelog entry (the A31 checklist line).
 
+## Test coverage and maturity
+
+What is already good, so these tasks build on it and don't redo it: the suite
+has about 675 cases in 44 spec files, a zero-dependency harness with a
+per-file isolation check, coverage on three operating systems with a floor,
+Neovim 0.11.7, stable and nightly in CI, a live-startup smoke test, and a demo
+tour that CI plays. The history lock is tested with a second Neovim process
+(`tests/history/history_spec.lua`, around lines 539–600), and crash recovery
+has tests for a prepared action and a mid-commit crash (around lines 625 and
+899). The tasks below are what is left.
+
+I could not run the suite or measure coverage in this review (see the note at
+the top), so the coverage figures A44 asks for have to come from a real run.
+
+### A43 — Crash recovery is tested with simulated crashes, not real ones (P2)
+
+**Problem.** The history journal (`lua/direct/history/transaction.lua`,
+`recovery.lua`) exists so that an interrupted save, paste or undo can be
+finished or reported after a crash. Its tests build the post-crash state by
+hand: they write a journal and then call the recovery code (for example
+`tests/history/history_spec.lua`, around lines 625–900). That checks that
+recovery handles each state its author thought of. It can't show that the
+real code, killed at a real moment, only ever leaves one of those states.
+Crash recovery is where a missed case means lost or doubled work, and
+`recovery.new` is also the largest function in the tree (A38).
+
+**Change.**
+
+- Add a test hook that makes the process stop (`os.exit` or a signal to
+  itself) at a named point: before and after each journal write, between the
+  filesystem step and the stack commit, and between the two stack files. Keep
+  it inert unless an environment variable names the point, and make sure it
+  can't be set by `setup()`.
+- A new spec starts a second Neovim process (the pattern at
+  `history_spec.lua`, around line 578) that performs a save, a grouped
+  swap, a paste, an undo and a redo, once for each stop point. Then a fresh
+  process runs recovery and the spec checks the invariants: no file's contents
+  are lost, nothing existing is overwritten, undo and redo stacks are
+  consistent with the filesystem or the history is reported as needing manual
+  recovery, and running recovery twice changes nothing.
+- Run the whole matrix on Linux in CI. Run a reduced set on macOS and Windows.
+
+**Tests.** The new spec is the test. Check it by removing one journal write in
+a scratch branch, and confirming that some stop point then fails.
+
+### A44 — Coverage is enforced as one total (P3)
+
+**Problem.** `make ci` fails below `COVERAGE_MIN=86` (`Makefile`), measured as
+one percentage over all of `lua/direct` (`.luacov` includes the whole
+directory, `tests/coverage_report.lua` writes the summary). A new
+module with no tests barely moves a total of 20,000 lines, and a well-tested
+file can hide a poorly tested one. Also:
+
+- Only line coverage is measured, so an untested branch of a covered line
+  isn't visible. That matters for the many early returns on error paths.
+- Platform code (`platform/unix.lua`, `platform/windows.lua`) is covered only
+  on its own operating system, and each run is measured against the same
+  floor, so the floor is a compromise between them.
+- `plugin/` and `ftplugin/` aren't included.
+- Which files are covered least is only visible by opening the HTML report.
+
+**Change.**
+
+- Print a per-file table in the CI summary, sorted by lowest coverage.
+- Add a per-file floor with a committed allowlist, like the function-length
+  check in A38: every file must reach a floor (for example 70%) unless it is
+  listed with its current figure, and a listed figure may only go up. A new
+  file starts under the floor and has to meet it.
+- Take the first measurement from a real run, then set the total floor to
+  just under it. Record the figures in the PR.
+- Add `plugin/` and `ftplugin/` to `.luacov`.
+- Look at whether the area where branches matter most (history, recovery,
+  fs) can get a branch measure, for example by instrumenting with a custom
+  runner. Don't block this task on it.
+
+**Tests.** A test for the check script, as in A38: a file under the floor
+fails it, a listed file that rises above its entry fails it until the entry is
+raised, and a listed file that no longer exists fails too.
+
+### A45 — Nothing tests a save, a restart and an undo as real processes (P3)
+
+**Problem.** The README's headline claim is "Undo on disk … the history
+survives restarts." The live-startup script (`tests/live_startup.sh`) checks
+the startup path and mappings, and the demo tour plays one session. Most
+specs run inside one Neovim process and reload the plugin between cases. Real
+use has more than one process. Neovim is closed after a save, a second
+instance starts, and `u` reverses a change the first one made, with the
+register and trash left behind.
+
+**Change.** Add `tests/e2e/` with a small runner that starts real
+`nvim --headless` processes against a throwaway data and config directory and
+drives them with `--cmd`/`-c` scripts or `--listen` plus `nvim_input`:
+
+- Process 1: open a listing, rename a file, delete another, yank and paste a
+  folder, save, quit. Process 2: open the same directory, undo three times,
+  quit. Process 3: redo. Check the filesystem after each process.
+- A listing opened in a directory behind a symlink and one with a name
+  containing a space, a Unicode character and a leading dot.
+- Two live processes on the same data directory: one saves while the other
+  has the same directory open, then the second tries to save and is refused
+  with the stale-listing message.
+
+**Tests.** The e2e specs are the tests. Keep them to a handful so they stay
+quick, and run them in the existing Linux, macOS and Windows jobs.
+
+### A46 — Undo and sync are checked by examples, not by generated sequences (P3)
+
+**Problem.** The tests describe many specific cases, and the earlier reviews
+found real bugs by thinking of more. The central promise is general: whatever
+edit script the user types, a save applies it, and undo restores the original
+tree exactly. The sync planner (`buffer/sync_plan.lua`), move grouping
+(`action/moves.lua`) and the history format round trip
+(`history/format.lua`) are pure enough to check against a model. Examples
+can't cover the number of ways renames, swaps, rotations, nested moves,
+deletes and pastes combine.
+
+**Change.**
+
+- Add a small seeded generator that makes a random tree, then a random edit
+  script over it (renames, permutations of names, moves between folders,
+  deletes, creates, pastes).
+- Check, for each generated case: the plan applies without data loss or
+  overwrite; the filesystem afterwards equals what a simple in-memory model
+  predicts; undo restores the original tree byte for byte, including contents;
+  redo restores the result; and serialising then parsing the history record
+  gives the same record.
+- Print the seed on failure, and pin a few seeds that once failed as ordinary
+  regression cases. Run a few hundred cases per CI run, and many more in a
+  scheduled job.
+
+**Tests.** The property specs are the tests. Check them by temporarily
+breaking `move_groups` and confirming that some seed fails.
+
+### A47 — There are no golden fixtures for the on-disk formats (P2)
+
+**Problem.** direct.vim persists several formats between versions: the history
+stacks (a header plus canonical JSONL, currently a versioned format in
+`history/format.lua`), the journal (`history/transaction.lua`), the trash
+metadata files, the register manifests, and the lock files. The project is
+before 1.0 and has already changed some, and users keep this data for months.
+The tests build each format with the current code and read it back, which
+proves the code agrees with itself. It doesn't prove that a file written by
+`v0.3.0` is still read, or refused safely, by a later version. A change to a
+field could silently strand or misread a user's trash or history.
+
+**Change.**
+
+- Generate and commit one golden file for each format at `v0.3.0`, under
+  `tests/fixtures/formats/v0.3.0/` (stacks with every action kind, a journal
+  in each recovery state, trash metadata for a file and a directory, a
+  register manifest).
+- Add a spec that loads each fixture with the current code and checks it is
+  either read to the same result or refused with the documented "preserved and
+  blocks operations" behaviour. It must never be reset, reinterpreted or
+  partly applied.
+- Add a rule to the contributing docs (A41): a change to any persisted format
+  bumps its version marker and adds a new fixture directory; old fixtures are
+  never edited.
+
+**Tests.** The fixtures spec is the test. Check it by altering a field name in
+a scratch branch and confirming that the spec fails.
+
+### A48 — Nothing says what is stable, and there is little outside use (P4)
+
+**Problem.** There are four tags (`v0.1.0` on 9 November to `v0.3.0` on 16
+November 2026), about 445 commits with 389 by one author and 56 by an AI
+assistant, no open or closed issues, and no pull requests from anyone else.
+The README compares direct.vim with established tools and claims safety
+properties. Both are credible from the code, but nobody else has yet put the
+plugin through everyday use on real trees, odd filesystems or other platforms,
+and neither the README nor the changelog says what may change before 1.0.
+
+**Change.**
+
+- Add a "Stability" section to the README and help: which parts are intended
+  to stay (the commands, the `setup()` options, the `User` events, the default
+  mappings, and the persisted formats once A47 is in), what is allowed to
+  change in a minor release, and how deprecations are announced.
+- Say what has been tried. List the platforms and filesystems the suite and
+  CI cover (Linux, macOS and Windows on local disks) and the ones it doesn't
+  (network and FUSE filesystems, which `:help direct.vim-data` already warns
+  about, case-insensitive volumes, very large directories), so users can
+  judge the risk.
+- Mark the next release as a beta in its notes and ask for reports, using the
+  bug template from A41, with a pinned issue for "what worked and what
+  didn't".
+- Run a pre-release soak: the maintainer uses the release candidate as their
+  only file manager for a fixed period, and the result is noted in the
+  release.
+
+**Tests.** None. Check that the README section exists and links the pinned
+issue.
+
 ## Suggested order
 
 1. A33 and A34 first: both are small, and both stop the editor from waiting.
@@ -462,3 +671,9 @@ pull request since `v0.3.0` has a changelog entry (the A31 checklist line).
 5. A39 and A40 together with, or just after, the refactors, since they add the
    checks that keep the result from drifting back.
 6. A41 whenever convenient; it touches no code.
+7. A47 early, since it is cheap and the formats only get costlier to fix
+   after more people hold data in them; A43 next, because it tests the code
+   the other tasks refactor (`history/recovery.lua`, A38).
+8. A44 once a real coverage run has set the floors; A45 and A46 after that,
+   as the safety net for A35–A38.
+9. A48 around the release in A42.

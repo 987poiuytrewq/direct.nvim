@@ -87,6 +87,26 @@ Register and trash paths use NUL-delimited SHA-256 keys. Neovim 0.11 rejects
 NUL-containing strings in `vim.fn.sha256()` (`E976`), so direct uses a byte-safe
 SHA-256 fallback on 0.11 to keep those keys identical across versions.
 
+## Stability
+
+**v0.4.0 is a beta.** The maintainer pre-release soak was not performed. If you
+try the beta, please share what worked and what did not in the
+[feedback issue](https://github.com/987poiuytrewq/direct.vim/issues/159).
+
+The commands, `setup()` options, `User` events, default mappings, and persisted
+data formats are intended to remain stable during the 0.x series. This is a
+pre-1.0 project: minor releases may still change behavior or public interfaces.
+Breaking changes and migrations will be described in the changelog and release
+notes. Deprecations will be called out there and in the help; when practical,
+an interface will be marked deprecated before it is removed. Persisted formats
+are treated as user data: format changes require explicit versioning and
+migration or a safe refusal, not a silent rewrite.
+
+CI runs the suite on Linux, macOS, and Windows using the runners' local disks.
+It does not establish compatibility with network or FUSE filesystems, test
+case-insensitive-volume edge cases as a separate configuration, or cover very
+large directories. See `:help direct.vim-data` for filesystem limitations.
+
 ## Installation
 
 With Neovim's built-in `vim.pack`:

@@ -1,4 +1,5 @@
 NVIM ?= nvim
+PYTHON ?= python3
 COVERAGE_PLATFORM ?= local
 DEMO_FONT ?= JetBrainsMono Nerd Font
 DEMO_GIF ?= demo/tour.gif
@@ -8,13 +9,14 @@ LUALS ?= lua-language-server
 LUALS_LOGPATH ?= $(CURDIR)/.cache/luals
 COVERAGE_MIN ?= 86
 
-.PHONY: ci test lint coverage coverage-deps coverage-check coverage-summary live-startup demo demo-record demo-gif demo-check check-nvim
+.PHONY: ci test lint coverage coverage-deps coverage-check coverage-summary live-startup e2e demo demo-record demo-gif demo-check check-nvim
 
 ci:
 	$(MAKE) coverage
 	$(MAKE) coverage-check
 	$(MAKE) coverage-summary
 	$(MAKE) live-startup
+	$(MAKE) e2e
 
 test: check-nvim
 	$(NVIM) --headless -l tests/run.lua
@@ -62,6 +64,9 @@ coverage-summary:
 
 live-startup:
 	bash tests/live_startup.sh
+
+e2e: check-nvim
+	NVIM='$(NVIM)' $(PYTHON) tests/e2e/run.py
 
 # The README demo: record the tour with asciinema, then convert it to a GIF
 # with agg. DEMO_FONT must be a Nerd Font, so the icons render.

@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a reproducible problem with direct.vim
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a vulnerability that could cause data loss or run unintended commands,
+        do not open a public issue. Follow the private reporting instructions in
+        [SECURITY.md](https://github.com/987poiuytrewq/direct.vim/blob/master/SECURITY.md).
+        Reproduce bugs only in a throwaway directory with non-sensitive files.
+  - type: input
+    id: nvim-version
+    attributes:
+      label: Neovim version
+      description: Include the output of `nvim --version` or the version number.
+      placeholder: "0.11.7"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Include the OS version and, if relevant, filesystem type.
+      placeholder: "macOS 15.1"
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: direct.vim version
+      description: Include the release tag or commit if installed from source.
+      placeholder: "v0.3.0"
+    validations:
+      required: true
+  - type: textarea
+    id: checkhealth
+    attributes:
+      label: "`:checkhealth direct` output"
+      description: Paste the output. Redact personal paths or other sensitive information.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: |
+        Give numbered, minimal steps that reproduce the problem in a throwaway
+        directory. Use non-sensitive files and say what files or setup are needed.
+      placeholder: |
+        1. Create and enter a throwaway directory.
+        2. ...
+        3. Run ...
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include any relevant messages.
+    validations:
+      required: true

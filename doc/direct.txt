@@ -24,7 +24,8 @@ CONTENTS                                                 *direct.vim-contents*
     16. User events ..................................... |direct.vim-events|
     17. Data and safety .................................... |direct.vim-data|
     18. Upgrading from the Python version ............... |direct.vim-upgrade|
-    19. Licence ......................................... |direct.vim-licence|
+    19. Stability ....................................... |direct.vim-stability|
+    20. Licence ......................................... |direct.vim-licence|
 
 ==============================================================================
 1. Introduction                                             *direct.vim-intro*
@@ -1415,7 +1416,31 @@ version's data:
     - Trash: entries deleted with the Python version can still be restored.
 
 ==============================================================================
-19. Licence                                               *direct.vim-licence*
+19. Stability                                           *direct.vim-stability*
+
+direct.vim 0.4.0 is a beta. The maintainer pre-release soak was not performed.
+If you try this release, please share what worked and what did not in the
+feedback issue:
+https://github.com/987poiuytrewq/direct.vim/issues/159
+
+The commands, |direct.setup()| options, |User| events, default mappings, and
+persisted data formats are intended to remain stable during the 0.x series.
+direct.vim is pre-1.0, so a minor release may still change behavior or public
+interfaces. Breaking changes and migrations are described in the changelog and
+release notes. Deprecations are called out there and in this help; when
+practical, an interface is marked deprecated before removal.
+
+Persisted formats are user data. A format change requires explicit versioning
+and migration or a safe refusal; it must not silently rewrite existing data.
+The test suite pins the v0.3.0 format baselines.
+
+CI runs tests on Linux, macOS and Windows using the runners' local disks. It
+does not establish compatibility with network or FUSE filesystems, test
+case-insensitive-volume edge cases as a separate configuration, or cover very
+large directories. See |direct.vim-data| for filesystem limitations.
+
+==============================================================================
+20. Licence                                               *direct.vim-licence*
 
 Copyright (c) 2017-2026 Duncan Williams
 

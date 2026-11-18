@@ -614,6 +614,12 @@ The tests run in Neovim's embedded Lua and need only Neovim 0.11.7 or later:
 make test
 ```
 
+The real-process end-to-end check also requires Python 3.9 or later:
+
+```sh
+make e2e                 # override Python with PYTHON=python if needed
+```
+
 For coverage, `make coverage` fetches [LuaCov](https://github.com/lunarmodules/luacov)
 with Git into the ignored `.rocks/` directory, then runs the suite with it:
 
@@ -627,7 +633,7 @@ On pull requests and pushes to `master`, CI runs the suite with coverage on
 Linux, macOS and Windows against Neovim 0.11.7, rejects coverage below the
 floor, checks the full Lua tree with Luacheck, StyLua and LuaLS, tests latest
 stable Neovim on all three platforms and nightly Neovim on Linux, and checks
-the demo tour.
+the demo tour and real-process end-to-end scenarios.
 
 ### Release checklist
 

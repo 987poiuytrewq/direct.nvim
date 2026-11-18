@@ -5,16 +5,24 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
 ### Changed
 
+- Limit each undo/redo stack to 1000 steps by default; set `history_limit` to
+  another positive value to change the cap. Remove trash older than 90 days by
+  default; set `trash_retention = false` to disable automatic cleanup, or
+  configure `max_age_days` and `max_size_bytes`.
+- Store the history lock at `<data>/direct/.direct-history.lock`, with a
+  companion `.owner` file for the holder PID. The old `<data>/.direct-history.lock`
+  location is left untouched and is harmless once older versions stop running.
 - Bound Git ref completion waits to 200 ms, cache refs briefly, and cap directory
   completion candidates.
 - Keep deleted entries in trash and point the register at them instead of
   copying them; explicit yanks now copy in the background under the pending
   operation guard.
-- Limit undo and redo history to 1000 steps per stack and enable 90-day trash
-  retention by default; remove unreferenced old register copies and report
-  history counts and register size in `:checkhealth`.
+- Remove unreferenced old register copies and report history counts and register
+  size in `:checkhealth`.
 - Retry busy history locks for up to two seconds with a clear message and holder
   PID when available. Release the lock while paste prompts wait and explicit
   yanks copy, then recheck the register, history and destination before resuming.

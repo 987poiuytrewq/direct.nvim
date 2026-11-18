@@ -1,0 +1,1 @@
+copied register payload from /a47/work/source.txt

@@ -1,0 +1,12 @@
+{"format":"direct-history","version":1}
+{"op":"mv","src":"/a47/work/old.txt","dst":"/a47/work/new.txt"}
+{"op":"rm","src":"/a47/work/gone.txt","dst":"/a47/trash/file-entry"}
+{"op":"rmdir","src":"/a47/work/gone-dir/","dst":"/a47/trash/directory-entry"}
+{"op":"rs","src":"/a47/trash/restore-entry","dst":"/a47/work/restored.txt"}
+{"op":"rsdir","src":"/a47/trash/restore-dir-entry","dst":"/a47/work/restored-dir/"}
+{"op":"touch","dst":"/a47/work/created.txt"}
+{"op":"mkdir","dst":"/a47/work/created-dir/"}
+{"op":"p","src":"/a47/data/direct/register/contents","dst":"/a47/work","src_names":["copy.txt"],"dst_names":["copy.txt"]}
+{"op":"up","src":"/a47/work","dst":"/a47/data/direct/register/contents","src_names":["copy.txt"],"dst_names":["copy.txt"]}
+{"op":"g","moves":[{"src":"/a47/work/left.txt","dst":"/a47/work/right.txt"},{"src":"/a47/work/right.txt","dst":"/a47/work/left.txt"}]}
+{"op":"batch","actions":["{\"op\":\"touch\",\"dst\":\"/a47/work/batch-one.txt\"}","{\"op\":\"mkdir\",\"dst\":\"/a47/work/batch-dir/\"}"]}

@@ -1,0 +1,1 @@
+{"format":"direct-operation-journal","version":1,"kind":"stacks","undo":["{\"format\":\"direct-history\",\"version\":1}","{\"op\":\"touch\",\"dst\":\"/a47/work/new.txt\"}"],"redo":["{\"format\":\"direct-history\",\"version\":1}"]}

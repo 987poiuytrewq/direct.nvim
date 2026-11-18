@@ -12,9 +12,9 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ### Changed
 
-- Make `:write` wait for the asynchronous filesystem and history commit, while
-  allowing `<C-c>` to stop waiting without canceling the save; queue `:wa`
-  saves and wait on pending saves before quit.
+- Keep `:DirectSync` asynchronous while making `:write` wait for the filesystem
+  and history commit; `<C-c>` stops waiting without canceling the save. Queue
+  `:wa` saves and wait on pending saves before quit.
 - Limit each undo/redo stack to 1000 steps by default; set `history_limit` to
   another positive value to change the cap. Remove trash older than 90 days by
   default; set `trash_retention = false` to disable automatic cleanup, or

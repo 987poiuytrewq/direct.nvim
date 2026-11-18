@@ -4,6 +4,8 @@
 local M = {}
 M.uv = vim.uv
 local temp_sequence = 0
+local crash_test_hook = require('direct.history.crash_test_hook')
+local journal_write_sequence = 0
 
 -- read_raw(path) -> bytes, nil, exists | nil, nil, false when absent | nil, err.
 -- Unlike read(), this distinguishes an absent file from an unreadable one and
@@ -62,6 +64,14 @@ M.sync_parent = sync_parent
 -- history file; the temp is always exclusive and on the same filesystem.
 function M.write_raw_atomic(path, bytes)
   if type(bytes) ~= 'string' then return nil, 'log.write_raw_atomic: bytes must be a string' end
+  local is_transaction = type(path) == 'string' and path:match('[^/\\]+$') == 'transaction.json'
+  local journal_write
+  if is_transaction then
+    journal_write_sequence = journal_write_sequence + 1
+    journal_write = journal_write_sequence
+    crash_test_hook.checkpoint('journal.before.' .. journal_write)
+  end
+
   local fd, temp_path, open_err
   for _ = 1, 100 do
     temp_sequence = temp_sequence + 1
@@ -102,6 +112,7 @@ function M.write_raw_atomic(path, bytes)
   -- makes the replacement name durable across a power loss where supported.
   local synced, sync_err = sync_parent(path)
   if not synced then return nil, sync_err end
+  if journal_write then crash_test_hook.checkpoint('journal.after.' .. journal_write) end
   return true
 end
 

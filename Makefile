@@ -67,6 +67,7 @@ live-startup:
 
 e2e: check-nvim
 	NVIM='$(NVIM)' $(PYTHON) tests/e2e/run.py
+	NVIM='$(NVIM)' $(PYTHON) tests/e2e/run_a49.py
 
 # The README demo: record the tour with asciinema, then convert it to a GIF
 # with agg. DEMO_FONT must be a Nerd Font, so the icons render.

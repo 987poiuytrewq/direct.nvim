@@ -592,9 +592,10 @@ they are attached to the listing buffer. Paths are sent as `file:` URIs.
 
 Renames ~
 
-The `willRenameFiles` request is asynchronous. |:write| returns straight away,
-and the listing stays modified until the servers reply. Other direct.vim
-filesystem operations are refused in the meantime.
+The `willRenameFiles` request is asynchronous. A |:write| waits for the complete
+save, including the server reply and the filesystem and history commit. The
+listing stays modified until the commit finishes. Other direct.vim filesystem
+operations are refused while the save is pending.
 
 Edits returned by servers are applied in client-ID order. If a server returns
 an error or doesn't reply within the timeout, you get a warning and the rename
@@ -922,10 +923,37 @@ Editing ~
                                                                  *:DirectSync*
 :DirectSync
     Apply the edits in the listing to the filesystem. |:write| does the same.
-    The operation runs asynchronously: the command returns while it is pending,
-    and the listing stays modified until the filesystem and history are
-    committed. Other direct operations are refused meanwhile. Long copies to
-    another filesystem report progress.
+    The filesystem and history work runs asynchronously. The command returns
+    while it is pending, and the listing stays modified until the commit
+    completes. Other direct operations are refused meanwhile. Long copies to
+    another filesystem report progress. |:write| waits for this operation; see
+    |direct.vim-write|.
+
+Saving and quitting ~                                      *direct.vim-write*
+
+Saving a Direct listing runs filesystem changes and the history commit
+asynchronously. A |:write| or `:w` waits until both have completed, so the
+listing is clean only after the operation is committed. Long cross-filesystem
+copies report progress while they run. Other Direct filesystem and history
+operations are refused while a save is pending.
+
+Pressing <C-c> during the wait stops waiting, not the save. The save continues
+in the background, and direct.vim reports that it is still running. Do not
+start another Direct filesystem or history operation until it finishes.
+
+|:wq| and |:x| wait for the save to complete before closing the listing.
+|:wa| queues each modified Direct listing and saves them in sequence, rather
+than starting overlapping operations.
+
+When Neovim is about to exit with a save pending, an ExitPre handler waits for
+it. Press <C-c> to stop waiting and quit anyway. If Neovim exits before the
+operation finishes, the journal lets direct.vim complete the interrupted
+operation or report it on the next start.
+
+`:bw!` warns that the listing buffer is being wiped, but wiping it does not
+cancel its pending save; the operation continues in the background. If the
+process exits before it finishes, journal recovery handles the interrupted
+operation on the next start.
 
 Viewing history ~
                                                             *:DirectHistory*

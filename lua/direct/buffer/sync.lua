@@ -407,8 +407,9 @@ return function(context)
       return nil, identity_err
     end
     if plan.kind == 'AMBIGUOUS' then
-      ui.notify(ambiguous_message(plan, actual, expected), vim.log.levels.ERROR)
-      return nil, plan.reason
+      local detail = ambiguous_message(plan, actual, expected)
+      ui.notify(detail, vim.log.levels.ERROR)
+      return nil, plan.reason, detail
     end
 
     local actions, yanks, build_err = build_actions(self.root, plan)
@@ -740,8 +741,8 @@ return function(context)
                   pending_token = token,
                   async_complete = options.async_complete,
                 }
-                local result, follow_err = sync_locked(self, follow)
-                if not follow.async_started then options.async_complete(result, follow_err) end
+                local result, follow_err, follow_detail = sync_locked(self, follow)
+                if not follow.async_started then options.async_complete(result, follow_err, follow_detail) end
               else
                 self:sync({
                   bypass_pending = true,
@@ -1111,7 +1112,7 @@ return function(context)
   function Buffer:sync_async(callback)
     callback = callback or function() end
     if pending.refuse('sync') then return nil, 'another direct operation is pending' end
-    local began, token = pending.begin('sync')
+    local began, token = pending.begin('sync', vim.api.nvim_get_current_buf())
     if not began then
       ui.notify('direct: cannot sync while another operation is pending', vim.log.levels.WARN)
       return nil, token
@@ -1126,7 +1127,7 @@ return function(context)
       end
 
       local operation = { finished = false }
-      local function complete(result, err)
+      local function complete(result, err, detail)
         if operation.finished then return end
         operation.finished = true
         local released, release_err = history.lock.release()
@@ -1142,7 +1143,7 @@ return function(context)
           end
         end
         pending.finish(token)
-        local called, callback_err = pcall(callback, result, err)
+        local called, callback_err = pcall(callback, result, err, detail)
         if not called then ui.report_error('complete sync', callback_err) end
       end
 
@@ -1152,13 +1153,16 @@ return function(context)
         pending_token = token,
         async_complete = complete,
       }
-      local called, result, sync_err = xpcall(function() return sync_locked(self, options) end, debug.traceback)
+      local called, result, sync_err, sync_detail = xpcall(
+        function() return sync_locked(self, options) end,
+        debug.traceback
+      )
       if not called then
         complete(nil, result)
         ui.report_error('plan sync', result)
         return
       end
-      if not options.async_started then complete(result, sync_err) end
+      if not options.async_started then complete(result, sync_err, sync_detail) end
     end)
     if not started then
       pending.finish(token)

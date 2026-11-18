@@ -8,6 +8,28 @@ local group = vim.api.nvim_create_augroup('direct', { clear = true })
 local constants = require('direct.constants')
 require('direct.highlight').setup()
 
+vim.api.nvim_create_autocmd('ExitPre', {
+  group = group,
+  desc = 'direct: wait for pending listing saves before exiting',
+  callback = function()
+    local pending = require('direct.pending')
+    if not pending.has_saves() then return end
+    local ui = require('direct.ui')
+    ui.notify('direct: waiting for pending listing saves; press <C-c> to quit anyway', vim.log.levels.INFO)
+    while pending.has_saves() do
+      local _, wait_err = vim.wait(60000, function() return not pending.has_saves() end, 10)
+      if wait_err == -2 then
+        ui.notify(
+          'direct: stopped waiting; quitting while the save continues in the background. '
+            .. 'The journal will recover an interrupted operation on the next start.',
+          vim.log.levels.WARN
+        )
+        return
+      end
+    end
+  end,
+})
+
 -- netrw neutralisation runs at three points: clear the `FileExplorer` group at
 -- load (pcall, when it already exists), again synchronously on `VimEnter`, and
 -- once more on the next event-loop tick. The tick-deferred clear is credited

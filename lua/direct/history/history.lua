@@ -19,6 +19,10 @@ local TRANSACTION_VERSION = transaction_codec.VERSION
 local backup_sequence = 0
 local history_limit_notice_sent = false
 local trash_references
+local crash_test_hook = require('direct.history.crash_test_hook')
+local stack_commit_sequence = 0
+local undo_stack_write_sequence = 0
+local redo_stack_write_sequence = 0
 
 local function identity_paths_equal(a, b)
   if type(a) ~= 'string' or type(b) ~= 'string' then return false end
@@ -89,7 +93,24 @@ local function classify_path(path)
   return state
 end
 
-local function write_stack(path, lines) return log_mod.write(path, lines) end
+local function write_stack(path, lines)
+  local basename = type(path) == 'string' and path:match('[^/\\]+$')
+  local sequence, before_label, after_label
+  if basename == 'undo.log' then
+    undo_stack_write_sequence = undo_stack_write_sequence + 1
+    sequence = undo_stack_write_sequence
+    before_label, after_label = 'stack.before_undo_write.', 'stack.after_undo_write.'
+  elseif basename == 'redo.log' then
+    redo_stack_write_sequence = redo_stack_write_sequence + 1
+    sequence = redo_stack_write_sequence
+    before_label, after_label = 'stack.before_redo_write.', 'stack.after_redo_write.'
+  end
+
+  if sequence then crash_test_hook.checkpoint(before_label .. sequence) end
+  local ok, err = log_mod.write(path, lines)
+  if ok and sequence then crash_test_hook.checkpoint(after_label .. sequence) end
+  return ok, err
+end
 
 local commit_stacks
 
@@ -681,6 +702,9 @@ local function after_stack_commit(undo_lines, redo_lines, dropped, dropped_recor
 end
 
 commit_stacks = function(undo_path, redo_path, transaction_path, undo_lines, redo_lines)
+  stack_commit_sequence = stack_commit_sequence + 1
+  crash_test_hook.checkpoint('filesystem.before_stack_commit.' .. stack_commit_sequence)
+
   local limit = require('direct.config').options.history_limit
   local trimmed_undo, undo_dropped, undo_dropped_records = trim_stack(undo_lines, limit)
   local trimmed_redo, redo_dropped, redo_dropped_records = trim_stack(redo_lines, limit)

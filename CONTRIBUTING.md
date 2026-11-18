@@ -73,3 +73,19 @@ Version tags are the versions installed by lazy.nvim's `version = '*'`.
 repository and data directory. `make demo-check` plays the same tour without
 recording it and checks the result. See [`demo/README.md`](demo/README.md) for
 details.
+
+## Persisted data formats
+
+Treat files written by direct.vim as user data. When changing a persisted
+format, bump its existing version marker and add a new immutable fixture
+directory under `tests/fixtures/formats/<version>/`. Do not edit or regenerate
+fixtures for an older release; add a new directory for each release baseline.
+Tests must show that older data is either read with the same meaning or refused
+without changing its bytes or allowing the requested operation to proceed.
+
+Some persisted artifacts are not versioned formats. Do not invent a marker
+retroactively in a historical fixture: document the limitation, and introduce
+a marker only as part of a deliberate format change. For v0.3.0, the register
+golden is its one-line pointer and copied-entry tree rather than a manifest,
+and the lock golden is the empty advisory-lock file; neither had a version
+marker or manifest at that release.

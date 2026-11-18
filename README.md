@@ -597,65 +597,8 @@ Python version.
 
 ## Development
 
-On macOS, install the prerequisites with [Homebrew](https://brew.sh/):
-
-```sh
-brew install neovim git                    # tests and coverage
-brew install asciinema agg expect          # demo recording
-brew install --cask font-jetbrains-mono-nerd-font
-```
-
-The font is only needed for the demo GIF, which renders the file icons with
-it.
-
-The tests run in Neovim's embedded Lua and need only Neovim 0.11.7 or later:
-
-```sh
-make test
-```
-
-The real-process end-to-end check also requires Python 3.9 or later:
-
-```sh
-make e2e                 # override Python with PYTHON=python if needed
-```
-
-For coverage, `make coverage` fetches [LuaCov](https://github.com/lunarmodules/luacov)
-with Git into the ignored `.rocks/` directory, then runs the suite with it:
-
-```sh
-make coverage          # writes coverage/index.html and coverage/summary.out
-make coverage-check    # fails below 86% total coverage (override with COVERAGE_MIN)
-make coverage-summary  # writes coverage/summary.md
-```
-
-On pull requests and pushes to `master`, CI runs the suite with coverage on
-Linux, macOS and Windows against Neovim 0.11.7, rejects coverage below the
-floor, checks the full Lua tree with Luacheck, StyLua and LuaLS, tests latest
-stable Neovim on all three platforms and nightly Neovim on Linux, and checks
-the demo tour and real-process end-to-end scenarios.
-
-### Release checklist
-
-1. Add user-visible changes to the `Unreleased` section of
-   [`CHANGELOG.md`](CHANGELOG.md) and keep the README and help docs in sync.
-   Before release, check that every merged pull request since the last tag has
-   a changelog entry.
-   Release PRs may edit a released section and should use the `release` label
-   to skip the CI check that protects published release notes.
-2. Merge the release PR, then create and push an annotated `vX.Y.Z` tag on the
-   resulting `master` commit.
-3. Publish a GitHub release for that tag using the matching changelog section.
-
-Version tags are the versions installed by lazy.nvim's `version = '*'`.
-
-### Demo recording
-
-`make demo` records a scripted tour of direct.vim with
-[asciinema](https://asciinema.org/) and converts it to `demo/tour.gif` with
-[agg](https://github.com/asciinema/agg). The tour uses a throwaway Git
-repository and data directory. `make demo-check` plays the same tour without
-recording it and checks the result. See [`demo/README.md`](demo/README.md) for details.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, test and coverage
+commands, the release checklist, and demo recording instructions.
 
 ## License
 

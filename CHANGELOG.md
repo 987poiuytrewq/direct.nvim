@@ -5,6 +5,12 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- Make `:write` wait for the asynchronous filesystem and history commit, while
+  allowing `<C-c>` to stop waiting without canceling the save; queue `:wa`
+  saves and wait on pending saves before quit.
+
 ## [0.4.0] - 2026-11-18
 
 ### Changed

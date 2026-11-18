@@ -429,14 +429,30 @@ local function set_options(bufnr)
     buffer = bufnr,
     callback = function()
       if state_generations[bufnr] ~= generation then return end
-      state_generations[bufnr] = nil
+      local function release_state()
+        if state_generations[bufnr] ~= generation then return end
+        state_generations[bufnr] = nil
+        states[bufnr] = nil
+        deleted_guards[bufnr] = nil
+      end
+      local save_wiped = pending.save_wiped(bufnr, release_state)
+      local active_sync_wiped = not save_wiped
+        and pending.active_for_buffer(bufnr, 'sync')
+        and pending.defer_cleanup(bufnr, release_state)
+      if save_wiped or active_sync_wiped then
+        ui.notify(
+          'direct: listing buffer is gone; its save continues in the background. '
+            .. 'The journal will recover an interrupted operation on the next start.',
+          vim.log.levels.WARN
+        )
+        return
+      end
       local operation = pending_sync[bufnr]
       if operation then
         if operation.cancel then operation.cancel() end
         operation.cleanup()
       end
-      states[bufnr] = nil
-      deleted_guards[bufnr] = nil
+      release_state()
     end,
     desc = 'direct: release listing row state when the buffer is wiped',
   })
@@ -445,10 +461,36 @@ local function set_options(bufnr)
     buffer = bufnr,
     callback = function(args)
       vim.api.nvim_set_current_buf(args.buf)
-      if pending.refuse('sync') then return end
       if vim.bo[args.buf].modified then
-        vim.cmd('DirectSync')
+        if not pending.can_queue_save() then
+          pending.refuse('sync')
+          return
+        end
+        local listing_buffer = M.restore()
+        local completed, result, sync_err, sync_detail = false, nil, nil, nil
+        pending.enqueue_save(args.buf, function(done)
+          if not vim.api.nvim_buf_is_valid(args.buf) then
+            done(nil, 'listing buffer was closed before its queued save could start')
+            return true
+          end
+          vim.api.nvim_buf_call(args.buf, function()
+            local started, start_err = listing_buffer:sync_async(done)
+            if not started then done(nil, start_err) end
+          end)
+          return true
+        end, function(ok, err, detail)
+          completed, result, sync_err, sync_detail = true, ok, err, detail
+        end)
+        while not completed do
+          local _, wait_err = vim.wait(60000, function() return completed end, 10)
+          if wait_err == -2 then
+            ui.notify('direct: stopped waiting for the save; it continues in the background', vim.log.levels.INFO)
+            return
+          end
+        end
+        if result == nil then error(sync_detail or sync_err or 'direct sync refused') end
       else
+        if pending.refuse('sync') then return end
         M.restore():list({ reset_undo = true })
       end
     end,

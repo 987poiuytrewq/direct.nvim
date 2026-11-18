@@ -6,10 +6,14 @@ direct.vim lists a directory in a Neovim buffer, one line per entry. Rename,
 create, delete and move files with ordinary Vim editing, then `:write` to apply
 the changes. Every filesystem change can be undone and redone.
 
-Saving a listing starts a background sync and returns control to Neovim. The
-listing stays modified until the filesystem changes and history are committed;
-other direct operations are refused while the save is pending. Cross-filesystem
-copies show a progress notification.
+Saving runs the filesystem and history commit asynchronously. `:write` waits for
+the commit to finish, and cross-filesystem copies show progress. `<C-c>` stops
+waiting but does not cancel the save; direct.vim reports that it is continuing
+in the background. `:wq` and `:x` finish the save before closing, and `:wa`
+queues modified Direct listings one at a time. On exit, Neovim waits for pending
+saves; `<C-c>` lets you quit anyway. `:bw!` warns that the listing buffer is
+wiped while its save continues. If Neovim exits during an operation, journal
+recovery completes it or reports the interruption on the next start.
 
 <img src="demo/tour.gif" width="600" alt="direct.vim demo: renaming, creating and deleting files by editing a listing, undoing on disk, opening files and folders, renaming with :s, copying a folder, and staging with Git">
 
@@ -126,6 +130,8 @@ release notes. lazy.nvim users can select tagged releases with `version = '*'`.
 | Move   | Re-indent the line under another expanded directory         |
 
 4. Changed your mind? Press `u` to undo the filesystem change.
+
+See `:help direct.vim-write` for save, quit, and interrupted-operation behavior.
 
 ### Rules for edits
 
@@ -493,7 +499,7 @@ distinguished from messages from Neovim and other plugins.
 | `:DirectList[!] {dir}`     | List a directory; `!` discards its unsaved listing edits |
 | `:DirectListBuffer[!]`     | List the current file's directory; `!` discards its unsaved listing edits |
 | `:DirectListCwd[!]`        | List the working directory; `!` discards its unsaved listing edits |
-| `:DirectSync`              | Apply edits (same as `:write`)                        |
+| `:DirectSync`              | Start an asynchronous save; `:write` waits for completion |
 | `:DirectUndo` / `:DirectRedo` | Undo/redo filesystem changes, or text while modified |
 | `:DirectHistory`           | Show the undo and redo stacks in a read-only view     |
 | `:DirectHistory drop [undo|redo]` | Drop only the top step of one history stack     |

@@ -1,4 +1,4 @@
--- Sync writes keep the editor responsive while a cross-device tree is copied.
+-- DirectSync remains asynchronous while a cross-device tree is copied.
 local H = require('tests.support.harness')
 
 local function clean_buffers()
@@ -6,7 +6,7 @@ local function clean_buffers()
 end
 
 H.describe('asynchronous sync', function()
-  H.it(':write returns while a cross-device directory copy is pending', function()
+  H.it(':DirectSync returns while a cross-device directory copy is pending', function()
     clean_buffers()
     local pending = require('direct.pending')
     local fs = require('direct.fs')
@@ -37,9 +37,9 @@ H.describe('asynchronous sync', function()
     end)
 
     H.capture_messages()
-    local wrote, write_err = pcall(vim.cmd, 'write')
-    H.assert_true(wrote, 'write starts the asynchronous sync: ' .. tostring(write_err))
-    H.assert_true(pending.is_pending(), 'the save owns the Direct pending-operation guard')
+    local started, sync_err = pcall(vim.cmd, 'DirectSync')
+    H.assert_true(started, 'DirectSync starts the asynchronous sync: ' .. tostring(sync_err))
+    H.assert_true(pending.is_pending(), 'the sync owns the Direct pending-operation guard')
     H.assert_true(fs.exists(source), 'the original directory remains while copying')
     H.assert_false(fs.exists(destination), 'the destination is not committed early')
     H.assert_true(vim.wait(2000, function() return copy_deferred ~= nil end),

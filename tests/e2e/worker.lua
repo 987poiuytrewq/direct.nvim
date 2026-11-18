@@ -94,7 +94,11 @@ local function run_stale_wait(api)
   vim.api.nvim_buf_set_lines(0, shared - 1, shared, false, { 'stale-shared.txt' })
   write_marker(assert(vim.env.DIRECT_E2E_READY))
   wait_for_path(assert(vim.env.DIRECT_E2E_PROCEED), 'the second process save')
-  vim.cmd('write')
+  local wrote, write_err = pcall(vim.cmd, 'write')
+  assert_true(
+    not wrote and tostring(write_err):find('directory changed on disk since it was listed', 1, true) ~= nil,
+    'stale :write did not refuse the outdated listing: ' .. tostring(write_err)
+  )
   wait_for_idle()
   vim.notify = original_notify
   vim.cmd('qa!')

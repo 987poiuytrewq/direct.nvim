@@ -45,12 +45,8 @@ def make_env(base: Path, mode: str, root: Path) -> dict[str, str]:
     }
 
 
-def start_worker(
-    mode: str, env: dict[str, str], listen: Path | None = None
-) -> subprocess.Popen[str]:
+def start_worker(mode: str, env: dict[str, str]) -> subprocess.Popen[str]:
     command = [NVIM, "--headless", "-u", "NONE", "-n", "-i", "NONE"]
-    if listen is not None:
-        command.extend(["--listen", str(listen)])
     command.extend(["-l", str(WORKER)])
     return subprocess.Popen(
         command,
@@ -239,25 +235,10 @@ def run_write_all_case(base: Path) -> None:
 def run_qa_case(base: Path) -> None:
     root = create_workspace(base, {"before.txt": "payload\n"})
     env, source, destination = delayed_env(base, root)
-    socket = base / "nvim.sock"
-    process = start_worker("qa_pending", env, listen=socket)
+    process = start_worker("qa_pending", env)
     try:
         wait_for_marker(Path(env["DIRECT_E2E_STARTED"]), process, "qa_pending")
         assert_waiting(process, source, destination, ":qa")
-        result = subprocess.run(
-            [NVIM, "--server", str(socket), "--remote-send", ":qa<CR>"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=PROCESS_TIMEOUT_SECONDS,
-            check=False,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"could not send :qa to the pending-save process\n"
-                f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
-            )
         finish_worker(process, "qa_pending")
     finally:
         if process.poll() is None:

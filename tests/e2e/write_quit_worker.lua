@@ -128,7 +128,13 @@ end
 
 local function run_qa_pending(api)
   edit_rename(api, assert(vim.env.DIRECT_E2E_ROOT), 'before.txt', 'after.txt')
-  vim.cmd('write')
+  -- Stop :write waiting, then issue :qa while the save remains active. This
+  -- exercises ExitPre without a platform-specific remote-control socket.
+  vim.defer_fn(function() vim.api.nvim_input(string.char(3)) end, 150)
+  pcall(vim.cmd, 'write')
+  assert_true(require('direct.pending').has_saves(), 'the save stopped instead of continuing after Ctrl-C')
+  vim.bo.modified = false
+  vim.cmd('qa')
 end
 
 local function run_qa_ctrl_c(api)

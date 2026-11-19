@@ -173,7 +173,7 @@ function M.refresh_git_status(bufnr, root)
   return true
 end
 
-local is_deleted_record, merge_deleted_entries, hide_deleted_expansions
+local merge_deleted_entries, hide_deleted_expansions
 local capture_deleted_guard_snapshot, restore_deleted_rows, attach_deleted_guard
 
 local sync_plan = require('direct.buffer.sync_plan')({
@@ -194,7 +194,6 @@ local pending = require('direct.pending')
 M._pending_for_test = pending
 local pending_sync = buffer_state.pending_sync
 local reconcile_undone_materialization
-local children_integrity
 
 local Buffer = {}
 Buffer.__index = Buffer
@@ -251,7 +250,6 @@ local tree_planner = require('direct.buffer.tree')({
   action_mod = action_mod,
   indent_size = indent_size,
 })
-children_integrity = tree_planner.children_integrity
 buffer_state.tree_plan = tree_planner
 reconcile_undone_materialization = require('direct.buffer.undo_state')({
   states = states,
@@ -311,7 +309,6 @@ local row_state = require('direct.buffer.row_state')({
   reconcile_undone_materialization = reconcile_undone_materialization,
   action_mod = action_mod,
 })
-is_deleted_record = row_state.is_deleted_record
 local merge_status_deleted_entries = row_state.merge_deleted_entries
 merge_deleted_entries = function(directory, lines, git_snapshot, show_hidden, diff_snapshot)
   local result, deleted = merge_status_deleted_entries(directory, lines, git_snapshot, show_hidden)
@@ -907,22 +904,12 @@ Buffer.sync = sync.sync
 Buffer.sync_async = sync.sync_async
 
 -- Opening and row-path operations are kept separate from listing and sync.
-require('direct.buffer.open')({
-  M = M,
-  Buffer = Buffer,
-  paths = paths,
-  ui = ui,
-  constants = constants,
-  states = states,
-  restore_deleted_rows = restore_deleted_rows,
-  children_integrity = children_integrity,
-  current_row_record = current_row_record,
-  is_deleted_record = is_deleted_record,
-  row_path = row_path,
-  is_dir_line = is_dir_line,
-  recorded_row_text = recorded_row_text,
-  indent_size = indent_size,
-  remove_expanded_subtree = remove_expanded_subtree,
-})
+local open = require('direct.buffer.open')
+Buffer.open = open.open
+Buffer.get_paths = open.get_paths
+Buffer.get_entry_path = open.get_entry_path
+Buffer.get_entry_record = open.get_entry_record
+Buffer.paste_destination = open.paste_destination
+Buffer.refresh_after_paste = open.refresh_after_paste
 
 return M

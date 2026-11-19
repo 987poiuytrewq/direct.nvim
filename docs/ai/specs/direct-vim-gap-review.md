@@ -1,7 +1,7 @@
 # Spec: direct.vim improvements, fourth review
 
-**Status:** A33, A34, A41–A43, A45, A47, A49, A50 and A57 are complete.
-A48 is partially complete; A35–A40, A44, A46, A51–A56 and A58 remain open.
+**Status:** A33, A34, A41–A43, A45, A47, A49, A50, A57 and A58 are complete.
+A48 is partially complete; A35–A40, A44, A46 and A51–A56 remain open.
 
 **Source:** a fourth static review of `origin/master` at `1af1402`
 (17 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -141,7 +141,7 @@ into each task below:
 | A55 | P3 | Open | Support other icon providers and optional detail columns |
 | A56 | P3 | Open | Allow custom key actions and expose the entry under the cursor |
 | A57 | P2 | Done | Explain and probe filesystems without safe no-replace renames |
-| A58 | P3 | Open | Measure large-directory listing and set a performance budget |
+| A58 | P3 | Done | Measure large-directory listing and set a performance budget |
 
 ## Robustness and performance
 
@@ -1003,6 +1003,11 @@ changing anything, with the new message, once per device. A BSD `sysname`
 gives the same message. `:checkhealth` reports the probe result.
 
 ### A58 — Large directories have no performance budget (P3)
+
+**Progress.** `bench/listing.lua` now measures listing, re-listing, full
+expansion and a one-rename save on flat and deep fixtures, with Git-ignore on
+and off. Initial measurements, a focused optimization and the advisory CI
+budgets are recorded in `docs/performance/listing-benchmark.md`.
 
 **Problem.** Listing is synchronous: `lua/direct/buffer/listing.lua` scans the
 directory with `fs_scandir` (around line 158), stats entries, sets an extmark

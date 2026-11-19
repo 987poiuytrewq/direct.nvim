@@ -3,13 +3,16 @@ PYTHON ?= python3
 COVERAGE_PLATFORM ?= local
 DEMO_FONT ?= JetBrainsMono Nerd Font
 DEMO_GIF ?= demo/tour.gif
+DIRECT_LISTING_SAMPLES ?= 3
+DIRECT_LISTING_BUDGET_MS ?= 300
+DIRECT_LISTING_GITIGNORE_BUDGET_MS ?= 750
 LUACHECK ?= luacheck
 LUACHECK_MAX_WARNINGS ?= 0
 LUALS ?= lua-language-server
 LUALS_LOGPATH ?= $(CURDIR)/.cache/luals
 COVERAGE_MIN ?= 86
 
-.PHONY: ci test lint coverage coverage-deps coverage-check coverage-summary live-startup e2e demo demo-record demo-gif demo-check check-nvim
+.PHONY: ci test lint coverage coverage-deps coverage-check coverage-summary live-startup e2e demo demo-record demo-gif demo-check listing-benchmark check-nvim
 
 ci:
 	$(MAKE) coverage
@@ -68,6 +71,12 @@ live-startup:
 e2e: check-nvim
 	NVIM='$(NVIM)' $(PYTHON) tests/e2e/run.py
 	NVIM='$(NVIM)' $(PYTHON) tests/e2e/run_a49.py
+
+listing-benchmark: check-nvim
+	DIRECT_LISTING_SAMPLES='$(DIRECT_LISTING_SAMPLES)' \
+	DIRECT_LISTING_BUDGET_MS='$(DIRECT_LISTING_BUDGET_MS)' \
+	DIRECT_LISTING_GITIGNORE_BUDGET_MS='$(DIRECT_LISTING_GITIGNORE_BUDGET_MS)' \
+	$(NVIM) --headless -l bench/listing.lua
 
 # The README demo: record the tour with asciinema, then convert it to a GIF
 # with agg. DEMO_FONT must be a Nerd Font, so the icons render.

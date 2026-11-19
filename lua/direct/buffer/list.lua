@@ -271,6 +271,19 @@ return function(context)
 
     reconcile_undone_materialization(bufnr)
     old_state = states[bufnr]
+    local new_identities, new_identity_by_path, new_counts =
+      {}, {}, {
+        by_path = {},
+        by_inode = {},
+        unknown_by_path = {},
+      }
+    for index, line in ipairs(safe) do
+      local identity = path_identity(M.entry_path(self.root, line))
+      new_identities[index] = identity
+      if identity then new_identity_by_path[identity.path] = identity end
+      count_identity(new_counts, identity)
+    end
+
     local old_expanded, old_deleted = {}, {}
     local old_known_children = {}
     local deleted_visibility_changed = old_state and old_state.view_show_deleted ~= show_deleted
@@ -288,27 +301,21 @@ return function(context)
         local id = old_row_ids[row - 1]
         local rec = id and old_state.rows[id]
         -- Reuse a root only while its extmark still identifies the unchanged
-        -- row. `rec.path` is assigned from this row's entry path on every list;
-        -- checking it against the same path again was redundant. Edited text may
-        -- happen to equal another root's name; that is not an identity change.
+        -- row. Edited text may happen to equal another root's name; that is not
+        -- an identity change.
         if rec and rec.kind == 'root' and rec.deleted_kind then
           old_deleted[vim.fs.normalize(rec.path)] = rec
         elseif rec and rec.kind == 'root' and line == rec.text and line == rec.name and rec.path then
-          local candidate = { record = rec, identity = path_identity(rec.path) }
+          -- Use the current identity for a same-spelling row, preserving the
+          -- established behavior for entries replaced at that path. Keep the
+          -- live lookup for old paths without a visible same-spelling row,
+          -- because an alias may still point to that entry.
+          local identity = rec.identity and new_identity_by_path[rec.identity.path]
+          if not identity then identity = path_identity(rec.path) end
+          local candidate = { record = rec, identity = identity }
           add_identity(old_index, candidate.identity, candidate)
         end
       end
-    end
-
-    local new_identities, new_counts = {}, {
-      by_path = {},
-      by_inode = {},
-      unknown_by_path = {},
-    }
-    for index, line in ipairs(safe) do
-      local identity = path_identity(M.entry_path(self.root, line))
-      new_identities[index] = identity
-      count_identity(new_counts, identity)
     end
 
     local state = {

@@ -47,7 +47,9 @@ return function(context)
   -- is written per GROUP of interlinked moves: a swap or an N-way rotation is one
   -- entry. Independent actions keep their own entries unless a successful sync
   -- mixes create, delete, and rename categories; those records are compacted into
-  -- one durable batch so a single `DirectUndo` reverses the mixed save.
+  -- one durable batch so a single `DirectUndo` reverses the mixed save. A
+  -- permutation group is also batched with other moves from the same sync, so
+  -- one undo cannot reverse the permutation while leaving its companion move.
   --
   -- A group with any member that did NOT apply is not recorded at all: its
   -- reversal would pass through a colliding name (the reported defect), and
@@ -79,9 +81,14 @@ return function(context)
     end
 
     if all_recorded and #records > 1 then
-      local categories = {}
+      local categories, has_grouped_rename = {}, false
       local function categorize(action)
-        if action.name == 'g' or action.name == 'batch' then
+        if action.name == 'g' then
+          has_grouped_rename = true
+          for _, member in ipairs(action.actions or {}) do
+            categorize(member)
+          end
+        elseif action.name == 'batch' then
           for _, member in ipairs(action.actions or {}) do
             categorize(member)
           end
@@ -100,7 +107,10 @@ return function(context)
       for _ in pairs(categories) do
         category_count = category_count + 1
       end
-      if category_count > 1 then
+      -- A permutation group is atomic to reverse, and another rename from the
+      -- same listing sync must travel with it. Otherwise one undo reverses only
+      -- the permutation while leaving the other rename applied.
+      if category_count > 1 or has_grouped_rename then
         local combined, combine_err = history.combine_recent(records)
         if not combined then
           ui.notify(

@@ -15,6 +15,7 @@ local clean_buffers = sync.clean_buffers
 local route_write_to_test_buffer = sync.route_write_to_test_buffer
 local history_lines = sync.history_lines
 local list_edit_and_sync = sync.list_edit_and_sync
+local trash_metadata = require('direct.trash.metadata')
 
 H.describe('sync: applying actions', function()
   H.it('ADD (file): creates the file and logs one touch action', function()
@@ -403,7 +404,7 @@ H.describe('sync: applying actions', function()
       local ok, reason = listing:sync()
       H.assert_true(ok == true, tostring(reason))
       local entry = register.entries(register.content())[1]
-      local metadata_path = require('direct.action.action').trash_metadata_path(entry.path)
+      local metadata_path = trash_metadata.path(entry.path)
       local metadata = vim.json.decode(vim.fn.readfile(metadata_path)[1])
       metadata.deleted_at_epoch = os.time() - 2 * 86400
       vim.fn.writefile({ vim.json.encode(metadata) }, metadata_path)

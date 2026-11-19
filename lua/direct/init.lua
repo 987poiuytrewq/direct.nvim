@@ -14,7 +14,6 @@ local M = {}
 local buffer = require('direct.buffer.buffer')
 local register = require('direct.register')
 local history = require('direct.history.history')
-local action = require('direct.action.action')
 local config = require('direct.config')
 local ui = require('direct.ui')
 local constants = require('direct.constants')
@@ -47,7 +46,7 @@ local function worktree_backups(changes)
   for _, path in ipairs(changes) do
     local stat = vim.uv.fs_lstat(path)
     if stat then
-      local backup_path = action.first_free_trash(directory, path)
+      local backup_path = trash.first_free(directory, path)
       local copied, copy_err
       if stat.type == 'file' then
         copied, copy_err = fs.copy_file_exclusive(path, backup_path)
@@ -70,7 +69,7 @@ local function worktree_backups(changes)
         path = backup_path,
         original = path,
       }
-      local metadata, metadata_err = action.write_trash_metadata(backup_path, path, 'git-restore-backup')
+      local metadata, metadata_err = trash.write_metadata(backup_path, path, 'git-restore-backup')
       if not metadata then
         return nil, 'backup exists at ' .. backup_path .. ' but metadata failed: ' .. tostring(metadata_err), backups
       end

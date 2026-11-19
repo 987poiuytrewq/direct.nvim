@@ -7,6 +7,7 @@ local history = require('direct.history.history')
 local action = require('direct.action.action')
 local register = require('direct.register')
 local trash = require('direct.trash')
+local trash_metadata = require('direct.trash.metadata')
 local lock = require('direct.history.lock')
 
 local fixture_root =
@@ -137,8 +138,8 @@ H.describe('v0.3.0 persisted-format goldens', function()
     vim.fn.writefile({ 'nested payload' }, vim.fs.joinpath(directory_entry, 'nested.txt'))
     local file_metadata = fixture('trash/file.direct-trash.json')
     local directory_metadata = fixture('trash/directory.direct-trash.json')
-    write_raw(action.trash_metadata_path(file_entry), file_metadata)
-    write_raw(action.trash_metadata_path(directory_entry), directory_metadata)
+    write_raw(trash_metadata.path(file_entry), file_metadata)
+    write_raw(trash_metadata.path(directory_entry), directory_metadata)
 
     local entries = trash.entries()
     local by_id = {}
@@ -151,9 +152,9 @@ H.describe('v0.3.0 persisted-format goldens', function()
     H.assert_eq(by_id['directory-entry'].original, '/a47/work/deleted-dir', 'directory original path is retained')
     H.assert_eq(by_id['directory-entry'].kind, 'directory', 'directory kind is retained')
     H.assert_eq(by_id['directory-entry'].deleted_at, '2026-05-02T11:21:31Z', 'directory timestamp is retained')
-    H.assert_eq(read_raw(action.trash_metadata_path(file_entry)), file_metadata, 'file sidecar bytes are unchanged')
+    H.assert_eq(read_raw(trash_metadata.path(file_entry)), file_metadata, 'file sidecar bytes are unchanged')
     H.assert_eq(
-      read_raw(action.trash_metadata_path(directory_entry)),
+      read_raw(trash_metadata.path(directory_entry)),
       directory_metadata,
       'directory sidecar bytes are unchanged'
     )

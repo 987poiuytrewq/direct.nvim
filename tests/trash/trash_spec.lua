@@ -1,6 +1,7 @@
 -- tests/trash/trash_spec.lua -- metadata-backed trash management.
 local H = require('tests.support.harness')
 local action = require('direct.action.action')
+local trash_metadata = require('direct.trash.metadata')
 local fs = require('direct.fs')
 local history = require('direct.history.history')
 local log = require('direct.log')
@@ -34,7 +35,7 @@ H.describe('trash management', function()
       'metadata includes a deletion time')
     H.assert_eq(entry.kind, 'file', 'metadata records the entry type')
     H.assert_eq(entry.size, #'trash bytes\n', 'trash listing reports payload size')
-    local metadata_path = action.trash_metadata_path(entry.path)
+    local metadata_path = trash_metadata.path(entry.path)
     local metadata_raw = log.read_raw(metadata_path)
     local metadata = vim.json.decode(metadata_raw)
     H.assert_eq(metadata.original, original, 'the sidecar contains the original path')
@@ -159,7 +160,7 @@ H.describe('trash management', function()
     H.assert_true(remove['do'](), 'move the file into the trash')
     H.assert_true(history.log(remove), 'record the trash destination in history')
     local entry = trash.entries()[1]
-    H.assert_true(vim.uv.fs_unlink(action.trash_metadata_path(entry.path)),
+    H.assert_true(vim.uv.fs_unlink(trash_metadata.path(entry.path)),
       'simulate a legacy entry without its sidecar metadata')
 
     local view = trash.show()
@@ -193,7 +194,7 @@ H.describe('trash management', function()
     H.assert_true(remove['do'](), 'move the directory into the trash')
     H.assert_true(history.log(remove), 'record the directory trash destination')
     local entry = trash.entries()[1]
-    H.assert_true(vim.uv.fs_unlink(action.trash_metadata_path(entry.path)),
+    H.assert_true(vim.uv.fs_unlink(trash_metadata.path(entry.path)),
       'simulate an older directory entry without metadata')
 
     local recovered = trash.entries()[1]
@@ -202,7 +203,7 @@ H.describe('trash management', function()
       'history restores the directory original path')
     H.assert_eq(recovered.kind, 'directory', 'the trash payload supplies its entry kind')
     H.assert_not_nil(recovered.deleted_at_epoch, 'the deletion time is estimated')
-    H.assert_not_nil(vim.uv.fs_stat(action.trash_metadata_path(entry.path)),
+    H.assert_not_nil(vim.uv.fs_stat(trash_metadata.path(entry.path)),
       'recovery writes a metadata sidecar')
   end)
 
@@ -214,7 +215,7 @@ H.describe('trash management', function()
     local remove = action.Remove(source)
     H.assert_true(remove['do'](), 'create a trash entry')
     local entry = trash.entries()[1]
-    H.assert_true(vim.uv.fs_unlink(action.trash_metadata_path(entry.path)),
+    H.assert_true(vim.uv.fs_unlink(trash_metadata.path(entry.path)),
       'simulate an older entry that completion must not recover')
     local calls = 0
     local restore_entries = H.stub(trash, 'entries', function()
@@ -229,7 +230,7 @@ H.describe('trash management', function()
     H.assert_true(completed, 'completion avoids the expensive entry scan')
     H.assert_eq(calls, 0, 'completion does not walk trash entries, measure sizes, or recover metadata')
     H.assert_eq(completions, { entry.id }, 'completion returns the current trash entry ID')
-    H.assert_nil(vim.uv.fs_stat(action.trash_metadata_path(entry.path)),
+    H.assert_nil(vim.uv.fs_stat(trash_metadata.path(entry.path)),
       'completion does not write recovered metadata')
   end)
 
@@ -243,7 +244,7 @@ H.describe('trash management', function()
     H.assert_true(remove['do'](), 'create a trash entry')
     H.assert_true(history.log(remove), 'history identifies the trash payload')
     local entry = trash.entries()[1]
-    H.assert_true(vim.uv.fs_unlink(action.trash_metadata_path(entry.path)),
+    H.assert_true(vim.uv.fs_unlink(trash_metadata.path(entry.path)),
       'remove metadata to simulate an older entry')
     local expected_epoch = os.time() - 2 * 24 * 60 * 60
     local original_lstat = vim.uv.fs_lstat
@@ -319,7 +320,7 @@ H.describe('trash management', function()
     H.assert_eq(vim.fn.readfile(original), { 'restore me' }, 'restored bytes are intact')
     H.assert_eq(#trash.entries(), 0, 'restored items are no longer listed as trash')
     H.assert_notified('discarded 1 undo step and 0 redo steps', vim.log.levels.WARN)
-    local reservation_bytes = log.read_raw(action.trash_metadata_path(entry.path))
+    local reservation_bytes = log.read_raw(trash_metadata.path(entry.path))
     local reservation = vim.json.decode(reservation_bytes)
     H.assert_true(reservation.reserved, 'the hidden slot remains reserved for history redo')
     vim.cmd('DirectUndo')

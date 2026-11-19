@@ -1,10 +1,13 @@
 -- Deterministic generated edit sequences checked against an independent tree model.
 -- Seeds 1 and 2 pin the swap/move undo regressions; seed 20 pins a grouped-move
 -- apply failure involving a six-name permutation, companion move, and delete.
+-- Seeds 1-22 run real filesystem lifecycles; the remaining seeds check fast
+-- in-memory apply/undo/redo models and canonical history format round trips.
 local H = require('tests.support.harness')
 local sync_helpers = require('tests.support.sync_helpers').new()
 
 local SEED_COUNT = 200
+local FILESYSTEM_SEED_MAX = 22
 local GENERATED_FAMILIES = {
   'permutation',
   'cross-folder move',
@@ -159,6 +162,128 @@ local function expected_after_sync(case, initial)
   if case.delete_in_sync then files[case.delete_name] = nil end
   if case.create_in_sync then files[case.create_name] = {} end
   return files
+end
+
+local function expected_after_generated_operation(case, initial)
+  local files = expected_after_sync(case, initial)
+  if case.include_paste then files['right/' .. case.paste_name] = vim.deepcopy(case.paste_contents) end
+  return files
+end
+
+local function undo_pure_model(case, result, initial)
+  local files = copy_files(result)
+  if case.family == 'permutation' then
+    local restored = {}
+    for index = 1, case.permutation_count do
+      local source = case.root_names[index]
+      local target = case.root_names[((index - 1 + case.shift) % case.permutation_count) + 1]
+      restored[source] = vim.deepcopy(files[target])
+    end
+    for name, contents in pairs(restored) do
+      files[name] = contents
+    end
+  elseif case.family == 'cross-folder move' then
+    local source = 'left/' .. case.move_name
+    local destination = 'right/' .. case.move_name
+    files[source] = vim.deepcopy(files[destination])
+    files[destination] = nil
+  elseif case.family == 'delete' then
+    files[case.delete_name] = vim.deepcopy(initial[case.delete_name])
+  elseif case.family == 'create' then
+    files[case.create_name] = nil
+  elseif case.family == 'paste' then
+    files['right/' .. case.paste_name] = nil
+  else
+    error('no pure model inverse for operation family: ' .. tostring(case.family))
+  end
+  return files
+end
+
+local function pure_action_record(case, root)
+  local fixtures = require('tests.support.history_fixtures')
+  if case.family == 'permutation' then
+    local moves = {}
+    for index = 1, case.permutation_count do
+      local source = vim.fs.joinpath(root, case.root_names[index])
+      local target_name = case.root_names[((index - 1 + case.shift) % case.permutation_count) + 1]
+      moves[index] = { source, vim.fs.joinpath(root, target_name) }
+    end
+    return fixtures.group(moves)
+  elseif case.family == 'cross-folder move' then
+    return fixtures.move(vim.fs.joinpath(root, 'left', case.move_name), vim.fs.joinpath(root, 'right', case.move_name))
+  elseif case.family == 'delete' then
+    return fixtures.remove(
+      'rm',
+      vim.fs.joinpath(root, case.delete_name),
+      vim.fs.joinpath(root, '.direct-trash-' .. case.seed, case.delete_name)
+    )
+  elseif case.family == 'create' then
+    return fixtures.touch(vim.fs.joinpath(root, case.create_name))
+  elseif case.family == 'paste' then
+    return fixtures.paste(
+      'p',
+      vim.fs.joinpath(root, '.direct-register-' .. case.seed),
+      vim.fs.joinpath(root, 'right'),
+      { case.paste_name },
+      { case.paste_name }
+    )
+  end
+  error('no pure action record for operation family: ' .. tostring(case.family))
+end
+
+local function run_pure_seed(seed)
+  local case = make_case(seed)
+  local root = vim.fs.joinpath(vim.uv.cwd(), '.direct-property-model-' .. seed)
+  local initial = copy_files(case.root_files)
+  for name, contents in pairs(case.left_files) do
+    initial['left/' .. name] = vim.deepcopy(contents)
+  end
+  for name, contents in pairs(case.right_files) do
+    initial['right/' .. name] = vim.deepcopy(contents)
+  end
+
+  local result = expected_after_generated_operation(case, initial)
+  local undone = undo_pure_model(case, result, initial)
+  H.assert_eq(undone, initial, string.format('seed=%d %s pure undo restores the model', seed, case.family))
+  H.assert_eq(
+    expected_after_generated_operation(case, undone),
+    result,
+    string.format('seed=%d %s pure redo restores the model', seed, case.family)
+  )
+
+  local action = require('direct.action.action')
+  local format = require('direct.history.format')
+  local record = pure_action_record(case, root)
+  local parsed, parse_err = action.deserialize(record)
+  H.assert_not_nil(parsed, string.format('seed=%d %s record parses: %s', seed, case.family, tostring(parse_err)))
+  local encoded, encode_err = action.serialize(parsed)
+  H.assert_eq(
+    encoded,
+    record,
+    string.format('seed=%d %s record round-trips: %s', seed, case.family, tostring(encode_err))
+  )
+  local reversed, reverse_err = action.reverse(record)
+  H.assert_not_nil(reversed, string.format('seed=%d %s record reverses: %s', seed, case.family, tostring(reverse_err)))
+  local reversed_line, reversed_encode_err = action.serialize(reversed)
+  H.assert_not_nil(reversed_line, tostring(reversed_encode_err))
+  local restored, restore_err = action.reverse(reversed_line)
+  H.assert_not_nil(restored, tostring(restore_err))
+  local restored_line, restored_encode_err = action.serialize(restored)
+  H.assert_not_nil(restored_line, tostring(restored_encode_err))
+  local restored_parsed, restored_parse_err = action.deserialize(restored_line)
+  H.assert_not_nil(restored_parsed, tostring(restored_parse_err))
+  H.assert_eq(
+    action.serialize(restored_parsed),
+    restored_line,
+    string.format('seed=%d %s reversed record remains canonical', seed, case.family)
+  )
+
+  local bytes = format.HEADER .. '\n' .. record .. '\n'
+  H.assert_eq(
+    format.classify(bytes, true).state,
+    'current',
+    string.format('seed=%d %s record is a valid history-format round trip', seed, case.family)
+  )
 end
 
 local function delete_model_entry(files, name)
@@ -442,13 +567,26 @@ H.describe('sync: generated edit model', function()
     local original_notify = vim.notify
     local started_at = vim.uv.hrtime()
     local attempted = 0
+    local filesystem_cases, pure_cases = 0, 0
     vim.notify = function() end
     local ok, err = xpcall(function()
       local known_regression_failures = {}
       for seed = 1, SEED_COUNT do
         attempted = seed
         sync_helpers.clean_buffers()
-        local seed_ok, seed_err = xpcall(function() run_seed(seed) end, debug.traceback)
+        local filesystem_lifecycle = seed <= FILESYSTEM_SEED_MAX or REGRESSION_CASES[seed] ~= nil
+        if filesystem_lifecycle then
+          filesystem_cases = filesystem_cases + 1
+        else
+          pure_cases = pure_cases + 1
+        end
+        local seed_ok, seed_err = xpcall(function()
+          if filesystem_lifecycle then
+            run_seed(seed)
+          else
+            run_pure_seed(seed)
+          end
+        end, debug.traceback)
         if not seed_ok then
           local failure = string.format('generated edit sequence failed: seed=%d\n%s', seed, tostring(seed_err))
           if REGRESSION_CASES[seed] then
@@ -473,10 +611,12 @@ H.describe('sync: generated edit model', function()
     local runtime_budget = vim.env.DIRECT_COVERAGE == '1' and 150 or 90
     io.write(
       string.format(
-        '\n[runtime] sync_property_spec: %.2fs (%d/%d seeds, budget %.0fs)\n',
+        '\n[runtime] sync_property_spec: %.2fs (%d/%d seeds; %d filesystem, %d pure; budget %.0fs)\n',
         elapsed,
         attempted,
         SEED_COUNT,
+        filesystem_cases,
+        pure_cases,
         runtime_budget
       )
     )

@@ -104,8 +104,8 @@ H.describe('buffer: listing and path identity', function()
     H.assert_eq(root_scans, 1, 'refresh scans the root only once')
     H.assert_true(extmark_calls <= 4,
       'refresh rendering reads extmarks in batches, got ' .. extmark_calls .. ' calls')
-    H.assert_true(refresh_stats <= 3 * count + 10,
-      'refresh uses at most 3*N+10 stats, got ' .. refresh_stats)
+    H.assert_true(refresh_stats <= 2 * count + 10,
+      'refresh uses at most 2*N+10 stats, got ' .. refresh_stats)
     local after_marks = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})
     H.assert_eq(after_marks, before_marks, 'refresh preserves every row identity mark')
     H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], count,

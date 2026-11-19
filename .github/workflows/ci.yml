@@ -213,3 +213,41 @@ jobs:
 
       - name: Check the demo tour
         run: make demo-check
+
+  listing-benchmark:
+    name: Listing benchmark (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7 # v1.6.1
+        with:
+          neovim: true
+          version: v0.11.7
+
+      - name: Run listing benchmark and warn on budget overruns
+        run: |
+          set +e
+          mkdir -p .cache
+          make listing-benchmark \
+            DIRECT_LISTING_SAMPLES=3 \
+            DIRECT_LISTING_BUDGET_MS=300 \
+            DIRECT_LISTING_GITIGNORE_BUDGET_MS=750 \
+            > .cache/listing-benchmark.log 2>&1
+          result=$?
+          cat .cache/listing-benchmark.log
+          if grep -q '^LISTING_BUDGET_.*=exceeded' .cache/listing-benchmark.log; then
+            echo '::warning::A 10,000-entry listing exceeded its advisory latency budget.'
+          fi
+          if [ "$result" -ne 0 ]; then
+            echo '::warning::The listing benchmark did not complete; this job is informational.'
+          fi
+          exit 0

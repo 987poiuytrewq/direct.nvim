@@ -33,9 +33,9 @@ measurements, not guarantees for network or FUSE filesystems.
 
 ## Initial measurements and profile
 
-Environment: macOS 15.6, Apple M4, Neovim 0.12.6 / LuaJIT,
-Apple Git 2.54.0. Results below are medians of three samples in one process,
-warm cache. Milliseconds:
+Environment: macOS 26.6.2, Apple M4, internal APFS SSD, Neovim 0.12.6 /
+LuaJIT, Apple Git 2.54.0. Results below are medians of three samples in one
+process, warm cache. Milliseconds:
 
 | Fixture | Git-ignore | First list | Re-list | `zR` | One-rename save |
 |---|---:|---:|---:|---:|---:|
@@ -75,12 +75,26 @@ fixture:
 | Git-ignore off | 300 ms | 184.89 ms |
 | Git-ignore on | 750 ms | 412.71 ms |
 
-These initial thresholds are deliberately above the local medians to allow
-runner and filesystem variance, while still warning on a substantial
-regression. The `listing-benchmark` GitHub Actions job runs the same three
-samples on `ubuntu-latest`; it is non-blocking and emits a warning on an
-over-budget result or if the benchmark cannot complete. Its output is the
-reference for calibrating these thresholds to the current hosted runner.
+The first hosted calibration ran in GitHub Actions run
+[44539164138](https://github.com/987poiuytrewq/direct.vim/actions/runs/44539164138):
+Ubuntu 26.04.1 on an AWS `ubuntu-latest` runner (Linux 7.0.0-1016-aws,
+x86_64, Intel Xeon 6975P-C), Neovim 0.11.7 / LuaJIT, Git 2.56.1. The 10,000
+entry medians were:
+
+| Mode | First list | Re-list | `zR` | One-rename save |
+|---|---:|---:|---:|---:|
+| Git-ignore off | 191.33 ms | 295.36 ms | 50.42 ms | 855.39 ms |
+| Git-ignore on | 527.16 ms | 423.04 ms | 251.27 ms | 1,114.13 ms |
+
+The deep-tree `zR` median on that runner was 65.79 ms with Git-ignore off and
+2,990.47 ms with it on. Both 10,000-entry first-list medians fit the advisory
+budgets with roughly 36% and 30% headroom respectively. The hosted figures
+support retaining 300 ms / 750 ms as the warning thresholds; they are not
+hard-fail gates.
+
+The `listing-benchmark` GitHub Actions job runs the same three samples on
+`ubuntu-latest`; it is non-blocking and emits a warning on an over-budget result
+or if the benchmark cannot complete.
 
 The 50,000-entry results remain above one second, and expanding a deep tree with
 Git-ignore enabled is much slower than with the filter disabled. The benchmark

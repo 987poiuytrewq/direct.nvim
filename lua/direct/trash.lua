@@ -6,11 +6,19 @@ local paths = require('direct.paths')
 local ui = require('direct.ui')
 local history = require('direct.history.history')
 local action = require('direct.action.action')
+local metadata_store = require('direct.trash.metadata')
 local log = require('direct.log')
 
-local metadata_suffix = '.direct-trash.json'
 local retention_checked = {}
 local retention_after_trim_checked = {}
+
+M.metadata_path = metadata_store.path
+M.reserved = metadata_store.reserved
+M.first_free = metadata_store.first_free
+M.write_metadata = metadata_store.write
+M.recover_metadata = metadata_store.recover
+M.write_reservation = metadata_store.write_reservation
+M.clear_metadata = metadata_store.clear
 
 local function step_word(count) return count == 1 and 'step' or 'steps' end
 
@@ -54,7 +62,7 @@ local function stat_time_epoch(stat, field)
 end
 
 local function decode_metadata(path)
-  local raw, err, exists = log.read_raw(action.trash_metadata_path(path))
+  local raw, err, exists = log.read_raw(metadata_store.path(path))
   if err then return nil, err end
   if not exists then return nil, 'metadata is unavailable' end
   local ok, value = pcall(vim.json.decode, raw)
@@ -98,7 +106,7 @@ function M.entries(options)
         local reserved = metadata and metadata.reserved or false
         if options.include_reserved or not reserved then
           local size = path_size(path)
-          local sidecar = lstat(action.trash_metadata_path(path))
+          local sidecar = lstat(metadata_store.path(path))
           entries[#entries + 1] = {
             id = name,
             path = path,
@@ -149,12 +157,8 @@ function M.entries(options)
         if entry.metadata_error == 'metadata is unavailable' then
           local original = by_trash_path[paths.canonical(entry.path)]
           if original then
-            local _, record_err = action.recover_trash_metadata(
-              entry.path,
-              original,
-              entry.kind,
-              recovery_times[paths.canonical(entry.path)]
-            )
+            local _, record_err =
+              metadata_store.recover(entry.path, original, entry.kind, recovery_times[paths.canonical(entry.path)])
             local metadata, metadata_err = decode_metadata(entry.path)
             if metadata then
               entry.original = metadata.original
@@ -164,7 +168,7 @@ function M.entries(options)
               entry.kind = metadata.kind
               entry.reserved = metadata.reserved
               entry.metadata_error = nil
-              local sidecar = lstat(action.trash_metadata_path(entry.path))
+              local sidecar = lstat(metadata_store.path(entry.path))
               entry.storage_size = entry.size + (sidecar and sidecar.size or 0)
             else
               entry.metadata_error = record_err or metadata_err
@@ -467,7 +471,7 @@ local function remove_entry(path)
     removed, err = fs.rm_file(path)
   end
   if not removed then return nil, err end
-  local metadata_removed, metadata_err = action.clear_trash_metadata(path)
+  local metadata_removed, metadata_err = metadata_store.clear(path)
   if not metadata_removed then
     ui.notify(
       'direct: removed trash entry but could not remove its metadata: ' .. tostring(metadata_err),
@@ -638,14 +642,14 @@ function M.apply_retention_after_history_trim(options)
       if newly_seen then
         local payload_size, size_err = path_size(path)
         if payload_size == nil then return nil, size_err end
-        local sidecar = lstat(action.trash_metadata_path(path))
+        local sidecar = lstat(metadata_store.path(path))
         storage_size = payload_size + (sidecar and sidecar.size or 0)
         size_state.known_paths[key] = true
         if total ~= nil then total = total + storage_size end
       elseif total ~= nil then
         local payload_size, size_err = path_size(path)
         if payload_size == nil then return nil, size_err end
-        local sidecar = lstat(action.trash_metadata_path(path))
+        local sidecar = lstat(metadata_store.path(path))
         storage_size = payload_size + (sidecar and sidecar.size or 0)
       end
       local over_size = total ~= nil and retention.max_size_bytes and total > retention.max_size_bytes
@@ -720,5 +724,5 @@ function M.empty(force)
   end)
 end
 
-M.METADATA_SUFFIX = metadata_suffix
+M.METADATA_SUFFIX = metadata_store.SUFFIX
 return M

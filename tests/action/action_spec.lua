@@ -4,6 +4,7 @@
 local H = require('tests.support.harness')
 local M = require('direct.action.action')
 local paths = require('direct.paths')
+local trash_metadata = require('direct.trash.metadata')
 
 H.describe('action', function()
   H.it('Move preserves the inode for files and directories', function()
@@ -180,7 +181,7 @@ H.describe('action', function()
     H.assert_false(vim.uv.fs_stat(trash .. '/' .. base) ~= nil,
       'the following check reports the name free')
 
-    H.assert_eq(M.first_free_trash(trash, src), trash .. '/' .. base .. '-1',
+    H.assert_eq(trash_metadata.first_free(trash, src), trash .. '/' .. base .. '-1',
       'the picker skips the occupied name instead of naming a taken destination')
   end)
 
@@ -251,8 +252,8 @@ H.describe('action', function()
     table.sort(names)
     local expected_names = {
       vim.fs.basename(t1), vim.fs.basename(t2),
-      vim.fs.basename(M.trash_metadata_path(t1)),
-      vim.fs.basename(M.trash_metadata_path(t2)),
+      vim.fs.basename(trash_metadata.path(t1)),
+      vim.fs.basename(trash_metadata.path(t2)),
     }
     table.sort(expected_names)
     H.assert_eq(names, expected_names,
@@ -865,11 +866,11 @@ H.describe('action', function()
         mode .. ': original move error is returned')
       H.assert_eq(rename_calls, 1, mode .. ': one move was attempted')
       H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, mode .. ': source remains')
-      H.assert_false(M.fs.taken(M.trash_metadata_path(trash)), mode .. ': failed move leaves no metadata')
+      H.assert_false(M.fs.taken(trash_metadata.path(trash)), mode .. ': failed move leaves no metadata')
 
       local cleanup_action = M.Remove(src)
       local notifications = {}
-      local restore_cleanup = H.stub(M, 'clear_trash_metadata', function()
+      local restore_cleanup = H.stub(trash_metadata, 'clear', function()
         return nil, 'forced metadata cleanup failure'
       end)
       local restore_notify = H.stub(M.ui, 'notify', function(message, level)
@@ -892,7 +893,7 @@ H.describe('action', function()
       restore_notify()
       restore_cleanup()
       H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, mode .. ': source remains after cleanup failure')
-      H.assert_true(M.fs.taken(M.trash_metadata_path(cleanup_action.dst)),
+      H.assert_true(M.fs.taken(trash_metadata.path(cleanup_action.dst)),
         mode .. ': metadata remains when cleanup fails')
       local warning_count = 0
       for _, notification in ipairs(notifications) do

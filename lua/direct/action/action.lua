@@ -7,115 +7,17 @@ local M = {}
 M.fs = require('direct.fs')
 M.paths = require('direct.paths')
 M.ui = require('direct.ui')
-M.log = require('direct.log')
-
-local TRASH_METADATA_SUFFIX = '.direct-trash.json'
+local trash_metadata = require('direct.trash.metadata')
 
 local function lstat(path)
   local ok, stat = pcall(vim.uv.fs_lstat, path)
   return ok and stat or nil
 end
 
-function M.trash_metadata_path(trash_path) return trash_path .. TRASH_METADATA_SUFFIX end
-
 -- A restored trash slot keeps an empty reservation marker so a later delete
 -- cannot reuse the slot while history can still reverse to it. Register entries
 -- pointing at such a slot must fall back to the original path.
-function M.trash_reserved(trash_path)
-  local bytes, _, exists = M.log.read_raw(M.trash_metadata_path(trash_path))
-  if not exists or not bytes then return false end
-  local ok, value = pcall(vim.json.decode, bytes)
-  return ok and type(value) == 'table' and value.format == 'direct-trash' and value.reserved == true
-end
-
-local function trash_metadata(original_path, reserved, purpose)
-  local stat = lstat(original_path)
-  local value = {
-    format = 'direct-trash',
-    version = 1,
-    original = M.paths.canonical(M.paths.root(original_path)),
-    deleted_at = os.date('!%Y-%m-%dT%H:%M:%SZ'),
-    deleted_at_epoch = os.time(),
-    deleted_at_estimated = false,
-    kind = stat and stat.type or 'unknown',
-    reserved = reserved == true,
-  }
-  if purpose ~= nil then value.purpose = purpose end
-  return value
-end
-
-function M.write_trash_metadata(trash_path, original_path, purpose)
-  local metadata_path = M.trash_metadata_path(trash_path)
-  local parent, parent_err = M.fs.mkdirp(M.fs.dirname(metadata_path))
-  if not parent then return nil, parent_err end
-  local bytes = vim.json.encode(trash_metadata(original_path, false, purpose)) .. '\n'
-  local existing, read_err, exists = M.log.read_raw(metadata_path)
-  if read_err then return nil, read_err end
-  if exists then
-    local ok, old = pcall(vim.json.decode, existing)
-    if
-      not ok
-      or type(old) ~= 'table'
-      or old.format ~= 'direct-trash'
-      or old.version ~= 1
-      or old.reserved ~= true
-      or old.original ~= M.paths.canonical(M.paths.root(original_path))
-    then
-      return nil, 'trash slot metadata already exists'
-    end
-    return M.log.write_raw_atomic(metadata_path, bytes)
-  end
-  return M.log.write_raw_exclusive(metadata_path, bytes)
-end
-
-function M.recover_trash_metadata(trash_path, original_path, kind, deleted_at_epoch)
-  if not M.fs.taken(trash_path) then return nil, 'trash entry is no longer present' end
-  local original = M.paths.canonical(M.paths.root(original_path))
-  local valid, valid_err = M.paths.validate_canonical_path(original)
-  if not valid then return nil, 'invalid recovered trash path: ' .. tostring(valid_err) end
-  if type(deleted_at_epoch) ~= 'number' or deleted_at_epoch <= 0 then deleted_at_epoch = os.time() end
-  if kind ~= 'file' and kind ~= 'directory' and kind ~= 'link' and kind ~= 'unknown' then kind = 'unknown' end
-  local value = {
-    format = 'direct-trash',
-    version = 1,
-    original = original,
-    deleted_at = os.date('!%Y-%m-%dT%H:%M:%SZ', deleted_at_epoch),
-    deleted_at_epoch = deleted_at_epoch,
-    deleted_at_estimated = true,
-    kind = kind,
-    reserved = false,
-  }
-  return M.log.write_raw_exclusive(M.trash_metadata_path(trash_path), vim.json.encode(value) .. '\n')
-end
-
-function M.write_trash_reservation(trash_path, original_path)
-  local metadata_path = M.trash_metadata_path(trash_path)
-  local parent, parent_err = M.fs.mkdirp(M.fs.dirname(metadata_path))
-  if not parent then return nil, parent_err end
-  local bytes = vim.json.encode(trash_metadata(original_path, true)) .. '\n'
-  local existing, read_err, exists = M.log.read_raw(metadata_path)
-  if read_err then return nil, read_err end
-  if exists then
-    local ok, old = pcall(vim.json.decode, existing)
-    if
-      not ok
-      or type(old) ~= 'table'
-      or old.format ~= 'direct-trash'
-      or old.version ~= 1
-      or old.original ~= M.paths.canonical(M.paths.root(original_path))
-    then
-      return nil, 'trash slot metadata is damaged'
-    end
-    return M.log.write_raw_atomic(metadata_path, bytes)
-  end
-  return M.log.write_raw_exclusive(metadata_path, bytes)
-end
-
-function M.clear_trash_metadata(trash_path)
-  local path = M.trash_metadata_path(trash_path)
-  if not M.fs.taken(path) then return true end
-  return M.fs.rm_file(path)
-end
+M.trash_reserved = trash_metadata.reserved
 
 -- Bound repeated asynchronous answers that still name an occupied destination.
 -- On exhaustion, skip the entry; never write to an existing target.
@@ -158,21 +60,6 @@ function M.close_src_buffer(src)
   end)
   if not ok then return nil, 'failed to close source buffers' end
   return true
-end
-
--- first_free_trash(trash_dir, src) -> `<trash>/<digest(src)>` or the first
--- free `<digest>-<n>` when that path already exists. The result is
--- persisted in the action's `dst` field and serialized, so `Restore` always
--- reverses to the exact entry.
-function M.first_free_trash(trash_dir, src)
-  local base = M.paths.digest(src)
-  local dst = M.fs.join(trash_dir, base)
-  if not M.fs.taken(dst) and not M.fs.taken(M.trash_metadata_path(dst)) then return dst end
-  local n = 1
-  while M.fs.taken(dst .. '-' .. n) or M.fs.taken(M.trash_metadata_path(dst .. '-' .. n)) do
-    n = n + 1
-  end
-  return dst .. '-' .. n
 end
 
 -- split_names(str) -> the entry-name list of a serialized `p`/`up` field.
@@ -315,7 +202,7 @@ local function trash_target(self)
   if not self.dst then
     local trash, err = M.paths.ensure_data_dir('trash')
     if not trash then return nil, err end
-    self.dst = M.first_free_trash(trash, self.src)
+    self.dst = trash_metadata.first_free(trash, self.src)
   end
   local trash, err = M.paths.ensure_data_dir('trash')
   if not trash then return nil, err end
@@ -323,11 +210,11 @@ local function trash_target(self)
 end
 
 local function rollback_trash_metadata(trash_path)
-  local cleared, clear_err = M.clear_trash_metadata(trash_path)
+  local cleared, clear_err = trash_metadata.clear(trash_path)
   if not cleared then
     M.ui.notify(
       'direct: could not remove unused trash metadata '
-        .. M.trash_metadata_path(trash_path)
+        .. trash_metadata.path(trash_path)
         .. ': '
         .. tostring(clear_err),
       vim.log.levels.WARN
@@ -342,7 +229,7 @@ local function prepare_remove(self, is_directory)
   if not ok then return nil, close_err end
   if is_directory then warn_cross_device_trash(self.src, trash) end
   if M.fs.taken(self.dst) then return nil, 'destination exists: ' .. tostring(self.dst) end
-  local recorded, record_err = M.write_trash_metadata(self.dst, self.src)
+  local recorded, record_err = trash_metadata.write(self.dst, self.src)
   if not recorded then return nil, 'could not record trash metadata: ' .. tostring(record_err) end
   return true
 end
@@ -353,7 +240,7 @@ local function make_remove(src, dst, name, is_directory)
     self.dst = dst
   else
     local trash = M.paths.data_dir_path('trash')
-    if trash then self.dst = M.first_free_trash(trash, src) end
+    if trash then self.dst = trash_metadata.first_free(trash, src) end
   end
   self._execute = function()
     local prepared, prepare_err = prepare_remove(self, is_directory)
@@ -390,7 +277,7 @@ function M.RemoveDirectory(src, dst) return make_remove(src, dst, 'rmdir', true)
 local function prepare_restore(self) return M.close_src_buffer(self.src) end
 
 local function finish_restore(self, is_directory)
-  local reserved, reserve_err = M.write_trash_reservation(self.src, self.dst)
+  local reserved, reserve_err = trash_metadata.write_reservation(self.src, self.dst)
   if not reserved then
     M.ui.notify(
       'direct: restored '

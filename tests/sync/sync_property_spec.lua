@@ -470,8 +470,20 @@ H.describe('sync: generated edit model', function()
     end, debug.traceback)
     vim.notify = original_notify
     local elapsed = (vim.uv.hrtime() - started_at) / 1000000000
-    io.write(string.format('\n[runtime] sync_property_spec: %.2fs (%d/%d seeds)\n', elapsed, attempted, SEED_COUNT))
+    local runtime_budget = vim.env.DIRECT_COVERAGE == '1' and 150 or 90
+    io.write(
+      string.format(
+        '\n[runtime] sync_property_spec: %.2fs (%d/%d seeds, budget %.0fs)\n',
+        elapsed,
+        attempted,
+        SEED_COUNT,
+        runtime_budget
+      )
+    )
     if not ok then error(err, 0) end
-    H.assert_true(elapsed < 90, string.format('property spec exceeded 90s runtime budget: %.2fs', elapsed))
+    H.assert_true(
+      elapsed < runtime_budget,
+      string.format('property spec exceeded %ds runtime budget: %.2fs', runtime_budget, elapsed)
+    )
   end)
 end)

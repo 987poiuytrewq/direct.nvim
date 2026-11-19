@@ -725,6 +725,187 @@ H.describe('action', function()
       'the register itself is untouched')
   end)
 
+  H.it('remove, restore, paste, and unpaste have the same result through both dispatch modes', function()
+    local function execute(mode, action)
+      if mode == 'sync' then return M.execute(action) end
+      local completed
+      H.assert_true(M.execute_async(action, function(ok, result, err)
+        completed = { ok = ok, result = result, err = err }
+      end), 'async dispatch starts')
+      H.assert_true(vim.wait(5000, function() return completed ~= nil end),
+        'the action completes')
+      H.assert_true(completed.ok, mode .. ': ' .. tostring(completed.err))
+      return completed.result
+    end
+
+    local cases = {
+      {
+        label = 'remove file',
+        prepare = function(sb)
+          local src = H.mkfile(sb.root, 'source.txt', { 'FILE' })
+          return M.Remove(src)
+        end,
+        verify = function(action, sb)
+          H.assert_false(H.exists(sb.root, 'source.txt'), 'source file is trashed')
+          H.assert_eq(vim.fn.readfile(action.dst), { 'FILE' }, 'trash payload is intact')
+        end,
+      },
+      {
+        label = 'remove directory',
+        prepare = function(sb)
+          local src = H.mkdir(sb.root, 'source-tree')
+          H.mkfile(src, 'child.txt', { 'CHILD' })
+          return M.RemoveDirectory(src)
+        end,
+        verify = function(action, sb)
+          H.assert_false(H.exists(sb.root, 'source-tree'), 'source directory is trashed')
+          H.assert_eq(vim.fn.readfile(action.dst .. '/child.txt'), { 'CHILD' }, 'tree payload is intact')
+        end,
+      },
+      {
+        label = 'restore file',
+        prepare = function(sb)
+          local src = H.mkfile(sb.root, 'trash-file', { 'FILE' })
+          return M.Restore(src, sb.root .. '/restored.txt')
+        end,
+        verify = function(action, sb)
+          H.assert_eq(vim.fn.readfile(sb.root .. '/restored.txt'), { 'FILE' }, 'file content is restored')
+          H.assert_true(vim.fn.filereadable(action.src) == 1, 'file reservation marker remains')
+        end,
+      },
+      {
+        label = 'restore directory',
+        prepare = function(sb)
+          local src = H.mkdir(sb.root, 'trash-tree')
+          H.mkfile(src, 'child.txt', { 'CHILD' })
+          return M.RestoreDirectory(src, sb.root .. '/restored-tree')
+        end,
+        verify = function(action, sb)
+          H.assert_eq(vim.fn.readfile(sb.root .. '/restored-tree/child.txt'), { 'CHILD' },
+            'tree content is restored')
+          H.assert_eq(vim.fn.isdirectory(action.src), 1, 'directory reservation marker remains')
+        end,
+      },
+      {
+        label = 'paste',
+        prepare = function(sb)
+          local reg = H.mkdir(sb.root, 'reg')
+          H.mkfile(reg, 'copy.txt', { 'COPY' })
+          return M.Paste(reg, H.mkdir(sb.root, 'paste-dst'), { 'copy.txt' }, { 'copy.txt' })
+        end,
+        verify = function(_, sb)
+          H.assert_eq(vim.fn.readfile(sb.root .. '/paste-dst/copy.txt'), { 'COPY' }, 'pasted content matches')
+        end,
+      },
+      {
+        label = 'unpaste',
+        prepare = function(sb)
+          local reg = H.mkdir(sb.root, 'reg')
+          H.mkfile(reg, 'copy.txt', { 'COPY' })
+          local dst = H.mkdir(sb.root, 'paste-dst')
+          H.assert_true(M.execute(M.Paste(reg, dst, { 'copy.txt' }, { 'copy.txt' })) ~= nil,
+            'prepare pasted copy')
+          local register_home = paths.data_dir('register')
+          vim.fn.writefile({ reg }, paths.join(register_home, 'content'))
+          return M.Unpaste(dst, reg, { 'copy.txt' }, { 'copy.txt' })
+        end,
+        verify = function(_, sb)
+          H.assert_false(H.exists(sb.root .. '/paste-dst', 'copy.txt'), 'pasted copy is removed')
+          H.assert_eq(vim.fn.readfile(sb.root .. '/reg/copy.txt'), { 'COPY' }, 'register source is untouched')
+        end,
+      },
+    }
+
+    for _, mode in ipairs({ 'sync', 'async' }) do
+      for _, case in ipairs(cases) do
+        local sb = H.sandbox()
+        local action = case.prepare(sb)
+        H.assert_true(execute(mode, action) ~= nil, mode .. ': ' .. case.label .. ' succeeds')
+        case.verify(action, sb)
+      end
+    end
+  end)
+
+  H.it('failed trash moves clean metadata in both dispatch modes and warn once if cleanup fails', function()
+    local function execute(mode, action)
+      if mode == 'sync' then return M.execute(action) end
+      local completed
+      H.assert_true(M.execute_async(action, function(ok, result, err)
+        completed = { ok = ok, result = result, err = err }
+      end), 'async dispatch starts')
+      H.assert_true(vim.wait(5000, function() return completed ~= nil end),
+        'the action completes')
+      return completed.ok and completed.result or nil, completed.err
+    end
+
+    for _, mode in ipairs({ 'sync', 'async' }) do
+      local sb = H.sandbox()
+      local src = H.mkfile(sb.root, 'source.txt', { 'SOURCE' })
+      local action = M.Remove(src)
+      local trash, rename_calls = action.dst, 0
+      local restore_rename, restore_rename_async
+      if mode == 'sync' then
+        restore_rename = H.stub(M.fs, 'rename', function()
+          rename_calls = rename_calls + 1
+          return nil, 'forced move failure'
+        end)
+      else
+        restore_rename_async = H.stub(M.fs, 'rename_async', function(_, _, callback)
+          rename_calls = rename_calls + 1
+          callback(false, nil, 'forced move failure')
+        end)
+      end
+
+      local moved, move_err = execute(mode, action)
+      if restore_rename then restore_rename() end
+      if restore_rename_async then restore_rename_async() end
+
+      H.assert_nil(moved, mode .. ': failed move is reported')
+      H.assert_true(tostring(move_err):find('forced move failure', 1, true) ~= nil,
+        mode .. ': original move error is returned')
+      H.assert_eq(rename_calls, 1, mode .. ': one move was attempted')
+      H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, mode .. ': source remains')
+      H.assert_false(M.fs.taken(M.trash_metadata_path(trash)), mode .. ': failed move leaves no metadata')
+
+      local cleanup_action = M.Remove(src)
+      local notifications = {}
+      local restore_cleanup = H.stub(M, 'clear_trash_metadata', function()
+        return nil, 'forced metadata cleanup failure'
+      end)
+      local restore_notify = H.stub(M.ui, 'notify', function(message, level)
+        notifications[#notifications + 1] = { message = message, level = level }
+      end)
+      if mode == 'sync' then
+        restore_rename = H.stub(M.fs, 'rename', function()
+          return nil, 'forced move failure'
+        end)
+      else
+        restore_rename_async = H.stub(M.fs, 'rename_async', function(_, _, callback)
+          callback(false, nil, 'forced move failure')
+        end)
+      end
+
+      execute(mode, cleanup_action)
+
+      if restore_rename then restore_rename() end
+      if restore_rename_async then restore_rename_async() end
+      restore_notify()
+      restore_cleanup()
+      H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, mode .. ': source remains after cleanup failure')
+      H.assert_true(M.fs.taken(M.trash_metadata_path(cleanup_action.dst)),
+        mode .. ': metadata remains when cleanup fails')
+      local warning_count = 0
+      for _, notification in ipairs(notifications) do
+        if notification.level == vim.log.levels.WARN
+          and notification.message:find('could not remove unused trash metadata', 1, true)
+        then
+          warning_count = warning_count + 1
+        end
+      end
+      H.assert_eq(warning_count, 1, mode .. ': cleanup failure warns exactly once')
+    end
+  end)
+
   H.it('summarize() joins descriptions with a single leading capital', function()
     local sb = H.sandbox()
     H.mkfile(sb.root, 'a.txt', { 'a' })

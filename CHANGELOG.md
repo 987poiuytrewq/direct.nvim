@@ -5,6 +5,11 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep a grouped rename permutation with the other recorded actions from the
+  same sync, so one undo reverses the permutation and its companion operations.
+
 ## [0.4.0] - 2026-11-18
 
 > **Beta:** The maintainer pre-release soak was not performed. Please share

@@ -192,6 +192,12 @@ missing source that the user edited, deleted or moved is refused, as is an
 external entry occupying a requested destination. Refusals name the path and
 suggest restoring it, re-listing, or choosing another destination.
 
+When a save includes a grouped rename permutation, such as a swap or rotation,
+Direct batches that group with its other recorded actions from the same sync.
+One `u` reverses the permutation and its companion operations together. This
+does not mean every save is one history entry: standalone independent moves can
+remain separate when there is no grouped permutation.
+
 A row whose mark survives a text edit is a rename. An unmarked row is a create,
 and a marked row that disappears is a delete. Whole-line replacements such as
 `cc` or `S` may invalidate the mark: if so, direct.vim treats the old row as a

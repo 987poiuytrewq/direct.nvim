@@ -166,6 +166,11 @@ See `:help direct.vim-write` for save, quit, and interrupted-operation behavior.
   rows by their row identities, not by line position. The whole save is one
   undoable history entry when it mixes change types; deleted entries are
   kept in trash and referenced by the register.
+- **A grouped rename permutation stays with the rest of its sync.** When a
+  save includes a rename permutation such as a swap or rotation, Direct batches
+  it with the sync's other recorded actions, so one undo reverses the
+  permutation and its companion operations together. Standalone independent
+  moves can remain separate undo steps when there is no grouped permutation.
 - **A row's identity decides whether an edit is a rename.** Editing its name
   while the row mark survives is a rename. An unmarked row is a create, and a
   marked row that disappears is a delete. If a whole-line edit such as `cc` or

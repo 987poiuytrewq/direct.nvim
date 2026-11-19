@@ -294,94 +294,6 @@ end
 -- is kept verbatim so `Restore` reverses to the exact entry. A
 -- resolution failure is deferred to `do`, which returns nil, err (
 -- consumers branch, nothing raises).
-function M.Remove(src, dst)
-  local self = { name = 'rm', _kind = 'rm', src = src }
-  if dst ~= nil then
-    self.dst = dst
-  else
-    local trash = M.paths.data_dir_path('trash')
-    if trash then self.dst = M.first_free_trash(trash, src) end
-  end
-  self._execute = function()
-    if not self.dst then
-      local trash, err = M.paths.ensure_data_dir('trash')
-      if not trash then return nil, err end
-      self.dst = M.first_free_trash(trash, self.src)
-    end
-    local trash, err = M.paths.ensure_data_dir('trash')
-    if not trash then return nil, err end
-    local ok, close_err = M.close_src_buffer(self.src)
-    if not ok then return nil, close_err end
-    if M.fs.taken(self.dst) then return nil, 'destination exists: ' .. tostring(self.dst) end
-    local recorded, record_err = M.write_trash_metadata(self.dst, self.src)
-    if not recorded then return nil, 'could not record trash metadata: ' .. tostring(record_err) end
-    local moved, move_err = M.fs.rename(self.src, self.dst)
-    if not moved then
-      local cleared, clear_err = M.clear_trash_metadata(self.dst)
-      if not cleared then
-        M.ui.notify(
-          'direct: could not remove unused trash metadata '
-            .. M.trash_metadata_path(self.dst)
-            .. ': '
-            .. tostring(clear_err),
-          vim.log.levels.WARN
-        )
-      end
-      return nil, move_err
-    end
-    return moved
-  end
-  self['do'] = function() return M.execute(self) end
-  function self.describe() return 'Removed ' .. M.rel(self.src) end
-  self._execute_async = function(callback)
-    if not self.dst then
-      local trash, err = M.paths.ensure_data_dir('trash')
-      if not trash then
-        callback(false, nil, err)
-        return
-      end
-      self.dst = M.first_free_trash(trash, self.src)
-    end
-    local trash, err = M.paths.ensure_data_dir('trash')
-    if not trash then
-      callback(false, nil, err)
-      return
-    end
-    local ok, close_err = M.close_src_buffer(self.src)
-    if not ok then
-      callback(false, nil, close_err)
-      return
-    end
-    if M.fs.taken(self.dst) then
-      callback(false, nil, 'destination exists: ' .. tostring(self.dst))
-      return
-    end
-    local recorded, record_err = M.write_trash_metadata(self.dst, self.src)
-    if not recorded then
-      callback(false, nil, 'could not record trash metadata: ' .. tostring(record_err))
-      return
-    end
-    local progress, clear_progress = move_progress(self.src, self.dst)
-    M.fs.rename_async(self.src, self.dst, function(moved, result, move_err)
-      clear_progress()
-      if not moved then
-        local cleared, clear_err = M.clear_trash_metadata(self.dst)
-        if not cleared then
-          M.ui.notify(
-            'direct: could not remove unused trash metadata '
-              .. M.trash_metadata_path(self.dst)
-              .. ': '
-              .. tostring(clear_err),
-            vim.log.levels.WARN
-          )
-        end
-      end
-      callback(moved, result, move_err)
-    end, progress)
-  end
-  return self
-end
-
 local function warn_cross_device_trash(src, trash)
   local source_stat, trash_stat = lstat(src), M.fs.stat(trash)
   if
@@ -399,8 +311,44 @@ local function warn_cross_device_trash(src, trash)
   end
 end
 
-function M.RemoveDirectory(src, dst)
-  local self = { name = 'rmdir', _kind = 'rmdir', src = src }
+local function trash_target(self)
+  if not self.dst then
+    local trash, err = M.paths.ensure_data_dir('trash')
+    if not trash then return nil, err end
+    self.dst = M.first_free_trash(trash, self.src)
+  end
+  local trash, err = M.paths.ensure_data_dir('trash')
+  if not trash then return nil, err end
+  return trash
+end
+
+local function rollback_trash_metadata(trash_path)
+  local cleared, clear_err = M.clear_trash_metadata(trash_path)
+  if not cleared then
+    M.ui.notify(
+      'direct: could not remove unused trash metadata '
+        .. M.trash_metadata_path(trash_path)
+        .. ': '
+        .. tostring(clear_err),
+      vim.log.levels.WARN
+    )
+  end
+end
+
+local function prepare_remove(self, is_directory)
+  local trash, err = trash_target(self)
+  if not trash then return nil, err end
+  local ok, close_err = M.close_src_buffer(self.src)
+  if not ok then return nil, close_err end
+  if is_directory then warn_cross_device_trash(self.src, trash) end
+  if M.fs.taken(self.dst) then return nil, 'destination exists: ' .. tostring(self.dst) end
+  local recorded, record_err = M.write_trash_metadata(self.dst, self.src)
+  if not recorded then return nil, 'could not record trash metadata: ' .. tostring(record_err) end
+  return true
+end
+
+local function make_remove(src, dst, name, is_directory)
+  local self = { name = name, _kind = name, src = src }
   if dst ~= nil then
     self.dst = dst
   else
@@ -408,31 +356,11 @@ function M.RemoveDirectory(src, dst)
     if trash then self.dst = M.first_free_trash(trash, src) end
   end
   self._execute = function()
-    if not self.dst then
-      local trash, err = M.paths.ensure_data_dir('trash')
-      if not trash then return nil, err end
-      self.dst = M.first_free_trash(trash, self.src)
-    end
-    local trash, err = M.paths.ensure_data_dir('trash')
-    if not trash then return nil, err end
-    local ok, close_err = M.close_src_buffer(self.src)
-    if not ok then return nil, close_err end
-    warn_cross_device_trash(self.src, trash)
-    if M.fs.taken(self.dst) then return nil, 'destination exists: ' .. tostring(self.dst) end
-    local recorded, record_err = M.write_trash_metadata(self.dst, self.src)
-    if not recorded then return nil, 'could not record trash metadata: ' .. tostring(record_err) end
+    local prepared, prepare_err = prepare_remove(self, is_directory)
+    if not prepared then return nil, prepare_err end
     local moved, move_err = M.fs.rename(self.src, self.dst)
     if not moved then
-      local cleared, clear_err = M.clear_trash_metadata(self.dst)
-      if not cleared then
-        M.ui.notify(
-          'direct: could not remove unused trash metadata '
-            .. M.trash_metadata_path(self.dst)
-            .. ': '
-            .. tostring(clear_err),
-          vim.log.levels.WARN
-        )
-      end
+      rollback_trash_metadata(self.dst)
       return nil, move_err
     end
     return moved
@@ -440,84 +368,68 @@ function M.RemoveDirectory(src, dst)
   self['do'] = function() return M.execute(self) end
   function self.describe() return 'Removed ' .. M.rel(self.src) end
   self._execute_async = function(callback)
-    if not self.dst then
-      local trash, err = M.paths.ensure_data_dir('trash')
-      if not trash then
-        callback(false, nil, err)
-        return
-      end
-      self.dst = M.first_free_trash(trash, self.src)
-    end
-    local trash, err = M.paths.ensure_data_dir('trash')
-    if not trash then
-      callback(false, nil, err)
-      return
-    end
-    local ok, close_err = M.close_src_buffer(self.src)
-    if not ok then
-      callback(false, nil, close_err)
-      return
-    end
-    warn_cross_device_trash(self.src, trash)
-    if M.fs.taken(self.dst) then
-      callback(false, nil, 'destination exists: ' .. tostring(self.dst))
-      return
-    end
-    local recorded, record_err = M.write_trash_metadata(self.dst, self.src)
-    if not recorded then
-      callback(false, nil, 'could not record trash metadata: ' .. tostring(record_err))
+    local prepared, prepare_err = prepare_remove(self, is_directory)
+    if not prepared then
+      callback(false, nil, prepare_err)
       return
     end
     local progress, clear_progress = move_progress(self.src, self.dst)
     M.fs.rename_async(self.src, self.dst, function(moved, result, move_err)
       clear_progress()
-      if not moved then
-        local cleared, clear_err = M.clear_trash_metadata(self.dst)
-        if not cleared then
-          M.ui.notify(
-            'direct: could not remove unused trash metadata '
-              .. M.trash_metadata_path(self.dst)
-              .. ': '
-              .. tostring(clear_err),
-            vim.log.levels.WARN
-          )
-        end
-      end
+      if not moved then rollback_trash_metadata(self.dst) end
       callback(moved, result, move_err)
     end, progress)
   end
   return self
 end
 
-function M.Restore(src, dst)
-  local self = { name = 'rs', _kind = 'rs', src = src, dst = dst }
+function M.Remove(src, dst) return make_remove(src, dst, 'rm', false) end
+
+function M.RemoveDirectory(src, dst) return make_remove(src, dst, 'rmdir', true) end
+
+local function prepare_restore(self) return M.close_src_buffer(self.src) end
+
+local function finish_restore(self, is_directory)
+  local reserved, reserve_err = M.write_trash_reservation(self.src, self.dst)
+  if not reserved then
+    M.ui.notify(
+      'direct: restored '
+        .. (is_directory and 'directory' or 'entry')
+        .. ' but could not reserve its trash slot '
+        .. self.src
+        .. ' ('
+        .. tostring(reserve_err)
+        .. ')',
+      vim.log.levels.WARN
+    )
+  end
+  if not is_directory then
+    -- Keep the restored slot occupied until history can no longer reverse it.
+    M.fs.touch(self.src)
+    return
+  end
+
+  -- Directory slots use an empty directory marker so rename can replace it.
+  local made, make_err = M.fs.mkdir_exclusive(self.src)
+  if not made then
+    M.ui.notify(
+      'direct: restored directory, but could not reserve its trash slot ' .. self.src .. ': ' .. tostring(make_err),
+      vim.log.levels.WARN
+    )
+  end
+end
+
+local function make_restore(src, dst, name, is_directory)
+  local self = { name = name, _kind = name, src = src, dst = dst }
   self._execute = function()
-    local ok, err = M.close_src_buffer(self.src)
+    local ok, err = prepare_restore(self)
     if not ok then return nil, err end
-    local res, rerr = M.fs.rename(self.src, self.dst)
-    if res then
-      local reserved, reserve_err = M.write_trash_reservation(self.src, self.dst)
-      if not reserved then
-        M.ui.notify(
-          'direct: restored entry but could not reserve its trash slot '
-            .. self.src
-            .. ' ('
-            .. tostring(reserve_err)
-            .. ')',
-          vim.log.levels.WARN
-        )
-      end
-      -- the trash slot must stay occupied so a later Remove picks a
-      -- fresh `-<n>` sibling instead of reusing the exact slot. Leave an
-      -- empty marker FILE there; the next remove/restore rename replaces it
-      -- atomically (POSIX rename over an empty file). Best-effort: a marker
-      -- that cannot be created does not fail the restore.
-      M.fs.touch(self.src)
-    end
-    return res, rerr
+    local restored, restore_err = M.fs.rename(self.src, self.dst)
+    if restored then finish_restore(self, is_directory) end
+    return restored, restore_err
   end
   self._execute_async = function(callback)
-    local ok, err = M.close_src_buffer(self.src)
+    local ok, err = prepare_restore(self)
     if not ok then
       callback(false, nil, err)
       return
@@ -525,20 +437,7 @@ function M.Restore(src, dst)
     local progress, clear_progress = move_progress(self.src, self.dst)
     M.fs.rename_async(self.src, self.dst, function(restored, result, restore_err)
       clear_progress()
-      if restored then
-        local reserved, reserve_err = M.write_trash_reservation(self.src, self.dst)
-        if not reserved then
-          M.ui.notify(
-            'direct: restored entry but could not reserve its trash slot '
-              .. self.src
-              .. ' ('
-              .. tostring(reserve_err)
-              .. ')',
-            vim.log.levels.WARN
-          )
-        end
-        M.fs.touch(self.src)
-      end
+      if restored then finish_restore(self, is_directory) end
       callback(restored, result, restore_err)
     end, progress)
   end
@@ -547,75 +446,9 @@ function M.Restore(src, dst)
   return self
 end
 
-function M.RestoreDirectory(src, dst)
-  local self = { name = 'rsdir', _kind = 'rsdir', src = src, dst = dst }
-  self._execute = function()
-    local ok, err = M.close_src_buffer(self.src)
-    if not ok then return nil, err end
-    local res, rerr = M.fs.rename(self.src, self.dst)
-    if res then
-      local reserved, reserve_err = M.write_trash_reservation(self.src, self.dst)
-      if not reserved then
-        M.ui.notify(
-          'direct: restored directory but could not reserve its trash slot '
-            .. self.src
-            .. ' ('
-            .. tostring(reserve_err)
-            .. ')',
-          vim.log.levels.WARN
-        )
-      end
-      -- directory variant: the marker is an empty directory (the POSIX
-      -- rename below replaces an empty dir just as easily as a file).
-      local mok, merr = M.fs.mkdir_exclusive(self.src)
-      if not mok then
-        M.ui.notify(
-          'direct: restored directory, but could not reserve its trash slot ' .. self.src .. ': ' .. tostring(merr),
-          vim.log.levels.WARN
-        )
-      end
-    end
-    return res, rerr
-  end
-  self._execute_async = function(callback)
-    local ok, err = M.close_src_buffer(self.src)
-    if not ok then
-      callback(false, nil, err)
-      return
-    end
-    local progress, clear_progress = move_progress(self.src, self.dst)
-    M.fs.rename_async(self.src, self.dst, function(restored, result, restore_err)
-      clear_progress()
-      if restored then
-        local reserved, reserve_err = M.write_trash_reservation(self.src, self.dst)
-        if not reserved then
-          M.ui.notify(
-            'direct: restored directory but could not reserve its trash slot '
-              .. self.src
-              .. ' ('
-              .. tostring(reserve_err)
-              .. ')',
-            vim.log.levels.WARN
-          )
-        end
-        local made, make_err = M.fs.mkdir_exclusive(self.src)
-        if not made then
-          M.ui.notify(
-            'direct: restored directory, but could not reserve its trash slot '
-              .. self.src
-              .. ': '
-              .. tostring(make_err),
-            vim.log.levels.WARN
-          )
-        end
-      end
-      callback(restored, result, restore_err)
-    end, progress)
-  end
-  self['do'] = function() return M.execute(self) end
-  function self.describe() return 'Restored ' .. M.rel(self.dst) end
-  return self
-end
+function M.Restore(src, dst) return make_restore(src, dst, 'rs', false) end
+
+function M.RestoreDirectory(src, dst) return make_restore(src, dst, 'rsdir', true) end
 
 function M.Touch(dst)
   local self = { name = 'touch', _kind = 'touch', dst = dst }
@@ -655,8 +488,184 @@ local function paste_source(src, name)
   return M.fs.join(src, name)
 end
 
--- Paste creates an action. Its callback executor prompts asynchronously on
--- clashes; the synchronous executor refuses clashes rather than blocking.
+-- Paste/history hooks are a single contract: before/after-copy journal one
+-- entry, before-prompt releases the history lock, after-prompt resumes it (or
+-- returns 'pending' and calls resume later), and on-copy-conflict clears the
+-- attempted journal entry. Only callback execution uses these hooks.
+local function execute_paste(self, callback)
+  local asynchronous = type(callback) == 'function'
+  local copied, index, last = {}, 1, nil
+  local outcome
+  local process_next
+
+  local function finish(ok, result, err)
+    if outcome then return end
+    outcome = { ok = ok, result = result, err = err }
+    if asynchronous or ok then self.renames = copied end
+    if asynchronous then callback(ok, result, err) end
+  end
+
+  local function fail(err) finish(false, nil, tostring(err or 'paste failed')) end
+
+  local function skip(pair, notify)
+    if notify then M.ui.notify('Skipped ' .. pair.src, vim.log.levels.WARN) end
+    index = index + 1
+    process_next()
+  end
+
+  local function copy_pair(pair, full_src, full_dst, stat)
+    if asynchronous and type(self._before_copy) == 'function' then
+      local ready, ready_err = self._before_copy(pair, full_src, full_dst)
+      if not ready then
+        fail(ready_err or 'could not journal paste entry')
+        return
+      end
+    end
+
+    local function copy_entry()
+      if stat.type == 'file' then return M.fs.copy_file_exclusive(full_src, full_dst) end
+      if stat.type == 'directory' then return M.fs.copy_tree_exclusive(full_src, full_dst) end
+      return true
+    end
+    local called, ok, extra, code
+    if asynchronous then
+      called, ok, extra, code = pcall(copy_entry)
+    else
+      ok, extra = copy_entry()
+      called = true
+    end
+    if not called then
+      fail(ok)
+      return
+    end
+    if not ok then
+      if asynchronous and code == 'EEXIST' and type(self._on_copy_conflict) == 'function' then
+        local cleared, clear_err = self._on_copy_conflict(pair)
+        if not cleared then
+          fail(clear_err or extra or code or 'destination exists')
+          return
+        end
+      end
+      fail(extra or code or 'copy failed')
+      return
+    end
+    if stat.type == 'directory' and type(extra) == 'table' and #extra > 0 then
+      M.ui.notify(
+        'Skipped ' .. #extra .. ' ' .. (#extra == 1 and 'entry' or 'entries') .. ' that cannot be copied: ' .. full_src,
+        vim.log.levels.WARN
+      )
+    end
+    last = full_dst
+    copied[#copied + 1] = { src = pair.src, dst = pair.dst }
+    index = index + 1
+    if asynchronous and type(self._after_copy) == 'function' then
+      local recorded, record_err = self._after_copy(pair, full_src, full_dst)
+      if not recorded then
+        fail(record_err or 'could not record pasted entry')
+        return
+      end
+    end
+    process_next()
+  end
+
+  local function request_name(pair, full_src, stat, attempts)
+    if attempts >= M.PASTE_CLASH_ATTEMPTS then
+      skip(pair, true)
+      return
+    end
+    local current = M.fs.join(self.dst, pair.dst)
+    local entry_type = M.fs.is_file(current) and 'File' or 'Directory'
+    if type(self._before_prompt) == 'function' then
+      local called, released, release_err = pcall(self._before_prompt, pair, full_src, current)
+      if not called or not released then
+        fail(called and release_err or released or 'could not release the history lock for paste prompt')
+        return
+      end
+    end
+    local called, started, start_err = pcall(
+      M.ui.input,
+      entry_type .. ' already exists. Paste as: ',
+      pair.src,
+      'file',
+      function(answer)
+        if answer == nil or M.entry_name_reason(answer) ~= nil then
+          skip(pair, true)
+          return
+        end
+        pair.dst = answer
+        local resumed = false
+        local function continue_after_prompt(ready, resume_err)
+          if resumed then return end
+          resumed = true
+          if ready == 'clash' then return request_name(pair, full_src, stat, attempts + 1) end
+          if not ready then return fail(resume_err or 'could not reacquire the history lock after paste prompt') end
+          local chosen = M.fs.join(self.dst, pair.dst)
+          if M.fs.taken(chosen) then
+            request_name(pair, full_src, stat, attempts + 1)
+          else
+            copy_pair(pair, full_src, chosen, stat)
+          end
+        end
+        if type(self._after_prompt) == 'function' then
+          local resumed_called, ready, resume_err =
+            pcall(self._after_prompt, pair, full_src, answer, continue_after_prompt)
+          if not resumed_called then return fail(ready) end
+          if ready ~= 'pending' then continue_after_prompt(ready, resume_err) end
+        else
+          continue_after_prompt(true)
+        end
+      end,
+      function(input_err) fail(input_err) end
+    )
+    if not called then
+      fail(started)
+    elseif started ~= true then
+      fail(start_err or 'could not start paste input')
+    end
+  end
+
+  process_next = function()
+    if index > #self.renames then
+      local result = last
+      if not asynchronous and result == nil then result = true end
+      finish(true, result, nil)
+      return
+    end
+    local pair = self.renames[index]
+    local full_src = paste_source(self.src, pair.src)
+    local full_dst = M.fs.join(self.dst, pair.dst)
+    local stat = M.fs.stat(full_src)
+    if not stat then
+      index = index + 1
+      process_next()
+    elseif stat.type ~= 'file' and stat.type ~= 'directory' then
+      if asynchronous then
+        M.ui.notify('Skipped unsupported register entry: ' .. full_src, vim.log.levels.WARN)
+        index = index + 1
+        process_next()
+      else
+        copied[#copied + 1] = { src = pair.src, dst = pair.dst }
+        last = full_dst
+        index = index + 1
+        process_next()
+      end
+    elseif M.fs.taken(full_dst) then
+      if asynchronous then
+        request_name(pair, full_src, stat, 0)
+      else
+        fail('paste requires async execution for a destination clash: ' .. tostring(full_dst))
+      end
+    else
+      copy_pair(pair, full_src, full_dst, stat)
+    end
+  end
+
+  process_next()
+  if not asynchronous then return outcome.result, outcome.err end
+end
+
+-- Sync and callback execution share the same paste state machine; only clash
+-- prompting and the history hooks require callback execution.
 function M.Paste(src, dst, src_names, dst_names)
   local self = {
     name = 'p',
@@ -665,190 +674,8 @@ function M.Paste(src, dst, src_names, dst_names)
     dst = dst,
     renames = zipped(src_names, dst_names),
   }
-  self._execute = function()
-    local copied, last = {}, nil
-    for _, pair in ipairs(self.renames) do
-      local full_src = paste_source(self.src, pair.src)
-      local full_dst = M.fs.join(self.dst, pair.dst)
-      local st = M.fs.stat(full_src)
-      if st then
-        if M.fs.taken(full_dst) then
-          return nil, 'paste requires async execution for a destination clash: ' .. tostring(full_dst)
-        end
-        if st.type == 'file' then
-          local ok, err = M.fs.copy_file_exclusive(full_src, full_dst)
-          if not ok then return nil, err end
-        elseif st.type == 'directory' then
-          local ok, skipped = M.fs.copy_tree_exclusive(full_src, full_dst)
-          if not ok then return nil, skipped end
-          if skipped ~= nil and #skipped > 0 then
-            M.ui.notify(
-              'Skipped '
-                .. #skipped
-                .. ' '
-                .. (#skipped == 1 and 'entry' or 'entries')
-                .. ' that cannot be copied: '
-                .. full_src,
-              vim.log.levels.WARN
-            )
-          end
-        end
-        copied[#copied + 1] = { src = pair.src, dst = pair.dst }
-        last = full_dst
-      end
-    end
-    self.renames = copied
-    return last or true
-  end
-  self._execute_async = function(callback)
-    local copied, index, last = {}, 1, nil
-    local completed = false
-    local function finish(ok, result, err)
-      if completed then return end
-      completed = true
-      self.renames = copied
-      callback(ok, result, err)
-    end
-    local function fail(err) finish(false, nil, tostring(err or 'paste failed')) end
-    local process_next
-    local function skip(pair)
-      M.ui.notify('Skipped ' .. pair.src, vim.log.levels.WARN)
-      index = index + 1
-      process_next()
-    end
-    local function copy_pair(pair, full_src, full_dst, st)
-      if type(self._before_copy) == 'function' then
-        local ready, ready_err = self._before_copy(pair, full_src, full_dst)
-        if not ready then
-          fail(ready_err or 'could not journal paste entry')
-          return
-        end
-      end
-      local called, ok, extra, code = pcall(function()
-        if st.type == 'file' then
-          return M.fs.copy_file_exclusive(full_src, full_dst)
-        elseif st.type == 'directory' then
-          return M.fs.copy_tree_exclusive(full_src, full_dst)
-        end
-        return true
-      end)
-      if not called then
-        fail(ok)
-        return
-      end
-      if not ok then
-        if code == 'EEXIST' and type(self._on_copy_conflict) == 'function' then
-          local cleared, clear_err = self._on_copy_conflict(pair)
-          if not cleared then
-            fail(clear_err or extra or code or 'destination exists')
-            return
-          end
-        end
-        fail(extra or code or 'copy failed')
-        return
-      end
-      if st.type == 'directory' and type(extra) == 'table' and #extra > 0 then
-        M.ui.notify(
-          'Skipped '
-            .. #extra
-            .. ' '
-            .. (#extra == 1 and 'entry' or 'entries')
-            .. ' that cannot be copied: '
-            .. full_src,
-          vim.log.levels.WARN
-        )
-      end
-      last = full_dst
-      copied[#copied + 1] = { src = pair.src, dst = pair.dst }
-      index = index + 1
-      if type(self._after_copy) == 'function' then
-        local recorded, record_err = self._after_copy(pair, full_src, full_dst)
-        if not recorded then
-          fail(record_err or 'could not record pasted entry')
-          return
-        end
-      end
-      process_next()
-    end
-    local function request_name(pair, full_src, st, attempts)
-      if attempts >= M.PASTE_CLASH_ATTEMPTS then
-        skip(pair)
-        return
-      end
-      local current = M.fs.join(self.dst, pair.dst)
-      local entry_type = M.fs.is_file(current) and 'File' or 'Directory'
-      if type(self._before_prompt) == 'function' then
-        local called, released, release_err = pcall(self._before_prompt, pair, full_src, current)
-        if not called or not released then
-          fail(called and release_err or released or 'could not release the history lock for paste prompt')
-          return
-        end
-      end
-      local called, started, start_err = pcall(
-        M.ui.input,
-        entry_type .. ' already exists. Paste as: ',
-        pair.src,
-        'file',
-        function(answer)
-          if answer == nil or M.entry_name_reason(answer) ~= nil then
-            skip(pair)
-            return
-          end
-          pair.dst = answer
-          local resumed = false
-          local function continue_after_prompt(ready, resume_err)
-            if resumed then return end
-            resumed = true
-            if ready == 'clash' then return request_name(pair, full_src, st, attempts + 1) end
-            if not ready then return fail(resume_err or 'could not reacquire the history lock after paste prompt') end
-            local chosen = M.fs.join(self.dst, pair.dst)
-            if M.fs.taken(chosen) then
-              request_name(pair, full_src, st, attempts + 1)
-            else
-              copy_pair(pair, full_src, chosen, st)
-            end
-          end
-          if type(self._after_prompt) == 'function' then
-            local resumed_called, ready, resume_err =
-              pcall(self._after_prompt, pair, full_src, answer, continue_after_prompt)
-            if not resumed_called then return fail(ready) end
-            if ready ~= 'pending' then continue_after_prompt(ready, resume_err) end
-          else
-            continue_after_prompt(true)
-          end
-        end,
-        function(input_err) fail(input_err) end
-      )
-      if not called then
-        fail(started)
-      elseif started ~= true then
-        fail(start_err or 'could not start paste input')
-      end
-    end
-    process_next = function()
-      if index > #self.renames then
-        finish(true, last, nil)
-        return
-      end
-      local pair = self.renames[index]
-      local full_src = paste_source(self.src, pair.src)
-      local full_dst = M.fs.join(self.dst, pair.dst)
-      local st = M.fs.stat(full_src)
-      if not st then
-        index = index + 1
-        process_next()
-      elseif st.type ~= 'file' and st.type ~= 'directory' then
-        M.ui.notify('Skipped unsupported register entry: ' .. full_src, vim.log.levels.WARN)
-        index = index + 1
-        process_next()
-      elseif M.fs.taken(full_dst) then
-        request_name(pair, full_src, st, 0)
-      else
-        copy_pair(pair, full_src, full_dst, st)
-      end
-    end
-    process_next()
-  end
+  self._execute = function() return execute_paste(self) end
+  self._execute_async = function(callback) execute_paste(self, callback) end
   self['do'] = function() return M.execute(self) end
   function self.describe() return 'Pasted into ' .. M.rel(self.dst) .. M.paths.separator end
   return self

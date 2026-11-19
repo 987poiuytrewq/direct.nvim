@@ -1,44 +1,73 @@
 -- Sync planning and execution for the Direct buffer.
--- Dependencies are injected from buffer.lua to keep this a code-only split.
+-- Leaf dependencies are explicit here; shared row state lives in buffer.state.
 
-return function(context)
-  local M = context.M
-  local Buffer = context.Buffer
-  local action_mod = context.action_mod
-  local history = context.history
-  local register = context.register
-  local ui = context.ui
-  local fs = context.fs
-  local paths = context.paths
-  local git = context.git
-  local pending = context.pending
-  local file_operations = context.file_operations
-  local states = context.states
-  local namespace = context.namespace
-  local pending_sync = context.pending_sync
-  local restore_deleted_rows = context.restore_deleted_rows
-  local reconcile_undone_materialization = context.reconcile_undone_materialization
-  local get_directory_snapshot = context.get_directory_snapshot
-  local children_integrity = context.children_integrity
-  local row_ids_by_row = context.row_ids_by_row
-  local indent_size = context.indent_size
-  local edited_subtrees = context.edited_subtrees
-  local first_unsafe = context.first_unsafe
-  local ambiguous_message = context.ambiguous_message
-  local classify_identity = context.classify_identity
-  local build_actions = context.build_actions
-  local apply_snapshot = context.apply_snapshot
-  local filter_git_status_lines = context.filter_git_status_lines
-  local filter_git_diff_lines = context.filter_git_diff_lines
-  local is_dir_line = context.is_dir_line
-  local is_real_directory = context.is_real_directory
-  local hidden_descendant = context.hidden_descendant
-  local result_entry = context.result_entry
-  local current_row_record = context.current_row_record
-  local remove_expanded_subtree = context.remove_expanded_subtree
-  local collapse_single_entry_paths = context.collapse_single_entry_paths
-  local set_git_timeout_indicator = context.set_git_timeout_indicator
+local M = {}
 
+local action_mod = require('direct.action.action')
+local file_operations = require('direct.file_operations')
+local fs = require('direct.fs')
+local git = require('direct.git')
+local history = require('direct.history.history')
+local paths = require('direct.paths')
+local pending = require('direct.pending')
+local register = require('direct.register')
+local ui = require('direct.ui')
+local rows = require('direct.buffer.rows')
+local listing = require('direct.buffer.listing')
+local buffer_state = require('direct.buffer.state')
+
+local states = buffer_state.states
+local namespace = buffer_state.namespace
+local pending_sync = buffer_state.pending_sync
+
+-- These closures are assembled by buffer.lua because they own its deleted-row
+-- guard and undo reconciliation state. The methods remain standalone-loadable;
+-- buffer.lua publishes these hooks before attaching them to Buffer.
+local function restore_deleted_rows(bufnr) return buffer_state.restore_deleted_rows(bufnr) end
+local function reconcile_undone_materialization(bufnr) return buffer_state.reconcile_undone_materialization(bufnr) end
+
+local function indent_size() return require('direct.config').options.indent_size end
+
+local function filter_git_status_lines(root, lines, snapshot)
+  local filtered = {}
+  for _, line in ipairs(lines or {}) do
+    if git.status_for(snapshot, listing.entry_path(root, line)) then filtered[#filtered + 1] = line end
+  end
+  return filtered
+end
+
+local function filter_git_diff_lines(root, lines, snapshot)
+  local filtered = {}
+  for _, line in ipairs(lines or {}) do
+    if git.status_for(snapshot, listing.entry_path(root, line)) then filtered[#filtered + 1] = line end
+  end
+  return filtered
+end
+
+local is_dir_line = rows.is_dir_line
+local row_ids_by_row = rows.row_ids_by_row
+local current_row_record = rows.current_row_record
+local remove_expanded_subtree = rows.remove_expanded_subtree
+local get_directory_snapshot = listing.get_directory_snapshot
+local apply_snapshot = listing.apply_snapshot
+local is_real_directory = listing.is_real_directory
+local hidden_descendant = listing.hidden_descendant
+local set_git_timeout_indicator = listing.set_git_timeout_indicator
+
+local function sync_plan_call(name, ...) return buffer_state.sync_plan[name](...) end
+local function first_unsafe(...) return sync_plan_call('first_unsafe', ...) end
+local function ambiguous_message(...) return sync_plan_call('ambiguous_message', ...) end
+local function classify_identity(...) return sync_plan_call('classify_identity', ...) end
+local function build_actions(...) return sync_plan_call('build_actions', ...) end
+local function result_entry(...) return sync_plan_call('result_entry', ...) end
+
+local function tree_plan_call(name, ...) return buffer_state.tree_plan[name](...) end
+local function children_integrity(...) return tree_plan_call('children_integrity', ...) end
+local function edited_subtrees(...) return tree_plan_call('edited_subtrees', ...) end
+
+local function collapse_single_entry_paths(...) return buffer_state.collapse_single_entry_paths(...) end
+
+do
   -- ---------------------------------------------------------------------------
   -- sync
   -- ---------------------------------------------------------------------------
@@ -469,7 +498,7 @@ return function(context)
         if added_set[line] then
           local relative = paths.strip_directory_marker(line)
           if paths.directory_separator() == '\\' then relative = relative:gsub('\\', '/') end
-          added_focus_path = M.entry_path(self.root, line)
+          added_focus_path = listing.entry_path(self.root, line)
           if relative:find('/', 1, true) then
             local parts = vim.split(relative, '/', { plain = true })
             local directory_count = #parts - (is_dir_line(line) and 0 or 1)
@@ -497,7 +526,7 @@ return function(context)
       if #(plan.removed or {}) > 0 then
         local removed_roots = {}
         for _, line in ipairs(plan.removed or {}) do
-          if is_dir_line(line) then removed_roots[#removed_roots + 1] = M.entry_path(self.root, line) end
+          if is_dir_line(line) then removed_roots[#removed_roots + 1] = listing.entry_path(self.root, line) end
         end
         local function under_removed_root(path)
           if type(path) ~= 'string' then return false end
@@ -959,7 +988,7 @@ return function(context)
           local id = row_ids[row - 1]
           local rec = id and state_before_list.rows[id]
           if rec and rec.kind == 'root' and not line:match('^%s') then
-            local path = M.entry_path(self.root, line)
+            local path = listing.entry_path(self.root, line)
             if fs.exists(path) then
               rec.name, rec.text, rec.path = line, line, path
             end
@@ -1122,7 +1151,7 @@ return function(context)
     return finalize_sync()
   end
 
-  function Buffer:sync(options)
+  function M.sync(self, options)
     local synced, sync_err = history.with_lock(function() return sync_locked(self, options) end)
     if synced then
       local retained, retention_err = require('direct.trash').apply_retention()
@@ -1133,7 +1162,7 @@ return function(context)
     return synced, sync_err
   end
 
-  function Buffer:sync_async(callback)
+  function M.sync_async(self, callback)
     callback = callback or function() end
     if pending.refuse('sync') then return nil, 'another direct operation is pending' end
     local began, token = pending.begin('sync', vim.api.nvim_get_current_buf())
@@ -1196,3 +1225,5 @@ return function(context)
     return true
   end
 end
+
+return M

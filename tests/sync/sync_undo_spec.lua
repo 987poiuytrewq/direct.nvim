@@ -266,6 +266,75 @@ H.describe('sync with expanded children', function()
       'undoing b expansion is not interpreted as deleting its child')
   end)
 
+  H.it('undo restores a child move together with a root filename swap', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    local left = H.mkdir(ws, 'left')
+    local right = H.mkdir(ws, 'right')
+    H.mkfile(left, 'left-1.txt', { 'LEFT-CONTENT' })
+    H.mkfile(right, 'anchor.txt', { 'ANCHOR-CONTENT' })
+    H.mkfile(ws, 'root-01.txt', { 'ROOT-01-CONTENT' })
+    H.mkfile(ws, 'root-02.txt', { 'ROOT-02-CONTENT' })
+
+    local listing = buffer.list(ws)
+    listing:expand(1)
+    listing:expand(3)
+    H.assert_buf_eq({
+      'left/', '  left-1.txt', 'right/', '  anchor.txt', 'root-01.txt', 'root-02.txt',
+    }, 0, 'both folders and the root files are materialized')
+
+    -- Move the child row under right/ while preserving its row identity.
+    vim.cmd('2move 4')
+    -- Swap the two root names using a temporary name, keeping both root identities.
+    vim.api.nvim_buf_set_text(0, 4, 0, 4, #'root-01.txt', { 'temporary.txt' })
+    vim.api.nvim_buf_set_text(0, 5, 0, 5, #'root-02.txt', { 'root-01.txt' })
+    vim.api.nvim_buf_set_text(0, 4, 0, 4, #'temporary.txt', { 'root-02.txt' })
+
+    local ok, reason = listing:sync()
+
+    H.assert_true(ok == true, tostring(reason))
+    H.assert_fs_eq(ws, {
+      'left/', 'right/', 'right/anchor.txt', 'right/left-1.txt', 'root-01.txt', 'root-02.txt',
+    }, 'sync applies both the root swap and child move')
+    H.assert_eq(vim.fn.readfile(ws .. '/root-01.txt'), { 'ROOT-02-CONTENT' },
+      'the first root file receives the second file content')
+    H.assert_eq(vim.fn.readfile(ws .. '/root-02.txt'), { 'ROOT-01-CONTENT' },
+      'the second root file receives the first file content')
+    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' },
+      'the moved child keeps its content')
+
+    local undo_records = history_lines('undo.log')
+    H.assert_eq(#undo_records, 2, 'the permutation and child move share one undo record')
+    local combined = decode_record(undo_records, 2)
+    H.assert_eq(combined.op, 'batch', 'the related rename groups are stored as a batch')
+    H.assert_eq(#combined.actions, 2, 'the batch preserves both the swap and child move')
+
+    H.assert_true(history.undo() ~= nil, 'one undo reverses the mixed sync')
+    H.assert_fs_eq(ws, {
+      'left/', 'left/left-1.txt', 'right/', 'right/anchor.txt', 'root-01.txt', 'root-02.txt',
+    }, 'undo restores the exact original paths')
+    H.assert_eq(vim.fn.readfile(ws .. '/root-01.txt'), { 'ROOT-01-CONTENT' },
+      'undo restores the first root file content')
+    H.assert_eq(vim.fn.readfile(ws .. '/root-02.txt'), { 'ROOT-02-CONTENT' },
+      'undo restores the second root file content')
+    H.assert_eq(vim.fn.readfile(left .. '/left-1.txt'), { 'LEFT-CONTENT' },
+      'undo returns the child to left/')
+    H.assert_false(fs.exists(right .. '/left-1.txt'),
+      'undo removes the moved child from right/')
+
+    H.assert_true(history.redo() ~= nil, 'redo reapplies the mixed sync')
+    H.assert_fs_eq(ws, {
+      'left/', 'right/', 'right/anchor.txt', 'right/left-1.txt', 'root-01.txt', 'root-02.txt',
+    }, 'redo reapplies both the swap and child move')
+    H.assert_eq(vim.fn.readfile(ws .. '/root-01.txt'), { 'ROOT-02-CONTENT' },
+      'redo restores the swapped first root content')
+    H.assert_eq(vim.fn.readfile(ws .. '/root-02.txt'), { 'ROOT-01-CONTENT' },
+      'redo restores the swapped second root content')
+    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' },
+      'redo preserves the child content')
+  end)
+
   H.it('refuses a lost surviving child identity on an undo branch before side effects', function()
     clean_buffers()
     local sb = H.sandbox()

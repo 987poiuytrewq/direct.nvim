@@ -548,25 +548,39 @@ return function(context)
         if a.name == 'mkdir' and adepth ~= bdepth then return adepth < bdepth end
         return adst < bdst
       end)
-      -- A root-level delete may free the target of a root rename in the same
-      -- mixed save. Keep mkdir dependencies intact, but place that file removal
-      -- immediately before the move that reuses its path.
-      local move_index = 1
-      while move_index <= #actions do
-        local move = actions[move_index]
-        if move.name == 'mv' then
-          for remove_index = move_index + 1, #actions do
-            local removal = actions[remove_index]
-            if removal.name == 'rm' and fs.same_entry(removal.src, move.dst) then
-              table.remove(actions, remove_index)
-              table.insert(actions, move_index, removal)
-              move_index = move_index + 1
-              break
+      -- A root-level delete may free the target of a rename in the same mixed
+      -- save. Interlinked moves execute as one group at its first action index,
+      -- so a removal that only sits immediately before a later group member
+      -- would still run after the group has tried to use that destination.
+      -- Move each such removal before the first member of its move group (or
+      -- immediately before an independent move), preserving mkdir dependencies.
+      local reordered
+      repeat
+        reordered = false
+        local group_start_by_index = {}
+        for _, indices in ipairs(action_mod.move_groups(actions)) do
+          if #indices > 1 then
+            for _, index in ipairs(indices) do
+              group_start_by_index[index] = indices[1]
             end
           end
         end
-        move_index = move_index + 1
-      end
+        for move_index, move in ipairs(actions) do
+          if move.name == 'mv' then
+            for remove_index = move_index + 1, #actions do
+              local removal = actions[remove_index]
+              if removal.name == 'rm' and fs.same_entry(removal.src, move.dst) then
+                local insert_index = group_start_by_index[move_index] or move_index
+                table.remove(actions, remove_index)
+                table.insert(actions, insert_index, removal)
+                reordered = true
+                break
+              end
+            end
+          end
+          if reordered then break end
+        end
+      until not reordered
       local destination_index = fs.path_identity_index()
       for _, act in ipairs(actions) do
         if act.name == 'mv' or act.name == 'touch' or act.name == 'mkdir' then

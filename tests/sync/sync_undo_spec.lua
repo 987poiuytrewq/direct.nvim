@@ -297,12 +297,17 @@ H.describe('sync with expanded children', function()
     H.assert_fs_eq(ws, {
       'left/', 'right/', 'right/anchor.txt', 'right/left-1.txt', 'root-01.txt', 'root-02.txt',
     }, 'sync applies both the root swap and child move')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-01.txt'), { 'ROOT-02-CONTENT' },
-      'the first root file receives the second file content')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-02.txt'), { 'ROOT-01-CONTENT' },
-      'the second root file receives the first file content')
-    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' },
-      'the moved child keeps its content')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-01.txt'),
+      { 'ROOT-02-CONTENT' },
+      'the first root file receives the second file content'
+    )
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-02.txt'),
+      { 'ROOT-01-CONTENT' },
+      'the second root file receives the first file content'
+    )
+    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' }, 'the moved child keeps its content')
 
     local undo_records = history_lines('undo.log')
     H.assert_eq(#undo_records, 2, 'the permutation and child move share one undo record')
@@ -312,27 +317,157 @@ H.describe('sync with expanded children', function()
 
     H.assert_true(history.undo() ~= nil, 'one undo reverses the mixed sync')
     H.assert_fs_eq(ws, {
-      'left/', 'left/left-1.txt', 'right/', 'right/anchor.txt', 'root-01.txt', 'root-02.txt',
+      'left/',
+      'left/left-1.txt',
+      'right/',
+      'right/anchor.txt',
+      'root-01.txt',
+      'root-02.txt',
     }, 'undo restores the exact original paths')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-01.txt'), { 'ROOT-01-CONTENT' },
-      'undo restores the first root file content')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-02.txt'), { 'ROOT-02-CONTENT' },
-      'undo restores the second root file content')
-    H.assert_eq(vim.fn.readfile(left .. '/left-1.txt'), { 'LEFT-CONTENT' },
-      'undo returns the child to left/')
-    H.assert_false(fs.exists(right .. '/left-1.txt'),
-      'undo removes the moved child from right/')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-01.txt'),
+      { 'ROOT-01-CONTENT' },
+      'undo restores the first root file content'
+    )
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-02.txt'),
+      { 'ROOT-02-CONTENT' },
+      'undo restores the second root file content'
+    )
+    H.assert_eq(vim.fn.readfile(left .. '/left-1.txt'), { 'LEFT-CONTENT' }, 'undo returns the child to left/')
+    H.assert_false(fs.exists(right .. '/left-1.txt'), 'undo removes the moved child from right/')
 
     H.assert_true(history.redo() ~= nil, 'redo reapplies the mixed sync')
     H.assert_fs_eq(ws, {
-      'left/', 'right/', 'right/anchor.txt', 'right/left-1.txt', 'root-01.txt', 'root-02.txt',
+      'left/',
+      'right/',
+      'right/anchor.txt',
+      'right/left-1.txt',
+      'root-01.txt',
+      'root-02.txt',
     }, 'redo reapplies both the swap and child move')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-01.txt'), { 'ROOT-02-CONTENT' },
-      'redo restores the swapped first root content')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-02.txt'), { 'ROOT-01-CONTENT' },
-      'redo restores the swapped second root content')
-    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' },
-      'redo preserves the child content')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-01.txt'),
+      { 'ROOT-02-CONTENT' },
+      'redo restores the swapped first root content'
+    )
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-02.txt'),
+      { 'ROOT-01-CONTENT' },
+      'redo restores the swapped second root content'
+    )
+    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' }, 'redo preserves the child content')
+  end)
+
+  H.it('undo restores a child move together with a five-name root permutation', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    local left = H.mkdir(ws, 'left')
+    local right = H.mkdir(ws, 'right')
+    H.mkfile(left, 'left-2.txt', { 'LEFT-2-CONTENT' })
+    H.mkfile(right, 'anchor.txt', { 'ANCHOR-CONTENT' })
+    local root_names = { 'root-01.txt', 'root-02.txt', 'root-03.txt', 'root-04.txt', 'root-05.txt' }
+    for index, name in ipairs(root_names) do
+      H.mkfile(ws, name, { 'ROOT-' .. index .. '-CONTENT' })
+    end
+
+    local listing = buffer.list(ws)
+    listing:expand(1)
+    listing:expand(3)
+    H.assert_buf_eq({
+      'left/',
+      '  left-2.txt',
+      'right/',
+      '  anchor.txt',
+      'root-01.txt',
+      'root-02.txt',
+      'root-03.txt',
+      'root-04.txt',
+      'root-05.txt',
+    }, 0, 'both folders and all five root files are materialized')
+
+    vim.cmd('2move 4')
+    local root_start = 4
+    vim.api.nvim_buf_set_text(0, root_start, 0, root_start, #'root-01.txt', { 'temporary-root.txt' })
+    for index = 2, #root_names do
+      local row = root_start + index - 1
+      vim.api.nvim_buf_set_text(0, row, 0, row, #root_names[index], { root_names[index - 1] })
+    end
+    vim.api.nvim_buf_set_text(0, root_start, 0, root_start, #'temporary-root.txt', { root_names[#root_names] })
+
+    local ok, reason = listing:sync()
+
+    H.assert_true(ok == true, tostring(reason))
+    H.assert_fs_eq(ws, {
+      'left/',
+      'right/',
+      'right/anchor.txt',
+      'right/left-2.txt',
+      'root-01.txt',
+      'root-02.txt',
+      'root-03.txt',
+      'root-04.txt',
+      'root-05.txt',
+    }, 'sync applies the five-name permutation and child move')
+    for index = 1, #root_names do
+      local source_index = index == #root_names and 1 or index + 1
+      H.assert_eq(
+        vim.fn.readfile(ws .. '/' .. root_names[index]),
+        { 'ROOT-' .. source_index .. '-CONTENT' },
+        root_names[index] .. ' receives the next root content'
+      )
+    end
+    H.assert_eq(vim.fn.readfile(right .. '/left-2.txt'), { 'LEFT-2-CONTENT' }, 'the moved child keeps its content')
+    local undo_records = history_lines('undo.log')
+    H.assert_eq(#undo_records, 2, 'the permutation and child move share one undo record')
+    local combined = decode_record(undo_records, 2)
+    H.assert_eq(combined.op, 'batch', 'the related rename groups are stored as a batch')
+    H.assert_eq(#combined.actions, 2, 'the batch preserves both the permutation and child move')
+
+    H.assert_true(history.undo() ~= nil, 'one undo reverses the combined sync')
+    H.assert_fs_eq(ws, {
+      'left/',
+      'left/left-2.txt',
+      'right/',
+      'right/anchor.txt',
+      'root-01.txt',
+      'root-02.txt',
+      'root-03.txt',
+      'root-04.txt',
+      'root-05.txt',
+    }, 'undo restores the exact original paths')
+    H.assert_eq(vim.fn.readfile(left .. '/left-2.txt'), { 'LEFT-2-CONTENT' }, 'undo returns the child to left/')
+    H.assert_false(fs.exists(right .. '/left-2.txt'), 'undo removes the moved child from right/')
+    for index, name in ipairs(root_names) do
+      H.assert_eq(
+        vim.fn.readfile(ws .. '/' .. name),
+        { 'ROOT-' .. index .. '-CONTENT' },
+        'undo restores ' .. name .. ' content'
+      )
+    end
+
+    H.assert_true(history.redo() ~= nil, 'redo reapplies the combined sync')
+    H.assert_fs_eq(ws, {
+      'left/',
+      'right/',
+      'right/anchor.txt',
+      'right/left-2.txt',
+      'root-01.txt',
+      'root-02.txt',
+      'root-03.txt',
+      'root-04.txt',
+      'root-05.txt',
+    }, 'redo reapplies the permutation and child move')
+    H.assert_eq(vim.fn.readfile(right .. '/left-2.txt'), { 'LEFT-2-CONTENT' }, 'redo preserves the child content')
+    for index = 1, #root_names do
+      local source_index = index == #root_names and 1 or index + 1
+      H.assert_eq(
+        vim.fn.readfile(ws .. '/' .. root_names[index]),
+        { 'ROOT-' .. source_index .. '-CONTENT' },
+        'redo restores ' .. root_names[index] .. ' content'
+      )
+    end
   end)
 
   H.it('refuses a lost surviving child identity on an undo branch before side effects', function()

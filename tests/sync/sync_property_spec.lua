@@ -199,36 +199,106 @@ local function undo_pure_model(case, result, initial)
   return files
 end
 
-local function pure_action_record(case, root)
-  local fixtures = require('tests.support.history_fixtures')
-  if case.family == 'permutation' then
-    local moves = {}
-    for index = 1, case.permutation_count do
-      local source = vim.fs.joinpath(root, case.root_names[index])
-      local target_name = case.root_names[((index - 1 + case.shift) % case.permutation_count) + 1]
-      moves[index] = { source, vim.fs.joinpath(root, target_name) }
-    end
-    return fixtures.group(moves)
-  elseif case.family == 'cross-folder move' then
-    return fixtures.move(vim.fs.joinpath(root, 'left', case.move_name), vim.fs.joinpath(root, 'right', case.move_name))
-  elseif case.family == 'delete' then
-    return fixtures.remove(
-      'rm',
-      vim.fs.joinpath(root, case.delete_name),
-      vim.fs.joinpath(root, '.direct-trash-' .. case.seed, case.delete_name)
-    )
-  elseif case.family == 'create' then
-    return fixtures.touch(vim.fs.joinpath(root, case.create_name))
-  elseif case.family == 'paste' then
-    return fixtures.paste(
-      'p',
+local function pure_action_records(case, root)
+  local action = require('direct.action.action')
+  local plan = require('direct.buffer.state').sync_plan
+  H.assert_not_nil(plan, 'buffer sync planner is available to pure generated cases')
+  if case.family == 'paste' then
+    local paste = action.Paste(
       vim.fs.joinpath(root, '.direct-register-' .. case.seed),
       vim.fs.joinpath(root, 'right'),
       { case.paste_name },
       { case.paste_name }
     )
+    local record, err = action.serialize(paste)
+    H.assert_not_nil(record, string.format('seed=%d paste action serializes: %s', case.seed, tostring(err)))
+    return { record }, { paste }, action.move_groups({ paste })
   end
-  error('no pure action record for operation family: ' .. tostring(case.family))
+
+  local spec
+  if case.family == 'permutation' then
+    local moves = {}
+    for index = 1, case.permutation_count do
+      local target_name = case.root_names[((index - 1 + case.shift) % case.permutation_count) + 1]
+      moves[index] = { src = case.root_names[index], dst = target_name }
+    end
+    spec = { kind = 'RENAME', moves = moves }
+  elseif case.family == 'cross-folder move' then
+    spec = {
+      kind = 'RENAME',
+      moves = { { src = 'left/' .. case.move_name, dst = 'right/' .. case.move_name } },
+    }
+  elseif case.family == 'delete' then
+    spec = { kind = 'DELETE', removed = { case.delete_name } }
+  elseif case.family == 'create' then
+    spec = { kind = 'ADD', added = { case.create_name } }
+  else
+    error('no pure sync plan for operation family: ' .. tostring(case.family))
+  end
+
+  local actions, _, plan_err = plan.build_actions(root, spec)
+  H.assert_not_nil(actions, string.format('seed=%d %s plan builds: %s', case.seed, case.family, tostring(plan_err)))
+  local groups = action.move_groups(actions)
+  if case.family == 'permutation' then
+    H.assert_eq(#groups, 1, string.format('seed=%d permutation moves form one linked group', case.seed))
+    H.assert_eq(#groups[1], #actions, string.format('seed=%d full permutation stays in that group', case.seed))
+    local grouped = action.Group(actions)
+    local record, err = action.serialize(grouped)
+    H.assert_not_nil(record, string.format('seed=%d grouped permutation serializes: %s', case.seed, tostring(err)))
+    return { record }, actions, groups
+  end
+
+  H.assert_eq(#groups, #actions, string.format('seed=%d independent actions remain separate groups', case.seed))
+  local records = {}
+  for index, act in ipairs(actions) do
+    H.assert_eq(#groups[index], 1, string.format('seed=%d group %d has one action', case.seed, index))
+    local record, err = action.serialize(act)
+    H.assert_not_nil(record, string.format('seed=%d action %d serializes: %s', case.seed, index, tostring(err)))
+    records[index] = record
+  end
+  return records, actions, groups
+end
+
+local function assert_pure_plan_matches_model(case, root, records, actions)
+  local fixtures = require('tests.support.history_fixtures')
+  if case.family == 'permutation' then
+    local moves = {}
+    for index = 1, case.permutation_count do
+      local source = vim.fs.joinpath(root, case.root_names[index])
+      local target = case.root_names[((index - 1 + case.shift) % case.permutation_count) + 1]
+      moves[index] = { source, vim.fs.joinpath(root, target) }
+      H.assert_eq(actions[index].src, moves[index][1], 'planner move source matches the model')
+      H.assert_eq(actions[index].dst, moves[index][2], 'planner move destination matches the model')
+    end
+    H.assert_eq(records, { fixtures.group(moves) }, 'planner group matches the independently modeled permutation')
+  elseif case.family == 'cross-folder move' then
+    H.assert_eq(records, {
+      fixtures.move(vim.fs.joinpath(root, 'left', case.move_name), vim.fs.joinpath(root, 'right', case.move_name)),
+    }, 'planner move record matches the independently modeled folder move')
+  elseif case.family == 'delete' then
+    local decoded = vim.json.decode(records[1])
+    H.assert_eq(decoded.op, 'rm', 'delete plan emits a remove record')
+    H.assert_eq(
+      decoded.src,
+      require('direct.paths').record_path(vim.fs.joinpath(root, case.delete_name)),
+      'remove source matches the deleted model entry'
+    )
+    H.assert_true(decoded.dst ~= decoded.src, 'remove target is distinct from its source')
+  elseif case.family == 'create' then
+    H.assert_eq(records, {
+      fixtures.touch(vim.fs.joinpath(root, case.create_name)),
+    }, 'planner create record matches the independently modeled new entry')
+  elseif case.family == 'paste' then
+    H.assert_eq(records, {
+      fixtures.paste(
+        'p',
+        vim.fs.joinpath(root, '.direct-register-' .. case.seed),
+        vim.fs.joinpath(root, 'right'),
+        { case.paste_name },
+        { case.paste_name }
+      ),
+    }, 'paste action record matches the independently modeled copy')
+  end
 end
 
 local function run_pure_seed(seed)
@@ -253,37 +323,42 @@ local function run_pure_seed(seed)
 
   local action = require('direct.action.action')
   local format = require('direct.history.format')
-  local record = pure_action_record(case, root)
-  local parsed, parse_err = action.deserialize(record)
-  H.assert_not_nil(parsed, string.format('seed=%d %s record parses: %s', seed, case.family, tostring(parse_err)))
-  local encoded, encode_err = action.serialize(parsed)
-  H.assert_eq(
-    encoded,
-    record,
-    string.format('seed=%d %s record round-trips: %s', seed, case.family, tostring(encode_err))
-  )
-  local reversed, reverse_err = action.reverse(record)
-  H.assert_not_nil(reversed, string.format('seed=%d %s record reverses: %s', seed, case.family, tostring(reverse_err)))
-  local reversed_line, reversed_encode_err = action.serialize(reversed)
-  H.assert_not_nil(reversed_line, tostring(reversed_encode_err))
-  local restored, restore_err = action.reverse(reversed_line)
-  H.assert_not_nil(restored, tostring(restore_err))
-  local restored_line, restored_encode_err = action.serialize(restored)
-  H.assert_not_nil(restored_line, tostring(restored_encode_err))
-  local restored_parsed, restored_parse_err = action.deserialize(restored_line)
-  H.assert_not_nil(restored_parsed, tostring(restored_parse_err))
-  H.assert_eq(
-    action.serialize(restored_parsed),
-    restored_line,
-    string.format('seed=%d %s reversed record remains canonical', seed, case.family)
-  )
-
-  local bytes = format.HEADER .. '\n' .. record .. '\n'
+  local records, actions, groups = pure_action_records(case, root)
+  assert_pure_plan_matches_model(case, root, records, actions)
+  H.assert_eq(#groups, 1, string.format('seed=%d pure operation has one history group', seed))
+  local bytes = format.HEADER .. '\n' .. table.concat(records, '\n') .. '\n'
   H.assert_eq(
     format.classify(bytes, true).state,
     'current',
     string.format('seed=%d %s record is a valid history-format round trip', seed, case.family)
   )
+  for index, record in ipairs(records) do
+    local parsed, parse_err = action.deserialize(record)
+    H.assert_not_nil(
+      parsed,
+      string.format('seed=%d %s record %d parses: %s', seed, case.family, index, tostring(parse_err))
+    )
+    local encoded, encode_err = action.serialize(parsed)
+    H.assert_eq(
+      encoded,
+      record,
+      string.format('seed=%d %s record %d round-trips: %s', seed, case.family, index, tostring(encode_err))
+    )
+    local reversed, reverse_err = action.reverse(record)
+    H.assert_not_nil(
+      reversed,
+      string.format('seed=%d %s record %d reverses: %s', seed, case.family, index, tostring(reverse_err))
+    )
+    local reversed_line, reversed_encode_err = action.serialize(reversed)
+    H.assert_not_nil(reversed_line, tostring(reversed_encode_err))
+    local reparsed, reparsed_err = action.deserialize(reversed_line)
+    H.assert_not_nil(reparsed, tostring(reparsed_err))
+    H.assert_eq(
+      action.serialize(reparsed),
+      reversed_line,
+      string.format('seed=%d %s reverse record %d stays canonical', seed, case.family, index)
+    )
+  end
 end
 
 local function delete_model_entry(files, name)

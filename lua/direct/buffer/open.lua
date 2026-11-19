@@ -1,23 +1,45 @@
 -- Buffer open, row lookup, and post-paste refresh operations.
--- Dependencies are injected from buffer.lua so behavior stays unchanged.
+-- Leaf modules are required directly; parent and row state are shared through
+-- buffer.state so this module does not load buffer.lua as a dependency.
 
-return function(context)
-  local M = context.M
-  local Buffer = context.Buffer
-  local paths = context.paths
-  local ui = context.ui
-  local constants = context.constants
-  local states = context.states
-  local restore_deleted_rows = context.restore_deleted_rows
-  local children_integrity = context.children_integrity
-  local current_row_record = context.current_row_record
-  local is_deleted_record = context.is_deleted_record
-  local row_path = context.row_path
-  local is_dir_line = context.is_dir_line
-  local recorded_row_text = context.recorded_row_text
-  local indent_size = context.indent_size
-  local remove_expanded_subtree = context.remove_expanded_subtree
+local M = {}
 
+local paths = require('direct.paths')
+local ui = require('direct.ui')
+local constants = require('direct.constants')
+local rows = require('direct.buffer.rows')
+local buffer_state = require('direct.buffer.state')
+local states = buffer_state.states
+local current_row_record = rows.current_row_record
+local row_path = rows.row_path
+local is_dir_line = rows.is_dir_line
+local recorded_row_text = rows.recorded_row_text
+local remove_expanded_subtree = rows.remove_expanded_subtree
+
+local function buffer_module()
+  -- buffer.lua attaches itself after loading this module. Resolve it lazily to
+  -- keep requiring buffer.open independent from constructing the buffer facade.
+  local module = buffer_state.list_parent
+  assert(type(module) == 'table', 'buffer.open parent is not attached')
+  return module
+end
+
+local function restore_deleted_rows(bufnr)
+  local restore = buffer_state.restore_deleted_rows
+  if restore then return restore(bufnr) end
+end
+
+local function children_integrity(bufnr, lines)
+  local tree_plan = buffer_state.tree_plan
+  assert(type(tree_plan) == 'table', 'buffer.open tree plan is not attached')
+  return tree_plan.children_integrity(bufnr, lines)
+end
+
+local function is_deleted_record(record) return record ~= nil and record.deleted_kind ~= nil end
+
+local function indent_size() return require('direct.config').options.indent_size end
+
+do
   -- ---------------------------------------------------------------------------
   -- open / get_paths
   -- ---------------------------------------------------------------------------
@@ -28,7 +50,7 @@ return function(context)
   -- a directory can reuse its existing listing; remove the old listing on file
   -- opens after another buffer is current.
   -- Child paths resolve from their row identities rather than their display text.
-  function Buffer:open(line, options)
+  function M.open(self, line, options)
     options = options or {}
     if type(options) ~= 'table' then return nil, 'open options must be a table' end
     if
@@ -66,7 +88,9 @@ return function(context)
     local record = target_row and current_row_record(bufnr, target_row - 1)
     if is_deleted_record(record) then return false end
     local path = row_path(self.root, record, line)
-    if not path and type(line) == 'string' and not line:match('^%s') then path = M.entry_path(self.root, line) end
+    if not path and type(line) == 'string' and not line:match('^%s') then
+      path = buffer_module().entry_path(self.root, line)
+    end
     if not path then return nil, 'row identity is unavailable' end
 
     if options.split then
@@ -76,7 +100,7 @@ return function(context)
     end
 
     if is_dir_line(record and record.name or line) then
-      local listed, list_err = M.list(path, { reuse = options.reuse, open_in = open_in })
+      local listed, list_err = buffer_module().list(path, { reuse = options.reuse, open_in = open_in })
       if not listed then return nil, list_err end
     else
       if
@@ -105,7 +129,7 @@ return function(context)
 
   -- Buffer:get_paths(firstline, lastline) -> the absolute path of every line in
   -- the inclusive 1-based range (Python's buffer slice). Used by `:DirectYank`.
-  function Buffer:get_paths(firstline, lastline)
+  function M.get_paths(self, firstline, lastline)
     local bufnr = vim.api.nvim_get_current_buf()
     restore_deleted_rows(bufnr)
     local safe, integrity_err = children_integrity(bufnr, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
@@ -119,11 +143,11 @@ return function(context)
         if record and record.kind == 'child' then
           out[#out + 1] = record.path
         elseif record and record.kind == 'root' then
-          out[#out + 1] = M.entry_path(self.root, line)
+          out[#out + 1] = buffer_module().entry_path(self.root, line)
         elseif line:match('^%s') then
           return nil, 'row has no valid identity'
         else
-          out[#out + 1] = M.entry_path(self.root, line)
+          out[#out + 1] = buffer_module().entry_path(self.root, line)
         end
       end
     end
@@ -133,7 +157,7 @@ return function(context)
   -- Buffer:get_entry_path(row) -> the existing row identity at one display row.
   -- Unlike get_paths(), this is for actions that must target the entry that was
   -- actually listed: it refuses blank rows and rows with unsaved name edits.
-  function Buffer.get_entry_path(_, row)
+  function M.get_entry_path(_, row)
     local bufnr = vim.api.nvim_get_current_buf()
     restore_deleted_rows(bufnr)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -146,7 +170,7 @@ return function(context)
     return record.path
   end
 
-  function Buffer.get_entry_record(_, row)
+  function M.get_entry_record(_, row)
     local bufnr = vim.api.nvim_get_current_buf()
     restore_deleted_rows(bufnr)
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -159,7 +183,7 @@ return function(context)
   -- A directory row is itself the destination; a file row uses its parent.
   -- Resolve through the row record so expanded child rows never rely on their
   -- indented display text for filesystem paths.
-  function Buffer:paste_destination(row)
+  function M.paste_destination(self, row)
     local bufnr = vim.api.nvim_get_current_buf()
     restore_deleted_rows(bufnr)
     local safe, integrity_err = children_integrity(bufnr, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
@@ -192,7 +216,7 @@ return function(context)
   -- Refresh the root listing after a paste. Reopen existing folds and the path to
   -- the destination so the last pasted entry is visible; place the cursor on its
   -- name and expand it when it is a directory.
-  function Buffer:refresh_after_paste(destination, pasted_entry)
+  function M.refresh_after_paste(self, destination, pasted_entry)
     local bufnr = vim.api.nvim_get_current_buf()
     local state = states[bufnr]
     if not state then return self:list({ allow_modified = true, reset_undo = true }) end
@@ -281,3 +305,5 @@ return function(context)
     return true
   end
 end
+
+return M

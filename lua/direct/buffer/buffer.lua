@@ -10,8 +10,6 @@ local M = {}
 local fs = require('direct.fs')
 local paths = require('direct.paths')
 local action_mod = require('direct.action.action')
-local history = require('direct.history.history')
-local register = require('direct.register')
 local ui = require('direct.ui')
 local highlight = require('direct.highlight')
 local git = require('direct.git')
@@ -19,8 +17,9 @@ local constants = require('direct.constants')
 local folding = require('direct.folding')
 local listing = require('direct.buffer.listing')
 local rows = require('direct.buffer.rows')
-local states = rows.states
-local namespace = rows.namespace
+local buffer_state = require('direct.buffer.state')
+local states = buffer_state.states
+local namespace = buffer_state.namespace
 local deleted_guards = {}
 local state_generations = {}
 local next_state_generation = 0
@@ -69,8 +68,6 @@ local get_directory_snapshot = listing.get_directory_snapshot
 local apply_snapshot = listing.apply_snapshot
 local path_without_marker = listing.path_without_marker
 local lstat = listing.lstat
-local is_real_directory = listing.is_real_directory
-local hidden_descendant = listing.hidden_descendant
 
 local function ensure_git_snapshot(state) return state.git_status end
 
@@ -189,20 +186,14 @@ local sync_plan = require('direct.buffer.sync_plan')({
   path_without_marker = path_without_marker,
   fs = fs,
 })
-local classify_identity = sync_plan.classify_identity
+buffer_state.sync_plan = sync_plan
 M._component_reason = sync_plan.component_reason
 M._nested_path_reason = sync_plan.nested_path_reason
 local component_reason = sync_plan.component_reason
-local first_unsafe = sync_plan.first_unsafe
-local ambiguous_message = sync_plan.ambiguous_message
-local result_entry = sync_plan.result_entry
-local build_actions = sync_plan.build_actions
 local pending = require('direct.pending')
 M._pending_for_test = pending
-local file_operations = require('direct.file_operations')
-local pending_sync = {}
+local pending_sync = buffer_state.pending_sync
 local reconcile_undone_materialization
-local edited_subtrees
 local children_integrity
 
 local Buffer = {}
@@ -312,7 +303,7 @@ local tree_planner = require('direct.buffer.tree')({
   indent_size = indent_size,
 })
 children_integrity = tree_planner.children_integrity
-edited_subtrees = tree_planner.edited_subtrees
+buffer_state.tree_plan = tree_planner
 reconcile_undone_materialization = require('direct.buffer.undo_state')({
   states = states,
   namespace = namespace,
@@ -334,6 +325,7 @@ reconcile_undone_materialization = require('direct.buffer.undo_state')({
   refresh_icons = refresh_icons,
   remove_expanded_subtree = remove_expanded_subtree,
 })
+buffer_state.reconcile_undone_materialization = reconcile_undone_materialization
 
 -- ---------------------------------------------------------------------------
 local row_state = require('direct.buffer.row_state')({
@@ -384,6 +376,7 @@ end
 hide_deleted_expansions = row_state.hide_deleted_expansions
 capture_deleted_guard_snapshot = row_state.capture_deleted_guard_snapshot
 restore_deleted_rows = row_state.restore_deleted_rows
+buffer_state.restore_deleted_rows = restore_deleted_rows
 attach_deleted_guard = row_state.attach_deleted_guard
 
 -- Buffer options
@@ -623,6 +616,7 @@ local collapse_single_entry_paths = require('direct.buffer.collapse')({
   is_dir_line = is_dir_line,
   dirs_then_name = dirs_then_name,
 })
+buffer_state.collapse_single_entry_paths = collapse_single_entry_paths
 
 require('direct.buffer.list')({
   M = M,
@@ -978,46 +972,10 @@ require('direct.buffer.navigation')({
   ensure_git_snapshot = ensure_git_snapshot,
 })
 
--- Sync planning and execution lives in its own module; it receives the buffer's
--- private state and helpers so this extraction does not change behavior.
-require('direct.buffer.sync')({
-  M = M,
-  Buffer = Buffer,
-  action_mod = action_mod,
-  history = history,
-  register = register,
-  ui = ui,
-  fs = fs,
-  paths = paths,
-  git = git,
-  pending = pending,
-  file_operations = file_operations,
-  states = states,
-  pending_sync = pending_sync,
-  namespace = namespace,
-  restore_deleted_rows = restore_deleted_rows,
-  reconcile_undone_materialization = reconcile_undone_materialization,
-  get_directory_snapshot = get_directory_snapshot,
-  children_integrity = children_integrity,
-  row_ids_by_row = row_ids_by_row,
-  indent_size = indent_size,
-  edited_subtrees = edited_subtrees,
-  first_unsafe = first_unsafe,
-  ambiguous_message = ambiguous_message,
-  classify_identity = classify_identity,
-  build_actions = build_actions,
-  apply_snapshot = apply_snapshot,
-  filter_git_status_lines = filter_git_status_lines,
-  filter_git_diff_lines = filter_git_diff_lines,
-  is_dir_line = is_dir_line,
-  is_real_directory = is_real_directory,
-  hidden_descendant = hidden_descendant,
-  result_entry = result_entry,
-  current_row_record = current_row_record,
-  remove_expanded_subtree = remove_expanded_subtree,
-  collapse_single_entry_paths = collapse_single_entry_paths,
-  set_git_timeout_indicator = listing.set_git_timeout_indicator,
-})
+-- Attach sync methods together so Buffer's public implementation is easy to find.
+local sync = require('direct.buffer.sync')
+Buffer.sync = sync.sync
+Buffer.sync_async = sync.sync_async
 
 -- Opening and row-path operations are kept separate from listing and sync.
 require('direct.buffer.open')({

@@ -198,62 +198,11 @@ local children_integrity
 
 local Buffer = {}
 Buffer.__index = Buffer
+buffer_state.Buffer = Buffer
 
 -- Display rows are identified by extmarks rather than their spelling.  In
 -- particular, child rows are never interpreted as root-relative filenames.
 local function path_identity(path) return fs.path_identity(path, fs.stat(path)) end
-
-local function add_identity(index, identity, value)
-  if not identity then return end
-  local function add(bucket, key)
-    if not key then return end
-    local entry = bucket[key]
-    if not entry then
-      entry = { count = 0 }
-      bucket[key] = entry
-    end
-    entry.count = entry.count + 1
-    if entry.count == 1 then entry.only = value end
-    if entry.count > 1 then entry.only = nil end
-  end
-  add(index.by_path, identity.path)
-  if identity.inode then
-    add(index.by_inode, identity.inode)
-  else
-    add(index.unknown_by_path, identity.path)
-  end
-end
-
-local function matching_identity_values(index, identity)
-  if not identity then return nil, 0 end
-  if not identity.inode then
-    local entry = index.by_path[identity.path]
-    return entry and entry.only, entry and entry.count or 0
-  end
-  local inode = index.by_inode[identity.inode]
-  local unknown = index.unknown_by_path[identity.path]
-  local count = (inode and inode.count or 0) + (unknown and unknown.count or 0)
-  if count == 1 then return (inode and inode.only) or (unknown and unknown.only), count end
-  return nil, count
-end
-
-local function identity_is_duplicated(identity, counts)
-  if not identity then return false end
-  if identity.inode then
-    return (counts.by_inode[identity.inode] or 0) > 1 or (counts.unknown_by_path[identity.path] or 0) > 0
-  end
-  return (counts.by_path[identity.path] or 0) > 1
-end
-
-local function count_identity(counts, identity)
-  if not identity then return end
-  counts.by_path[identity.path] = (counts.by_path[identity.path] or 0) + 1
-  if identity.inode then
-    counts.by_inode[identity.inode] = (counts.by_inode[identity.inode] or 0) + 1
-  else
-    counts.unknown_by_path[identity.path] = (counts.unknown_by_path[identity.path] or 0) + 1
-  end
-end
 
 -- ---------------------------------------------------------------------------
 -- Small helpers
@@ -618,42 +567,22 @@ local collapse_single_entry_paths = require('direct.buffer.collapse')({
 })
 buffer_state.collapse_single_entry_paths = collapse_single_entry_paths
 
-require('direct.buffer.list')({
-  M = M,
-  Buffer = Buffer,
-  paths = paths,
-  fs = fs,
-  action_mod = action_mod,
-  ui = ui,
-  constants = constants,
-  states = states,
-  namespace = namespace,
-  next_id = next_id,
-  set_row_mark = set_row_mark,
-  row_ids_by_row = row_ids_by_row,
-  current_row_record = current_row_record,
-  row_path = row_path,
-  is_dir_line = is_dir_line,
-  indent_size = indent_size,
-  list_with_snapshot = list_with_snapshot,
-  filter_git_status_lines = filter_git_status_lines,
-  filter_git_diff_lines = filter_git_diff_lines,
+buffer_state.list_hooks = {
   merge_deleted_entries = merge_deleted_entries,
   hide_deleted_expansions = hide_deleted_expansions,
-  path_identity = path_identity,
-  add_identity = add_identity,
-  matching_identity_values = matching_identity_values,
-  identity_is_duplicated = identity_is_duplicated,
-  count_identity = count_identity,
-  set_directory_snapshot = set_directory_snapshot,
-  set_git_timeout_indicator = listing.set_git_timeout_indicator,
-  reconcile_undone_materialization = reconcile_undone_materialization,
   refresh_highlights = refresh_highlights,
   refresh_icons = refresh_icons,
   set_options = set_options,
   start_git_status = start_git_status,
-  collapse_single_entry_paths = collapse_single_entry_paths,
-})
+}
+buffer_state.list_parent = M
+
+-- Attach root listing and buffer methods in one visible place.
+local list = require('direct.buffer.list')
+M.restore = list.restore
+M.list = list.list
+Buffer.place_cursor = list.place_cursor
+Buffer.list = list.list_buffer
 
 function M.expand()
   if pending.refuse('expand', 'willRenameFiles') then return nil end

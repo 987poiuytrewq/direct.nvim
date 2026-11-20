@@ -96,6 +96,44 @@ H.describe('register', function()
     H.assert_eq(reg.content(), sorted_dst(sb, { source }), 'the copy updates the register')
   end)
 
+  H.it('async yank failure clears pending and discards the private snapshot exactly once', function()
+    local sb = H.sandbox()
+    local original = H.mkfile(sb.root, 'original.txt', { 'original' })
+    H.assert_true(reg.yank({ original }), 'seed the current register')
+    local previous_content = reg.content()
+    local entries_before = H.ls(register_dir(sb))
+    local tree = H.mkdir(sb.root, 'tree')
+    H.mkfile(tree, 'inside.txt', { 'inside' })
+
+    local finish_copy, private_snapshot
+    local callback_count, callback_ok, callback_err = 0, nil, nil
+    local restore = H.stub(fs, 'copy_tree_async', function(_, target, callback)
+      private_snapshot = vim.fs.dirname(target)
+      finish_copy = function() callback(false, nil, 'forced async copy failure') end
+      return true
+    end)
+    local started, start_err = reg.yank_async({ tree .. '/' }, function(ok, err)
+      callback_count = callback_count + 1
+      callback_ok, callback_err = ok, err
+    end)
+    restore()
+
+    H.assert_true(started == true, tostring(start_err))
+    H.assert_true(reg.pending.is_pending(), 'the background copy retains the pending guard')
+    H.assert_eq(reg.content(), previous_content, 'the register pointer is unchanged while copying')
+    H.assert_true(type(finish_copy) == 'function', 'the async copy started')
+
+    finish_copy()
+
+    H.assert_false(reg.pending.is_pending(), 'copy failure clears the pending guard')
+    H.assert_eq(callback_count, 1, 'the failure callback runs once')
+    H.assert_false(callback_ok, 'the failure callback reports failure')
+    H.assert_eq(callback_err, 'forced async copy failure', 'the copy error is passed to the callback')
+    H.assert_eq(reg.content(), previous_content, 'copy failure preserves the prior register')
+    H.assert_false(fs.exists(private_snapshot), 'copy failure removes the private snapshot')
+    H.assert_eq(H.ls(register_dir(sb)), entries_before, 'failed async copy leaves no snapshot directory behind')
+  end)
+
   H.it('does not replace a newer register after an asynchronous copy', function()
     local sb = H.sandbox()
     local original = H.mkfile(sb.root, 'original.txt', { 'original' })

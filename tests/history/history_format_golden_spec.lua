@@ -127,6 +127,41 @@ H.describe('v0.3.0 persisted-format goldens', function()
     end
   end)
 
+  H.it('refuses malformed, unsupported, and unknown transaction envelopes', function()
+    local function envelope(overrides)
+      local value = {
+        format = transaction.FORMAT,
+        version = transaction.VERSION,
+        kind = 'stacks',
+        undo = { transaction.HEADER },
+        redo = { transaction.HEADER },
+      }
+      for key, item in pairs(overrides or {}) do
+        value[key] = item
+      end
+      return vim.json.encode(value)
+    end
+
+    local cases = {
+      { label = 'invalid JSON', bytes = '{' },
+      { label = 'non-table JSON', bytes = 'null' },
+      { label = 'wrong format', bytes = envelope({ format = 'future-journal' }) },
+      { label = 'unsupported version', bytes = envelope({ version = transaction.VERSION + 1 }) },
+      { label = 'unknown kind', bytes = envelope({ kind = 'future-kind' }) },
+      { label = 'extra stack field', bytes = envelope({ extra = true }) },
+      { label = 'missing stack', bytes = vim.json.encode({
+        format = transaction.FORMAT,
+        version = transaction.VERSION,
+        kind = 'stacks',
+        undo = { transaction.HEADER },
+      }) },
+    }
+    for _, case in ipairs(cases) do
+      H.assert_nil(transaction.parse(case.bytes), case.label .. ' is refused')
+    end
+    H.assert_nil(transaction.parse(nil), 'a non-string input is refused without raising')
+  end)
+
   H.it('reads both old trash sidecars without changing their metadata', function()
     local sb = H.sandbox()
     local dir = vim.fs.joinpath(sb.data_home, 'direct/trash')

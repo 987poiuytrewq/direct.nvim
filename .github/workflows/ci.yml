@@ -158,6 +158,9 @@ jobs:
         env:
           COVERAGE_PLATFORM: ${{ runner.os }}-stable
 
+      - name: Enforce per-file coverage policy
+        run: python3 scripts/check_coverage.py --platform "${{ runner.os }}-stable"
+
       - name: Publish coverage report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -194,6 +197,16 @@ jobs:
         run: make ci
         env:
           COVERAGE_PLATFORM: Linux-nightly
+
+      - name: Publish per-file coverage table
+        if: always()
+        continue-on-error: true
+        run: |
+          if test -s coverage/summary.out; then
+            python3 scripts/check_coverage.py --report-only --platform Linux-nightly
+          else
+            echo '::warning::No coverage summary was generated for nightly.'
+          fi
 
       - name: Report nightly failures without blocking
         if: ${{ steps.setup_nightly.outcome == 'failure' || steps.test_nightly.outcome == 'failure' }}

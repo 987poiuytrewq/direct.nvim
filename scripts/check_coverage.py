@@ -273,11 +273,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="check that a baseline update does not lower floors or grow exceptions",
     )
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help="publish a lowest-first table without enforcing a baseline",
+    )
     parser.add_argument("--platform", default=os.environ.get("COVERAGE_PLATFORM", "local"))
     args = parser.parse_args(argv)
 
     try:
         policy = json.loads(args.baseline.read_text(encoding="utf-8"))
+        if args.check_baseline_only and args.report_only:
+            raise ValueError("--check-baseline-only and --report-only cannot be combined")
         if args.check_baseline_only:
             if args.previous_baseline is None:
                 raise ValueError("--check-baseline-only requires --previous-baseline")
@@ -293,13 +300,24 @@ def main(argv: list[str] | None = None) -> int:
         summary_text = args.summary.read_text(encoding="utf-8")
         root = Path(__file__).resolve().parents[1]
         source_files = tracked_source_files(root, policy.get("source_roots", []))
-        rows, errors, total = evaluate(
-            summary_text,
-            policy,
-            args.platform,
-            source_files,
-            root,
-        )
+        if args.report_only:
+            files, total = parse_summary(summary_text, root)
+            files = add_unreported_sources(files, source_files)
+            rows = [
+                (path, row, "informational")
+                for path, row in sorted(
+                    files.items(), key=lambda item: (float(item[1]["coverage"]), item[0])
+                )
+            ]
+            errors = []
+        else:
+            rows, errors, total = evaluate(
+                summary_text,
+                policy,
+                args.platform,
+                source_files,
+                root,
+            )
     except (OSError, json.JSONDecodeError, ValueError) as error:
         print(f"coverage policy error: {error}", file=sys.stderr)
         return 2

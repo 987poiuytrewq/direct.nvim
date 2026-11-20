@@ -158,6 +158,7 @@ def evaluate(
     try:
         floor = float(policy["file_floor"])
         total_floor = float(profile["total_floor"])
+        measured_total = float(profile["measured_total"])
     except (KeyError, TypeError, ValueError) as error:
         return [], [f"invalid coverage policy for platform {platform!r}: {error}"], total
 
@@ -213,6 +214,11 @@ def evaluate(
 
     if total < total_floor:
         errors.append(f"total coverage {total:.2f}% is below the {total_floor:.2f}% platform floor")
+    if total_floor >= measured_total:
+        errors.append(
+            f"{platform}: total floor {total_floor:.2f}% must be just below "
+            f"the recorded measurement {measured_total:.2f}%"
+        )
     return rows, errors, total
 
 
@@ -287,6 +293,19 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     report = markdown_table(rows, args.platform, total)
+    profile = policy.get("platforms", {}).get(args.platform)
+    if isinstance(profile, dict):
+        try:
+            total_floor = float(profile["total_floor"])
+            measured_total = float(profile["measured_total"])
+        except (KeyError, TypeError, ValueError):
+            pass
+        else:
+            report = report.replace(
+                f"Total: **{total:.2f}%**",
+                f"Total: **{total:.2f}%** (floor {total_floor:.2f}%; "
+                f"baseline {measured_total:.2f}%)",
+            )
     print(report, end="")
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:

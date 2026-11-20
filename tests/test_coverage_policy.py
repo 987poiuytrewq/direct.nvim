@@ -32,6 +32,7 @@ class CoveragePolicyTests(unittest.TestCase):
             "file_floor": 70.0,
             "platforms": {
                 "Linux": {
+                    "measured_total": 88.0,
                     "total_floor": 87.5,
                     "allowlist": {
                         "lua/direct/history/reverse.lua": 61.57,
@@ -83,6 +84,21 @@ class CoveragePolicyTests(unittest.TestCase):
         text = summary(("lua/direct/ok.lua", 90, 10, 90.0), total=87.4)
         _, errors, _ = evaluate(text, self.policy, "Linux")
         self.assertTrue(any("total coverage 87.40% is below the 87.50%" in error for error in errors))
+
+    def test_total_floor_must_be_below_its_recorded_measurement(self):
+        policy = {
+            "file_floor": 70.0,
+            "platforms": {
+                "Linux": {
+                    "measured_total": 87.5,
+                    "total_floor": 87.5,
+                    "allowlist": {},
+                },
+            },
+        }
+        text = summary(("lua/direct/ok.lua", 90, 10, 90.0), total=88.0)
+        _, errors, _ = evaluate(text, policy, "Linux")
+        self.assertTrue(any("must be just below the recorded measurement" in error for error in errors))
 
     def test_absolute_summary_paths_are_made_repo_relative(self):
         text = summary(("/checkout/lua/direct/ok.lua", 90, 10, 90.0))

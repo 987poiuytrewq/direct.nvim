@@ -186,7 +186,6 @@ local sync_plan = require('direct.buffer.sync_plan')({
 buffer_state.sync_plan = sync_plan
 M._component_reason = sync_plan.component_reason
 M._nested_path_reason = sync_plan.nested_path_reason
-local component_reason = sync_plan.component_reason
 local pending = require('direct.pending')
 M._pending_for_test = pending
 local pending_sync = buffer_state.pending_sync
@@ -233,21 +232,9 @@ end
 
 local function indent_size() return require('direct.config').options.indent_size end
 
-local tree_planner = require('direct.buffer.tree')({
-  fs = fs,
-  states = states,
-  namespace = namespace,
-  row_ids_by_row = row_ids_by_row,
-  set_row_mark = set_row_mark,
-  is_dir_line = is_dir_line,
-  strip_directory_marker = paths.strip_directory_marker,
-  component_reason = component_reason,
-  nested_path_reason = sync_plan.nested_path_reason,
-  entry_path = M.entry_path,
-  action_mod = action_mod,
-  indent_size = indent_size,
-})
-buffer_state.tree_plan = tree_planner
+-- Attach tree-integrity and edited-subtree planning methods.
+local tree_plan = require('direct.buffer.tree')
+buffer_state.tree_plan = tree_plan
 reconcile_undone_materialization = require('direct.buffer.undo_state')({
   states = states,
   namespace = namespace,

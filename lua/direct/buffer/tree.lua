@@ -1,20 +1,43 @@
 -- Parse materialized tree edits and produce validated filesystem action plans.
--- Dependencies are injected by buffer.lua to keep the stateful editor adapter out
--- of the tree planner.
-return function(deps)
-  local fs = deps.fs
-  local states = deps.states
-  local namespace = deps.namespace
-  local row_ids_by_row = deps.row_ids_by_row
-  local set_row_mark = deps.set_row_mark
-  local is_dir_line = deps.is_dir_line
-  local strip_directory_marker = deps.strip_directory_marker
-  local component_reason = deps.component_reason
-  local nested_path_reason = deps.nested_path_reason
-  local entry_path = deps.entry_path
-  local action_mod = deps.action_mod
-  local indent_size = deps.indent_size
 
+local M = {}
+
+local action_mod = require('direct.action.action')
+local buffer_state = require('direct.buffer.state')
+local fs = require('direct.fs')
+local paths = require('direct.paths')
+local rows = require('direct.buffer.rows')
+
+local states = buffer_state.states
+local namespace = buffer_state.namespace
+local row_ids_by_row = rows.row_ids_by_row
+local set_row_mark = rows.set_row_mark
+local is_dir_line = rows.is_dir_line
+local strip_directory_marker = paths.strip_directory_marker
+
+local function buffer_module()
+  local module = buffer_state.list_parent
+  assert(type(module) == 'table', 'buffer.tree parent is not attached')
+  return module
+end
+
+local function component_reason(...)
+  local plan = buffer_state.sync_plan
+  assert(type(plan) == 'table', 'buffer.tree sync plan is not attached')
+  return plan.component_reason(...)
+end
+
+local function nested_path_reason(...)
+  local plan = buffer_state.sync_plan
+  assert(type(plan) == 'table', 'buffer.tree sync plan is not attached')
+  return plan.nested_path_reason(...)
+end
+
+local function entry_path(root, line) return buffer_module().entry_path(root, line) end
+
+local function indent_size() return require('direct.config').options.indent_size end
+
+do
   local function children_integrity(bufnr, lines)
     local state = states[bufnr]
     if not state then return lines end
@@ -847,5 +870,8 @@ return function(deps)
       expanded_targets = expanded_targets,
     }
   end
-  return { children_integrity = children_integrity, edited_subtrees = edited_subtrees }
+  M.children_integrity = children_integrity
+  M.edited_subtrees = edited_subtrees
 end
+
+return M

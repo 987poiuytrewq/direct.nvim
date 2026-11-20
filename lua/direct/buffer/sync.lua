@@ -20,6 +20,7 @@ local sync_refusals = require('direct.buffer.sync_refusals')
 local states = buffer_state.states
 local namespace = buffer_state.namespace
 local pending_sync = buffer_state.pending_sync
+local previewing = {}
 
 -- These closures are assembled by buffer.lua because they own its deleted-row
 -- guard and undo reconciliation state. The methods remain standalone-loadable;
@@ -71,8 +72,25 @@ local function collapse_single_entry_paths(...) return buffer_state.collapse_sin
 local function refuse_sync(bufnr, reason, context, level)
   context = context or {}
   local code = context.code or sync_refusals.code_for_reason(reason)
+  if previewing[bufnr] then return nil, sync_refusals.format(code, context) end
   local message = sync_refusals.report(bufnr, code, context, level)
   return nil, message
+end
+
+local function mark_sync_modified(bufnr)
+  if not previewing[bufnr] then vim.bo[bufnr].modified = true end
+end
+
+local function remember_git_retry(directory_snapshot, retry_snapshot)
+  if retry_snapshot then
+    git.record_ignore_candidates(retry_snapshot, directory_snapshot.path, directory_snapshot.git_candidates or {})
+  end
+  directory_snapshot.git = nil
+  directory_snapshot.git_repo = retry_snapshot ~= nil
+  directory_snapshot.git_timeout = false
+  directory_snapshot.git_timeout_error = nil
+  directory_snapshot.git_unfiltered = retry_snapshot ~= nil
+  directory_snapshot.git_retry_snapshot = retry_snapshot
 end
 
 local function line_for_path(root, lines, path)
@@ -265,7 +283,7 @@ do
   end
 
   local function refuse_git_query(bufnr, err)
-    vim.bo[bufnr].modified = true
+    mark_sync_modified(bufnr)
     local message = tostring(err)
     local detail
     if git.is_timeout(err) then
@@ -288,12 +306,14 @@ do
     options = options or {}
     local bufnr = vim.api.nvim_get_current_buf()
     if not options.bypass_pending and pending.refuse('sync') then return refuse_busy(bufnr) end
-    restore_deleted_rows(bufnr)
-    reconcile_undone_materialization(bufnr)
+    if not options.preview then
+      restore_deleted_rows(bufnr)
+      reconcile_undone_materialization(bufnr)
+    end
     local state = states[bufnr]
     local snapshot = get_directory_snapshot(state, self.root)
     if not snapshot then
-      vim.bo[bufnr].modified = true
+      mark_sync_modified(bufnr)
       local reason = 'list-time filter snapshot is unavailable; re-list this directory'
       return refuse_sync(bufnr, reason)
     end
@@ -327,7 +347,7 @@ do
       end
     end
     local visible = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local actual = children_integrity(bufnr, visible)
+    local actual = children_integrity(bufnr, visible, options.preview)
     local child_err, child_refusal
     local subtree_edit
     if actual then
@@ -386,7 +406,7 @@ do
     if not actual then
       subtree_edit, child_err, child_refusal = edited_subtrees(bufnr, visible)
       if not subtree_edit then
-        vim.bo[bufnr].modified = true
+        mark_sync_modified(bufnr)
         return refuse_sync(bufnr, child_err, child_refusal)
       end
       actual = subtree_edit.root_lines
@@ -400,7 +420,7 @@ do
     end
     local filtered_expected, filter_err = apply_snapshot(self.root, expected, snapshot)
     if not filtered_expected then
-      vim.bo[bufnr].modified = true
+      mark_sync_modified(bufnr)
       local reason = 'Git ignore query failed: ' .. tostring(filter_err)
       return refuse_sync(bufnr, reason)
     end
@@ -418,7 +438,7 @@ do
         git_diff = state.git_diff_snapshot,
       })
       if not projected then
-        vim.bo[bufnr].modified = true
+        mark_sync_modified(bufnr)
         local reason = 'could not validate collapsed directory view: ' .. tostring(project_err)
         return refuse_sync(bufnr, reason)
       end
@@ -465,7 +485,7 @@ do
     local unsafe = first_unsafe(self.root, actual, nested_added, true)
       or first_unsafe(self.root, expected, expected_nested, false)
     if unsafe ~= nil then
-      vim.bo[bufnr].modified = true
+      mark_sync_modified(bufnr)
       local line = unsafe.line
       if subtree_edit then line = line_for_path(self.root, visible, unsafe.path) end
       return refuse_sync(bufnr, unsafe.reason, { line = line, path = unsafe.path })
@@ -499,7 +519,7 @@ do
       not subtree_edit and invalid_root_ids or nil
     )
     if not plan then
-      vim.bo[bufnr].modified = true
+      mark_sync_modified(bufnr)
       return refuse_sync(bufnr, identity_err, identity_refusal)
     end
     if plan.kind == 'AMBIGUOUS' then
@@ -509,7 +529,7 @@ do
 
     local actions, yanks, build_err, build_refusal = build_actions(self.root, plan)
     if not actions then
-      vim.bo[bufnr].modified = true
+      mark_sync_modified(bufnr)
       return refuse_with_path(bufnr, build_err, self.root, visible, build_refusal)
     end
     for _, retry in ipairs(timed_out_snapshots) do
@@ -524,22 +544,16 @@ do
           local reason = 'an entry changed by this save is Git-ignored: '
             .. ignored[1]
             .. '; re-list it or use gi to disable Git-ignore filtering'
-          vim.bo[bufnr].modified = true
+          mark_sync_modified(bufnr)
           return refuse_with_path(bufnr, reason, self.root, visible, { path = ignored[1] })
         end
-        git.record_ignore_candidates(retry_snapshot, directory_snapshot.path, directory_snapshot.git_candidates or {})
       else
         local unchanged, git_err = git.ignore_snapshot_matches(nil, directory_snapshot.path, checked_git)
         if unchanged ~= true then return refuse_git_query(bufnr, git_err) end
       end
-      directory_snapshot.git = nil
-      directory_snapshot.git_repo = retry_snapshot ~= nil
-      directory_snapshot.git_timeout = false
-      directory_snapshot.git_timeout_error = nil
-      directory_snapshot.git_unfiltered = retry_snapshot ~= nil
-      directory_snapshot.git_retry_snapshot = retry_snapshot
+      if not options.preview then remember_git_retry(directory_snapshot, retry_snapshot) end
     end
-    if #timed_out_snapshots > 0 then set_git_timeout_indicator(bufnr, state) end
+    if not options.preview and #timed_out_snapshots > 0 then set_git_timeout_indicator(bufnr, state) end
     local added_expand_paths, added_focus_path = {}, nil
     if #(plan.added or {}) > 0 then
       local added_set, expand_by_path = {}, {}
@@ -668,7 +682,7 @@ do
       for _, act in ipairs(actions) do
         if act.name == 'mv' or act.name == 'touch' or act.name == 'mkdir' then
           if fs.path_identity_index_contains(destination_index, act.dst) then
-            vim.bo[bufnr].modified = true
+            mark_sync_modified(bufnr)
             local reason = 'multiple subtree actions target the same path: ' .. act.dst
             return refuse_with_path(bufnr, reason, self.root, visible, { path = act.dst })
           end
@@ -676,7 +690,7 @@ do
         end
         local _, serialize_err = action_mod.serialize(act)
         if serialize_err then
-          vim.bo[bufnr].modified = true
+          mark_sync_modified(bufnr)
           return refuse_sync(bufnr, 'Unsafe action (' .. tostring(serialize_err) .. ')')
         end
       end
@@ -695,7 +709,7 @@ do
       if hidden_path or inspect_err then
         local reason = hidden_path and ('directory contains hidden entry: ' .. hidden_path)
           or ('cannot inspect directory descendants: ' .. tostring(inspect_err))
-        vim.bo[bufnr].modified = true
+        mark_sync_modified(bufnr)
         return refuse_sync(bufnr, reason, { path = hidden_path })
       end
     end
@@ -742,7 +756,7 @@ do
           end
         end
         if not may_reuse_source then
-          vim.bo[bufnr].modified = true
+          mark_sync_modified(bufnr)
           local reason = 'destination already exists: '
             .. destination
             .. '; choose another name or use :DirectList! to discard and redo the edit'
@@ -752,10 +766,12 @@ do
     end
 
     if options.expected_plan and not vim.deep_equal(sync_signature(actions, yanks), options.expected_plan) then
-      vim.bo[bufnr].modified = true
+      mark_sync_modified(bufnr)
       local reason = 'sync plan changed while waiting for LSP willRenameFiles; review and save again'
       return refuse_sync(bufnr, reason, nil, vim.log.levels.WARN)
     end
+
+    if options.preview then return { root = self.root, actions = actions, yanks = yanks } end
 
     -- Ask workspace clients before the first history, register, staging, or
     -- filesystem side effect. The callback re-enters the ordinary sync planner so
@@ -815,7 +831,7 @@ do
               return
             end
             if not ok then
-              vim.bo[bufnr].modified = true
+              mark_sync_modified(bufnr)
               ui.notify(
                 'direct: workspace rename failed; earlier server edits may already have applied: '
                   .. tostring(suppressed_or_err),
@@ -885,7 +901,7 @@ do
       end
       local preflight, preflight_err = history.preflight(inputs)
       if not preflight then
-        vim.bo[bufnr].modified = true
+        mark_sync_modified(bufnr)
         return refuse_sync(bufnr, 'history preflight failed: ' .. tostring(preflight_err))
       end
     end
@@ -1214,6 +1230,18 @@ do
       end
     end
     return synced, sync_err
+  end
+
+  function M.plan(self)
+    local bufnr = vim.api.nvim_get_current_buf()
+    local modified = vim.bo[bufnr].modified
+    local previous_preview = previewing[bufnr]
+    previewing[bufnr] = true
+    local called, plan, plan_err = xpcall(function() return sync_locked(self, { preview = true }) end, debug.traceback)
+    previewing[bufnr] = previous_preview
+    if vim.api.nvim_buf_is_valid(bufnr) then vim.bo[bufnr].modified = modified end
+    if not called then return nil, plan end
+    return plan, plan_err
   end
 
   function M.sync_async(self, callback)

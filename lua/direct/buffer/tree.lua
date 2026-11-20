@@ -39,6 +39,16 @@ local function indent_size() return require('direct.config').options.indent_size
 
 local function tree_refusal(reason, line, path) return nil, reason, { line = line, path = path } end
 
+local function finish_children_integrity(bufnr, lines, recovered_rows, preview)
+  if not preview then
+    for id, row in pairs(recovered_rows) do
+      local ok = pcall(set_row_mark, bufnr, row, id)
+      if not ok then return tree_refusal('child identity marks could not be restored safely', row) end
+    end
+  end
+  return lines
+end
+
 local function unique_text_line(lines, text)
   local found
   for row, line in ipairs(lines or {}) do
@@ -160,7 +170,7 @@ local function restore_missing_child_rows(bufnr, lines, state, expected_order, m
 end
 
 do
-  local function children_integrity(bufnr, lines)
+  local function children_integrity(bufnr, lines, preview)
     local state = states[bufnr]
     if not state then return lines end
     local seq_cur = vim.fn.undotree(bufnr).seq_cur
@@ -292,11 +302,7 @@ do
       local rec = id and state.rows[id]
       if (not rec or rec.kind ~= 'child') and not (rec and rec.deleted_kind) then root_lines[#root_lines + 1] = line end
     end
-    for id, row in pairs(recovered_rows) do
-      local ok = pcall(set_row_mark, bufnr, row, id)
-      if not ok then return tree_refusal('child identity marks could not be restored safely', row) end
-    end
-    return root_lines
+    return finish_children_integrity(bufnr, root_lines, recovered_rows, preview)
   end
 
   -- edited_subtrees(bufnr, lines) -> a per-expanded-directory action plan, or

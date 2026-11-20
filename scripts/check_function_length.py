@@ -11,15 +11,15 @@ LIMIT = 120
 # Current >120-line inventory on the A38 guard branch. Remove an entry when its
 # function is refactored; do not add new entries to make a failing function pass.
 ALLOWLIST = {
-    "lua/direct/buffer/sync.lua:local sync_locked@287": 910,
+    "lua/direct/buffer/sync.lua:local sync_locked@305": 908,
     "lua/direct/history/reverse.lua:local build@13": 678,
-    "lua/direct/buffer/tree.lua:local edited_subtrees@365": 580,
+    "lua/direct/buffer/tree.lua:local edited_subtrees@371": 580,
     "lua/direct/history/reverse.lua:M._reverse_async@220": 461,
     "lua/direct/buffer/list.lua:M.list_buffer@255": 321,
     "lua/direct/buffer/sync_plan.lua:local classify_identity@92": 228,
     "lua/direct/history/trash_refs.lua:<anonymous>@4": 267,
     "lua/direct/history/reverse.lua:<anonymous>@450": 223,
-    "lua/direct/buffer/tree.lua:local children_integrity@163": 138,
+    "lua/direct/buffer/tree.lua:local children_integrity@173": 134,
     "lua/direct/buffer/undo_state.lua:local reconcile_undone_materialization@323": 190,
     "lua/direct/buffer/sync_plan.lua:local build_actions@408": 177,
     "lua/direct/buffer/undo_state.lua:local restore_undone_collapse@151": 161,

@@ -60,6 +60,12 @@ M.BUFFER_MAPS = {
     description = 'Show active key mappings',
   },
   {
+    action = 'plan',
+    mode = 'n',
+    rhs = '<Cmd>DirectPlan<CR>',
+    description = 'Preview the filesystem actions for this save',
+  },
+  {
     action = 'open_parent_expanded',
     mode = 'n',
     lhs = 'z-',

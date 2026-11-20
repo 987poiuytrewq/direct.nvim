@@ -158,6 +158,13 @@ function M.sync(callback)
   return buffer.restore():sync()
 end
 
+function M.plan()
+  if not guard('DirectPlan') then return nil end
+  local listing = buffer.restore()
+  local plan, err = listing:plan()
+  return require('direct.plan_view').show(plan, err, listing.root)
+end
+
 function M.fold_all()
   if not guard('DirectFoldAll') then return nil end
   return require('direct.folding').collapse_all(buffer)

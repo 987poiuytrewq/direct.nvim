@@ -254,11 +254,7 @@ These are the defaults:
 ```lua
 require('direct').setup({
   map_default_keys = true,           -- install the mappings above
-  mappings = {                       -- per-action key override or false to disable
-    expand = 'o',
-    undo = '<leader>u',
-    toggle_hidden = false,
-  },
+  mappings = {},                      -- per-action key override or false to disable
   show_hidden = true,                -- show dotfiles (toggle with `gh`)
   respect_gitignore = true,          -- hide Git-ignored entries (toggle with `gi`)
   collapse_single_entry_directories = true, -- show `a/b/c/` chains as one row (toggle with `gC`)

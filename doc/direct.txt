@@ -631,6 +631,7 @@ Calling `setup()` is optional. These are the defaults:
       undo_confirm = 'elsewhere',
       history_limit = 1000,
       trash_retention = { max_age_days = 90 },
+      mappings = {},
       directory_separator = package.config:sub(1, 1),
       max_recursive_expand_depth = false,
       buffers = {
@@ -650,6 +651,7 @@ Calling `setup()` is optional. These are the defaults:
       },
       git = {
         enabled = true,
+        timeout_ms = 1000,
         ignore_timeout_ms = 200,
         show_symbols = true,
         show_deleted = true,
@@ -820,6 +822,7 @@ icons                   table
     The `deleted_*` icons are used for deleted tracked files
     (|direct.vim-git-deleted|).
 
+                                                          *direct-git*
                                                           *direct-git.enabled*
 git.enabled             boolean (default: `true`)
     Show Git status. Turning this off doesn't affect

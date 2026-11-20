@@ -3,7 +3,9 @@ local H = require('tests.support.harness')
 
 local function git(root, ...)
   local args = { 'git', '-C', root }
-  for _, arg in ipairs({ ... }) do args[#args + 1] = arg end
+  for _, arg in ipairs({ ... }) do
+    args[#args + 1] = arg
+  end
   local result = vim.system(args, { text = true }):wait()
   if result.code ~= 0 then error(result.stderr or 'git failed') end
   return (result.stdout or ''):gsub('[\r\n]+$', '')
@@ -15,9 +17,7 @@ local function init_repo(root)
   git(root, 'config', 'user.email', 'direct-test@example.invalid')
 end
 
-local function contains(lines, value)
-  return vim.tbl_contains(lines, value)
-end
+local function contains(lines, value) return vim.tbl_contains(lines, value) end
 
 local function count_message(text, needle)
   local count, start = 0, 1
@@ -36,10 +36,13 @@ end
 
 local function wait_git_status()
   local bufnr = vim.api.nvim_get_current_buf()
-  H.assert_true(vim.wait(5000, function()
-    local state = require('direct.buffer.buffer')._state_for_test(bufnr)
-    return state and not state.git_status_pending
-  end), 'background Git status completes')
+  H.assert_true(
+    vim.wait(5000, function()
+      local state = require('direct.buffer.buffer')._state_for_test(bufnr)
+      return state and not state.git_status_pending
+    end),
+    'background Git status completes'
+  )
 end
 
 H.describe('hidden and Git-ignore filtering', function()
@@ -67,8 +70,11 @@ H.describe('hidden and Git-ignore filtering', function()
     H.mkfile(root, 'visible', 'visible')
     local listing = require('direct').list(root)
     H.assert_true(contains(H.buf_lines(), '.hidden'), 'dotfile visible initially')
-    H.assert_eq(vim.fn.maparg('gh', 'n', false, true).rhs,
-      '<Cmd>DirectToggleHidden<CR>', 'gh is the plugin-owned toggle mapping')
+    H.assert_eq(
+      vim.fn.maparg('gh', 'n', false, true).rhs,
+      '<Cmd>DirectToggleHidden<CR>',
+      'gh is the plugin-owned toggle mapping'
+    )
 
     pcall(vim.cmd, 'DirectToggleHidden')
     H.assert_buf_eq({ 'visible' }, 0, 'toggle hides dotfiles')
@@ -81,11 +87,9 @@ H.describe('hidden and Git-ignore filtering', function()
     H.mkfile(child, 'child-visible', '')
     listing:list()
     listing:expand(row_of(H.buf_lines(), 'dir/'))
-    H.assert_true(contains(H.buf_lines(), '  .child-hidden'),
-      'expanded children share the view filter')
+    H.assert_true(contains(H.buf_lines(), '  .child-hidden'), 'expanded children share the view filter')
     pcall(vim.cmd, 'DirectToggleHidden')
-    H.assert_buf_eq({ 'dir/', 'visible' }, 0,
-      'toggle refreshes the root and collapses stale expanded children')
+    H.assert_buf_eq({ 'dir/', 'visible' }, 0, 'toggle refreshes the root and collapses stale expanded children')
 
     config.setup({ map_default_keys = false })
     H.assert_eq(vim.fn.maparg('gh', 'n'), '', 'opt-out clears gh')
@@ -108,8 +112,11 @@ H.describe('hidden and Git-ignore filtering', function()
 
     local listing = require('direct').list(root)
     H.assert_false(contains(H.buf_lines(), 'ignored.tmp'), 'ignored rows are filtered by default')
-    H.assert_eq(vim.fn.maparg('gi', 'n', false, true).rhs,
-      '<Cmd>DirectToggleGitIgnore<CR>', 'gi is the plugin-owned Git-ignore toggle')
+    H.assert_eq(
+      vim.fn.maparg('gi', 'n', false, true).rhs,
+      '<Cmd>DirectToggleGitIgnore<CR>',
+      'gi is the plugin-owned Git-ignore toggle'
+    )
     listing:expand(row_of(H.buf_lines(), 'dir/'))
     H.assert_false(contains(H.buf_lines(), '  ignored.tmp'), 'expanded children use Git rules')
 
@@ -156,8 +163,11 @@ H.describe('hidden and Git-ignore filtering', function()
     require('direct').list(root)
     wait_git_status()
     H.assert_true(contains(H.buf_lines(), 'clean.txt'), 'clean entries show normally')
-    H.assert_eq(vim.fn.maparg('gs', 'n', false, true).rhs,
-      '<Cmd>DirectToggleGitStatus<CR>', 'gs is the plugin-owned status-filter mapping')
+    H.assert_eq(
+      vim.fn.maparg('gs', 'n', false, true).rhs,
+      '<Cmd>DirectToggleGitStatus<CR>',
+      'gs is the plugin-owned status-filter mapping'
+    )
 
     pcall(vim.cmd, 'DirectToggleGitStatus')
     wait_git_status()
@@ -165,11 +175,9 @@ H.describe('hidden and Git-ignore filtering', function()
     H.assert_true(contains(filtered, 'changed-dir/'), 'changed descendant keeps its directory visible')
     H.assert_true(contains(filtered, 'changed.txt'), 'modified files are included')
     H.assert_true(contains(filtered, 'untracked.txt'), 'untracked files are included')
-    H.assert_true(contains(filtered, '  changed-child.txt'),
-      'gs expands changed directories automatically')
+    H.assert_true(contains(filtered, '  changed-child.txt'), 'gs expands changed directories automatically')
     H.assert_true(contains(filtered, '  nested/'), 'gs expands nested changed directories')
-    H.assert_true(contains(filtered, '    nested-change.txt'),
-      'gs recursively reveals changed descendants')
+    H.assert_true(contains(filtered, '    nested-change.txt'), 'gs recursively reveals changed descendants')
     H.assert_false(contains(filtered, 'clean.txt'), 'clean files are hidden')
     H.assert_false(contains(filtered, '  clean-child.txt'), 'clean children are hidden')
 
@@ -177,17 +185,20 @@ H.describe('hidden and Git-ignore filtering', function()
     wait_git_status()
     local restored = H.buf_lines()
     H.assert_true(contains(restored, 'clean.txt'), 'second toggle restores clean entries')
-    H.assert_false(contains(restored, '  changed-child.txt'),
-      'toggling rebuilds the root and collapses old expansions')
+    H.assert_false(contains(restored, '  changed-child.txt'), 'toggling rebuilds the root and collapses old expansions')
 
     pcall(vim.cmd, 'DirectGitStatus --dir ' .. vim.fn.fnameescape(root))
     wait_git_status()
     local direct_status = H.buf_lines()
-    H.assert_true(contains(direct_status, '    nested-change.txt'),
-      'DirectGitStatus enters the filtered view with all folds expanded')
+    H.assert_true(
+      contains(direct_status, '    nested-change.txt'),
+      'DirectGitStatus enters the filtered view with all folds expanded'
+    )
     pcall(vim.cmd, 'DirectGitStatus --dir ' .. vim.fn.fnameescape(root))
-    H.assert_false(contains(H.buf_lines(), 'clean.txt'),
-      'DirectGitStatus is idempotent rather than toggling the view off')
+    H.assert_false(
+      contains(H.buf_lines(), 'clean.txt'),
+      'DirectGitStatus is idempotent rather than toggling the view off'
+    )
   end)
 
   H.it('collapses directories by the entries visible in the Git-status-only view', function()
@@ -209,8 +220,11 @@ H.describe('hidden and Git-ignore filtering', function()
     pcall(vim.cmd, 'DirectToggleGitStatus')
     wait_git_status()
 
-    H.assert_buf_eq({ 'changed-dir/nested/', '  changed.txt' }, 0,
-      'gs counts visible directories when collapsing and reveals the changed file on expansion')
+    H.assert_buf_eq(
+      { 'changed-dir/nested/', '  changed.txt' },
+      0,
+      'gs counts visible directories when collapsing and reveals the changed file on expansion'
+    )
     config.setup({})
   end)
 
@@ -244,8 +258,7 @@ H.describe('hidden and Git-ignore filtering', function()
     require('direct').list(root)
 
     pcall(vim.cmd, 'DirectToggleGitStatus')
-    H.assert_false(contains(H.buf_lines(), 'ordinary.txt'),
-      'entries without a Git status are hidden')
+    H.assert_false(contains(H.buf_lines(), 'ordinary.txt'), 'entries without a Git status are hidden')
     pcall(vim.cmd, 'DirectToggleGitStatus')
     H.assert_true(contains(H.buf_lines(), 'ordinary.txt'), 'second toggle restores the listing')
 
@@ -296,8 +309,7 @@ H.describe('hidden and Git-ignore filtering', function()
     vim.bo[buf].modified = true
     H.capture_messages()
     pcall(vim.cmd, 'DirectToggleHidden')
-    H.assert_eq(vim.api.nvim_buf_get_lines(buf, 0, -1, false), before,
-      'unsaved text is preserved')
+    H.assert_eq(vim.api.nvim_buf_get_lines(buf, 0, -1, false), before, 'unsaved text is preserved')
     H.assert_true(vim.bo[buf].modified, 'modified remains set')
     H.assert_notified('unsaved edits', vim.log.levels.ERROR)
   end)
@@ -309,7 +321,11 @@ H.describe('hidden and Git-ignore filtering', function()
     local nested = H.mkdir(root, 'nested')
     local kept = H.mkdir(root, 'kept')
     H.mkfile(root, '.gitignore', {
-      '*.log', 'cache/', 'directory-only/', '!keep.log', '/anchored.tmp',
+      '*.log',
+      'cache/',
+      'directory-only/',
+      '!keep.log',
+      '/anchored.tmp',
       'literal\\ name.tmp',
     })
     H.mkfile(nested, '.gitignore', '*.cache')
@@ -335,23 +351,27 @@ H.describe('hidden and Git-ignore filtering', function()
     H.assert_false(contains(lines, 'anchored.tmp'), 'root-anchored pattern applies')
     H.assert_false(contains(lines, 'anchored.tmp'), 'nested paths are not root rows')
     H.assert_false(contains(lines, 'literal name.tmp'), 'escaped spaces use Git semantics')
-    H.assert_true(contains(lines, 'cache/'),
-      'directory with a tracked descendant remains visible')
-    H.assert_false(contains(lines, 'directory-only/'),
-      'directory-only Git patterns hide matching directories')
+    H.assert_true(contains(lines, 'cache/'), 'directory with a tracked descendant remains visible')
+    H.assert_false(contains(lines, 'directory-only/'), 'directory-only Git patterns hide matching directories')
     H.assert_true(contains(lines, 'kept/'), 'tracked descendants keep their directory')
     listing:expand(row_of(H.buf_lines(), 'nested/'))
     H.assert_false(contains(H.buf_lines(), '  ignored.cache'), 'nested .gitignore applies')
-    H.assert_true(contains(H.buf_lines(), '  anchored.tmp'),
-      'root anchoring does not match the same basename in a child directory')
+    H.assert_true(
+      contains(H.buf_lines(), '  anchored.tmp'),
+      'root anchoring does not match the same basename in a child directory'
+    )
     H.assert_true(contains(H.buf_lines(), '  visible.tmp'), 'nested file not matched stays visible')
     listing:expand(row_of(H.buf_lines(), 'cache/'))
     H.assert_false(contains(H.buf_lines(), '  ignored.txt'), 'ignored child stays hidden')
-    H.assert_true(contains(H.buf_lines(), '  tracked.txt'),
-      'tracked descendant remains visible under an ignored directory')
+    H.assert_true(
+      contains(H.buf_lines(), '  tracked.txt'),
+      'tracked descendant remains visible under an ignored directory'
+    )
     listing:expand(row_of(H.buf_lines(), 'kept/'))
-    H.assert_true(contains(H.buf_lines(), '  tracked.log'),
-      'tracked file remains visible even though its name matches ignore rules')
+    H.assert_true(
+      contains(H.buf_lines(), '  tracked.log'),
+      'tracked file remains visible even though its name matches ignore rules'
+    )
   end)
 
   H.it('leaves ignored paths visible when Git-ignore filtering is disabled', function()
@@ -371,14 +391,16 @@ H.describe('hidden and Git-ignore filtering', function()
     end
     require('direct').list(root)
     vim.system = original_system
-    H.assert_true(contains(H.buf_lines(), 'ignored.tmp'),
-      'Git ignore does not filter when disabled')
+    H.assert_true(contains(H.buf_lines(), 'ignored.tmp'), 'Git ignore does not filter when disabled')
     H.assert_eq(git_calls, 0, 'disabled Git-ignore filtering makes no Git calls')
   end)
 
   H.it('falls back to an unfiltered listing when Git-ignore queries time out', function()
-    require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, ignore_timeout_ms = 40 } })
+    require('direct.config').setup({
+      map_default_keys = false,
+      respect_gitignore = true,
+      git = { enabled = false, ignore_timeout_ms = 40 },
+    })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'timed-out-ignore-repo')
     H.mkfile(root, '.gitignore', '*.tmp\n')
@@ -408,21 +430,25 @@ H.describe('hidden and Git-ignore filtering', function()
     local elapsed_ms = (vim.uv.hrtime() - started) / 1000000
     H.assert_not_nil(listing, 'a Git-ignore timeout does not fail the listing')
     H.assert_true(elapsed_ms < 500, 'the Git-ignore timeout is bounded')
-    H.assert_true(contains(H.buf_lines(), 'ignored.tmp'),
-      'entries stay visible when filtering timed out')
+    H.assert_true(contains(H.buf_lines(), 'ignored.tmp'), 'entries stay visible when filtering timed out')
     H.assert_true(contains(H.buf_lines(), 'visible.txt'), 'ordinary entries remain visible')
-    H.assert_eq(timeout_values, { 40, 40, 40 },
-      'all ignore inventory processes receive the configured timeout')
+    H.assert_eq(timeout_values, { 40, 40, 40 }, 'all ignore inventory processes receive the configured timeout')
     H.assert_true(timed_out_queries > 0, 'the fake Git inventory reached its timeout')
     H.assert_notified('Git-ignore filtering timed out', vim.log.levels.WARN)
 
     local warnings = count_message(H.messages(), 'Git-ignore filtering timed out')
     require('direct').list(root, { discard = true })
-    H.assert_eq(count_message(H.messages(), 'Git-ignore filtering timed out'), warnings,
-      'repeated timeouts in one repository do not repeat the warning')
+    H.assert_eq(
+      count_message(H.messages(), 'Git-ignore filtering timed out'),
+      warnings,
+      'repeated timeouts in one repository do not repeat the warning'
+    )
     vim.system = original_system
-    require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, ignore_timeout_ms = 5000 } })
+    require('direct.config').setup({
+      map_default_keys = false,
+      respect_gitignore = true,
+      git = { enabled = false, ignore_timeout_ms = 5000 },
+    })
 
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new.txt' })
     local ok, err = listing:sync()
@@ -432,8 +458,11 @@ H.describe('hidden and Git-ignore filtering', function()
   end)
 
   H.it('retries a timed-out ignore snapshot when Git is available again', function()
-    require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, ignore_timeout_ms = 40 } })
+    require('direct.config').setup({
+      map_default_keys = false,
+      respect_gitignore = true,
+      git = { enabled = false, ignore_timeout_ms = 40 },
+    })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'recovering-ignore-repo')
     H.mkfile(root, '.gitignore', '*.tmp\n')
@@ -454,8 +483,11 @@ H.describe('hidden and Git-ignore filtering', function()
     end
     local listing = require('direct').list(root)
     vim.system = original_system
-    require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, ignore_timeout_ms = 5000 } })
+    require('direct.config').setup({
+      map_default_keys = false,
+      respect_gitignore = true,
+      git = { enabled = false, ignore_timeout_ms = 5000 },
+    })
     H.assert_not_nil(listing, 'initial timeout leaves a listing available')
     H.assert_true(vim.b.direct_gitignore_timed_out, 'unfiltered state is visibly marked')
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new.txt' })
@@ -467,8 +499,11 @@ H.describe('hidden and Git-ignore filtering', function()
   end)
 
   H.it('refuses a recovered save when an edited row would be Git-ignored', function()
-    require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, ignore_timeout_ms = 40 } })
+    require('direct.config').setup({
+      map_default_keys = false,
+      respect_gitignore = true,
+      git = { enabled = false, ignore_timeout_ms = 40 },
+    })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'edited-ignored-timeout-repo')
     H.mkfile(root, '.gitignore', '*.tmp\n')
@@ -490,8 +525,11 @@ H.describe('hidden and Git-ignore filtering', function()
     end
     local listing = require('direct').list(root)
     vim.system = original_system
-    require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, ignore_timeout_ms = 5000 } })
+    require('direct.config').setup({
+      map_default_keys = false,
+      respect_gitignore = true,
+      git = { enabled = false, ignore_timeout_ms = 5000 },
+    })
     H.assert_true(vim.b.direct_gitignore_timed_out, 'the initial listing is unfiltered')
 
     local row = row_of(H.buf_lines(), 'ignored.tmp')
@@ -502,16 +540,21 @@ H.describe('hidden and Git-ignore filtering', function()
     local ok, err = listing:sync()
 
     H.assert_nil(ok, 'an edit to an entry now known to be ignored is refused')
-    H.assert_true(tostring(err):find('ignored.tmp', 1, true) ~= nil,
-      'the refusal identifies the filtered entry: ' .. tostring(err))
+    H.assert_true(
+      tostring(err):find('ignored.tmp', 1, true) ~= nil,
+      'the refusal identifies the filtered entry: ' .. tostring(err)
+    )
     H.assert_true(H.exists(root, 'ignored.tmp'), 'the ignored source stays on disk')
     H.assert_false(H.exists(root, 'renamed.txt'), 'the rename does not run')
     H.assert_true(vim.bo.modified, 'the edit stays available')
   end)
 
   H.it('keeps a repeated timeout visible, refuses save, and lets gi disable the filter', function()
-    require('direct.config').setup({ map_default_keys = false, respect_gitignore = true,
-      git = { enabled = false, ignore_timeout_ms = 40 } })
+    require('direct.config').setup({
+      map_default_keys = false,
+      respect_gitignore = true,
+      git = { enabled = false, ignore_timeout_ms = 40 },
+    })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'persistent-timeout-ignore-repo')
     H.mkfile(root, '.gitignore', '*.tmp\n')
@@ -540,17 +583,22 @@ H.describe('hidden and Git-ignore filtering', function()
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new.txt' })
     local ok, err = listing:sync()
     vim.system = original_system
-    H.assert_true(timed_out_queries >= 9,
-      'initial lists and save retry reach the fake Git timeout; calls=' .. timed_out_queries)
+    H.assert_true(
+      timed_out_queries >= 9,
+      'initial lists and save retry reach the fake Git timeout; calls=' .. timed_out_queries
+    )
     H.assert_true(marked_after_second_list, 'a second timed-out listing stays marked')
-    H.assert_true(namespace ~= nil
-      and #vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, {}) > 0,
-      'the timeout state is visible in the buffer, not only in :messages')
-    H.assert_eq(count_message(H.messages(), 'Git-ignore filtering timed out'), warning_count,
-      'the repeated timeout is still visible after the one-time warning')
+    H.assert_true(
+      namespace ~= nil and #vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, {}) > 0,
+      'the timeout state is visible in the buffer, not only in :messages'
+    )
+    H.assert_eq(
+      count_message(H.messages(), 'Git-ignore filtering timed out'),
+      warning_count,
+      'the repeated timeout is still visible after the one-time warning'
+    )
     H.assert_nil(ok, 'sync refuses while the retry also times out')
-    H.assert_true(tostring(err):find('timed out', 1, true) ~= nil,
-      'the refusal identifies the repeated timeout')
+    H.assert_true(tostring(err):find('timed out', 1, true) ~= nil, 'the refusal identifies the repeated timeout')
     H.assert_notified('gi', vim.log.levels.ERROR)
 
     local toggled = require('direct').toggle_gitignore()
@@ -581,8 +629,10 @@ H.describe('hidden and Git-ignore filtering', function()
     local original_scandir = vim.uv.fs_scandir
     local entered_ignored = 0
     vim.uv.fs_scandir = function(path, ...)
-      if path:sub(1, #root + 1) == root .. '/' and
-        (path:find('/ignored-heavy', 1, true) or path:find('/untracked-heavy', 1, true)) then
+      if
+        path:sub(1, #root + 1) == root .. '/'
+        and (path:find('/ignored-heavy', 1, true) or path:find('/untracked-heavy', 1, true))
+      then
         entered_ignored = entered_ignored + 1
       end
       return original_scandir(path, ...)
@@ -642,8 +692,10 @@ H.describe('hidden and Git-ignore filtering', function()
 
     local listing = require('direct').list(root)
     listing:expand(row_of(H.buf_lines(), 'nested/'))
-    H.assert_true(contains(H.buf_lines(), '  keep.tmp'),
-      'the nested repository listing does not inherit the outer ignore rule')
+    H.assert_true(
+      contains(H.buf_lines(), '  keep.tmp'),
+      'the nested repository listing does not inherit the outer ignore rule'
+    )
   end)
 
   H.it('refuses sync after ignore rules change, then refreshes safely on re-list', function()
@@ -669,8 +721,7 @@ H.describe('hidden and Git-ignore filtering', function()
     H.assert_false(H.exists(root, 'new-file'), 'no filesystem action ran')
     H.assert_notified('ignore rules changed', vim.log.levels.ERROR)
 
-    H.assert_true(listing:list({ discard = true }),
-      'explicit discard re-lists and refreshes the filter snapshot')
+    H.assert_true(listing:list({ discard = true }), 'explicit discard re-lists and refreshes the filter snapshot')
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new-file' })
     H.assert_true(listing:sync(), 'sync succeeds against the refreshed snapshot')
     H.assert_true(H.exists(root, 'new-file'), 'the new visible addition is created')
@@ -698,18 +749,18 @@ H.describe('hidden and Git-ignore filtering', function()
   end)
 
   H.it('refuses sync when a directory becomes a Git repository after listing', function()
-    require('direct.config').setup({ map_default_keys = false,
-      respect_gitignore = true, show_hidden = false })
+    require('direct.config').setup({ map_default_keys = false, respect_gitignore = true, show_hidden = false })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'plain')
     H.mkfile(root, 'visible', 'preserve')
     local listing = require('direct').list(root)
     H.assert_buf_eq({ 'visible' }, 0, 'the outside-repository listing is unfiltered')
     local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
-    H.assert_true(state.directory_snapshots[1].respect_gitignore,
-      'the directory records that Git filtering was enabled')
-    H.assert_false(state.directory_snapshots[1].git_repo,
-      'the directory records that no repository was found')
+    H.assert_true(
+      state.directory_snapshots[1].respect_gitignore,
+      'the directory records that Git filtering was enabled'
+    )
+    H.assert_false(state.directory_snapshots[1].git_repo, 'the directory records that no repository was found')
 
     init_repo(root)
     H.mkfile(root, '.gitignore', 'secret/\n')
@@ -722,30 +773,29 @@ H.describe('hidden and Git-ignore filtering', function()
     local history = require('direct.history.history')
     local history_calls = 0
     local original_log = history.log
-    history.log = function(...) history_calls = history_calls + 1; return original_log(...) end
+    history.log = function(...)
+      history_calls = history_calls + 1
+      return original_log(...)
+    end
     H.capture_messages()
     local ok, reason = listing:sync()
     history.log = original_log
 
     H.assert_nil(ok, 'a new repository context refuses sync')
-    H.assert_true(tostring(reason):find('re-list', 1, true) ~= nil,
-      'the refusal asks for a fresh listing')
+    H.assert_true(tostring(reason):find('re-list', 1, true) ~= nil, 'the refusal asks for a fresh listing')
     H.assert_true(vim.bo.modified, 'the user edit remains pending')
     H.assert_eq(H.fs_snapshot(root), before, 'no filesystem changes occur')
     H.assert_eq(history_calls, 0, 'no history entries are written')
     H.assert_notified('re-list', vim.log.levels.ERROR)
-    H.assert_true(H.exists(root, 'secret/important.txt'),
-      'the newly ignored path is not used as a deletion source')
+    H.assert_true(H.exists(root, 'secret/important.txt'), 'the newly ignored path is not used as a deletion source')
 
-    H.assert_true(listing:list({ discard = true }),
-      'explicit discard re-lists and captures the new repository context')
+    H.assert_true(listing:list({ discard = true }), 'explicit discard re-lists and captures the new repository context')
     H.assert_buf_eq({ 'visible' }, 0, 'the Git-ignored directory is now filtered')
     vim.api.nvim_buf_set_lines(0, 0, -1, false, { '' })
     vim.bo.modified = true
     H.assert_true(listing:sync(), 'sync succeeds against the refreshed snapshot')
     H.assert_false(H.exists(root, 'visible'), 'the requested visible deletion is applied')
-    H.assert_true(H.exists(root, 'secret/important.txt'),
-      'the ignored directory remains untouched after re-list')
+    H.assert_true(H.exists(root, 'secret/important.txt'), 'the ignored directory remains untouched after re-list')
   end)
 
   H.it('detects repository removal and a changed repository root', function()
@@ -760,8 +810,7 @@ H.describe('hidden and Git-ignore filtering', function()
     init_repo(nested)
     local matches, err = git_api.ignore_snapshot_matches(parent_snapshot, nested)
     H.assert_false(matches, 'a newly-created nested repository changes the context')
-    H.assert_true(tostring(err):find('re-list', 1, true) ~= nil,
-      'the root change requires a fresh listing')
+    H.assert_true(tostring(err):find('re-list', 1, true) ~= nil, 'the root change requires a fresh listing')
 
     local standalone = H.mkdir(sb.root, 'standalone')
     init_repo(standalone)
@@ -769,8 +818,7 @@ H.describe('hidden and Git-ignore filtering', function()
     vim.fn.delete(standalone .. '/.git', 'rf')
     matches, err = git_api.ignore_snapshot_matches(standalone_snapshot, standalone)
     H.assert_false(matches, 'removing the repository changes the context')
-    H.assert_true(tostring(err):find('re-list', 1, true) ~= nil,
-      'the missing repository requires a fresh listing')
+    H.assert_true(tostring(err):find('re-list', 1, true) ~= nil, 'the missing repository requires a fresh listing')
   end)
 
   H.it('refuses sync when a newly tracked ignored path changes the index snapshot', function()
@@ -789,25 +837,27 @@ H.describe('hidden and Git-ignore filtering', function()
     local history = require('direct.history.history')
     local history_calls = 0
     local original_log = history.log
-    history.log = function(...) history_calls = history_calls + 1; return original_log(...) end
+    history.log = function(...)
+      history_calls = history_calls + 1
+      return original_log(...)
+    end
     H.capture_messages()
     local ok, reason = listing:sync()
     history.log = original_log
 
     H.assert_nil(ok, 'index membership change refuses sync')
-    H.assert_true(tostring(reason):find('ignore rules changed', 1, true) ~= nil,
-      'the refusal reports that the Git snapshot changed')
-    H.assert_eq(vim.fn.readfile(root .. '/new.log'), { 'must survive' },
-      'newly tracked file remains unchanged')
-    H.assert_eq(vim.fn.readfile(root .. '/visible'), { 'preserve' },
-      'unrelated visible file remains unchanged')
+    H.assert_true(
+      tostring(reason):find('ignore rules changed', 1, true) ~= nil,
+      'the refusal reports that the Git snapshot changed'
+    )
+    H.assert_eq(vim.fn.readfile(root .. '/new.log'), { 'must survive' }, 'newly tracked file remains unchanged')
+    H.assert_eq(vim.fn.readfile(root .. '/visible'), { 'preserve' }, 'unrelated visible file remains unchanged')
     H.assert_false(H.exists(root, 'unrelated-new-file'), 'no filesystem action ran')
     H.assert_eq(history_calls, 0, 'refusal occurs before history effects')
     H.assert_true(vim.bo.modified, 'the buffer edit remains pending')
     H.assert_notified('ignore rules changed', vim.log.levels.ERROR)
 
-    H.assert_true(listing:list({ discard = true }),
-      'explicit discard re-lists and accepts the updated index snapshot')
+    H.assert_true(listing:list({ discard = true }), 'explicit discard re-lists and accepts the updated index snapshot')
     H.assert_true(contains(H.buf_lines(), 'new.log'), 'tracked ignored file is now visible')
   end)
 
@@ -835,7 +885,10 @@ H.describe('hidden and Git-ignore filtering', function()
     local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
     local root_snapshot
     for _, snapshot in ipairs(state.directory_snapshots) do
-      if snapshot.path == root then root_snapshot = snapshot; break end
+      if snapshot.path == root then
+        root_snapshot = snapshot
+        break
+      end
     end
     H.assert_true(root_snapshot ~= nil, 'root Git snapshot is captured at list time')
 
@@ -843,27 +896,28 @@ H.describe('hidden and Git-ignore filtering', function()
     local index_queries = 0
     vim.system = function(command, ...)
       for _, arg in ipairs(command) do
-        if arg == 'ls-files' then index_queries = index_queries + 1; break end
+        if arg == 'ls-files' then
+          index_queries = index_queries + 1
+          break
+        end
       end
       return original_system(command, ...)
     end
-    local hidden, err = require('direct.buffer.listing').hidden_descendant(
-      outer, root_snapshot, state)
+    local hidden, err = require('direct.buffer.listing').hidden_descendant(outer, root_snapshot, state)
     vim.system = original_system
 
-    H.assert_eq(hidden, nested .. '/hidden.tmp',
-      'the nested repository uses its own ignore rules while being scanned')
-    H.assert_eq(index_queries, 2,
-      'the outer and nested repository each use one live ignored-path inventory')
+    H.assert_eq(hidden, nested .. '/hidden.tmp', 'the nested repository uses its own ignore rules while being scanned')
+    H.assert_eq(index_queries, 2, 'the outer and nested repository each use one live ignored-path inventory')
     H.assert_nil(err, 'the raw descendant scan completed without error')
 
     H.mkfile(nested, 'new.tmp', 'must survive')
     git(nested, 'add', '-f', 'new.tmp')
-    local matches, snapshot_err = require('direct.git').ignore_snapshot_matches(
-      root_snapshot.git)
+    local matches, snapshot_err = require('direct.git').ignore_snapshot_matches(root_snapshot.git)
     H.assert_false(matches, 'the parent snapshot validates nested-repo index membership')
-    H.assert_true(tostring(snapshot_err):find('ignore rules changed', 1, true) ~= nil,
-      'nested index change requires a fresh listing')
+    H.assert_true(
+      tostring(snapshot_err):find('ignore rules changed', 1, true) ~= nil,
+      'nested index change requires a fresh listing'
+    )
   end)
 
   H.it('snapshots info/exclude and configured global exclude sources', function()
@@ -888,8 +942,7 @@ H.describe('hidden and Git-ignore filtering', function()
     H.assert_notified('ignore rules changed', vim.log.levels.ERROR)
     H.assert_false(H.exists(root, 'new-file'), 'the failed sync performs no additions')
 
-    H.assert_true(listing:list({ discard = true }),
-      'explicit discard re-lists and accepts the changed global exclude')
+    H.assert_true(listing:list({ discard = true }), 'explicit discard re-lists and accepts the changed global exclude')
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new-file-2' })
     H.mkfile(root, '.git/info/exclude', 'other.tmp\n')
     H.capture_messages()
@@ -910,8 +963,7 @@ H.describe('hidden and Git-ignore filtering', function()
       H.mkfile(root, 'visible', 'preserve')
       init_repo(root)
       local listing = require('direct').list(root)
-      H.assert_false(contains(H.buf_lines(), 'hidden.tmp'),
-        'Git default global excludes hide the file')
+      H.assert_false(contains(H.buf_lines(), 'hidden.tmp'), 'Git default global excludes hide the file')
 
       H.mkfile(xdg, 'git/ignore', 'other.tmp\n')
       vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'added-after-change' })
@@ -919,7 +971,10 @@ H.describe('hidden and Git-ignore filtering', function()
       local history = require('direct.history.history')
       local history_calls = 0
       local original_log = history.log
-      history.log = function(...) history_calls = history_calls + 1; return original_log(...) end
+      history.log = function(...)
+        history_calls = history_calls + 1
+        return original_log(...)
+      end
       H.capture_messages()
       local ok = listing:sync()
       history.log = original_log
@@ -930,16 +985,19 @@ H.describe('hidden and Git-ignore filtering', function()
       H.assert_true(vim.bo.modified, 'the buffer edit remains pending')
       H.assert_notified('ignore rules changed', vim.log.levels.ERROR)
 
-      H.assert_true(listing:list({ discard = true }),
-        'explicit discard re-lists and accepts the changed default excludes')
-      H.assert_true(contains(H.buf_lines(), 'hidden.tmp'),
-        'the formerly ignored file is visible after re-list')
+      H.assert_true(
+        listing:list({ discard = true }),
+        'explicit discard re-lists and accepts the changed default excludes'
+      )
+      H.assert_true(contains(H.buf_lines(), 'hidden.tmp'), 'the formerly ignored file is visible after re-list')
       vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'added-after-relist' })
       H.assert_true(listing:sync(), 'sync succeeds against the new default excludes')
       H.assert_true(H.exists(root, 'added-after-relist'), 'new state can be applied')
     end)
-    H.assert_true(H.exists(sb.root, 'xdg/git/ignore'),
-      'the test used the default XDG excludes path: ' .. default_excludes)
+    H.assert_true(
+      H.exists(sb.root, 'xdg/git/ignore'),
+      'the test used the default XDG excludes path: ' .. default_excludes
+    )
   end)
 
   H.it('detects when a default global exclude changes path decisions', function()
@@ -953,8 +1011,10 @@ H.describe('hidden and Git-ignore filtering', function()
       H.mkfile(root, 'visible', 'preserve')
       init_repo(root)
       local listing = require('direct').list(root)
-      H.assert_true(contains(H.buf_lines(), 'newly-ignored.tmp'),
-        'missing default exclude file leaves the file visible')
+      H.assert_true(
+        contains(H.buf_lines(), 'newly-ignored.tmp'),
+        'missing default exclude file leaves the file visible'
+      )
 
       H.mkfile(home, '.config/git/ignore', 'newly-ignored.tmp\n')
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { '.git/', 'visible' })
@@ -964,13 +1024,10 @@ H.describe('hidden and Git-ignore filtering', function()
       H.assert_eq(H.fs_snapshot(root), before, 'the formerly visible file is not deleted')
       H.assert_notified('ignore rules changed', vim.log.levels.ERROR)
 
-      H.assert_true(listing:list({ discard = true }),
-        'explicit discard re-lists and captures the newly-created file')
-      H.assert_false(contains(H.buf_lines(), 'newly-ignored.tmp'),
-        'the new default rule now hides the file')
+      H.assert_true(listing:list({ discard = true }), 'explicit discard re-lists and captures the newly-created file')
+      H.assert_false(contains(H.buf_lines(), 'newly-ignored.tmp'), 'the new default rule now hides the file')
     end)
-    H.assert_true(vim.uv.fs_stat(default_home_excludes) ~= nil,
-      'the test used HOME/.config/git/ignore')
+    H.assert_true(vim.uv.fs_stat(default_home_excludes) ~= nil, 'the test used HOME/.config/git/ignore')
   end)
 
   H.it('validates effective global excludes for nested repositories', function()
@@ -988,8 +1045,10 @@ H.describe('hidden and Git-ignore filtering', function()
       init_repo(nested)
       local listing = require('direct').list(root)
       listing:expand(row_of(H.buf_lines(), 'nested/'))
-      H.assert_false(contains(H.buf_lines(), '  nested-hidden.tmp'),
-        'the default global excludes apply in a nested repository')
+      H.assert_false(
+        contains(H.buf_lines(), '  nested-hidden.tmp'),
+        'the default global excludes apply in a nested repository'
+      )
 
       H.mkfile(xdg, 'git/ignore', 'other.tmp\n')
       vim.api.nvim_buf_set_lines(0, -1, -1, false, { '  added' })
@@ -1014,8 +1073,7 @@ H.describe('hidden and Git-ignore filtering', function()
     H.assert_true(H.symlink(root, alias), 'repository alias symlink is created')
 
     local listing = require('direct').list(alias)
-    H.assert_false(contains(H.buf_lines(), 'hidden.tmp'),
-      'ignored file stays hidden when listed through the alias')
+    H.assert_false(contains(H.buf_lines(), 'hidden.tmp'), 'ignored file stays hidden when listed through the alias')
     H.mkfile(root, '.gitignore', 'other.tmp\n')
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'added-through-alias' })
     local before = H.fs_snapshot(root)
@@ -1025,16 +1083,12 @@ H.describe('hidden and Git-ignore filtering', function()
     H.assert_true(vim.bo.modified, 'the alias listing edit remains pending')
     H.assert_notified('ignore rules changed', vim.log.levels.ERROR)
 
-    H.assert_true(listing:list({ discard = true }),
-      'explicit discard re-lists through the alias safely')
-    H.assert_true(contains(H.buf_lines(), 'hidden.tmp'),
-      'the formerly ignored entry is visible through the alias')
+    H.assert_true(listing:list({ discard = true }), 'explicit discard re-lists through the alias safely')
+    H.assert_true(contains(H.buf_lines(), 'hidden.tmp'), 'the formerly ignored entry is visible through the alias')
   end)
 
   H.it('matches a literal backslash filename in Git ignore rules on POSIX', function()
-    if H.is_windows() then
-      H.skip('backslashes are path separators on Windows, not literal filename bytes')
-    end
+    if H.is_windows() then H.skip('backslashes are path separators on Windows, not literal filename bytes') end
     require('direct.config').setup({ map_default_keys = false, respect_gitignore = true })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'backslash-repo')
@@ -1044,13 +1098,14 @@ H.describe('hidden and Git-ignore filtering', function()
     init_repo(root)
 
     require('direct').list(root)
-    H.assert_false(contains(H.buf_lines(), 'literal\\name.tmp'),
-      'POSIX backslash filename is matched as a literal Git path character')
+    H.assert_false(
+      contains(H.buf_lines(), 'literal\\name.tmp'),
+      'POSIX backslash filename is matched as a literal Git path character'
+    )
   end)
 
   H.it('keeps dot-hidden, Git-ignore, and wildignore filtering independent', function()
-    require('direct.config').setup({ map_default_keys = false,
-      respect_gitignore = true, show_hidden = false })
+    require('direct.config').setup({ map_default_keys = false, respect_gitignore = true, show_hidden = false })
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'repo')
     H.mkfile(root, '.gitignore', 'git-only\n')
@@ -1058,9 +1113,7 @@ H.describe('hidden and Git-ignore filtering', function()
     H.mkfile(root, 'git-only', '')
     H.mkfile(root, 'wild-only', '')
     init_repo(root)
-    H.with_option('wildignore', 'wild-only', function()
-      require('direct').list(root)
-    end)
+    H.with_option('wildignore', 'wild-only', function() require('direct').list(root) end)
     H.assert_buf_eq({ '' }, 0, 'the enabled filters form a union')
   end)
 
@@ -1124,7 +1177,9 @@ H.describe('hidden and Git-ignore filtering', function()
     require('direct').list(root)
     restore()
     H.assert_notified('forced ls-files failure', vim.log.levels.ERROR)
-    H.assert_false(contains(H.buf_lines(), 'hidden.tmp'),
-      'failed listing does not replace the previous buffer with unverifiable rows')
+    H.assert_false(
+      contains(H.buf_lines(), 'hidden.tmp'),
+      'failed listing does not replace the previous buffer with unverifiable rows'
+    )
   end)
 end)

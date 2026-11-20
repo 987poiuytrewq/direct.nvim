@@ -84,20 +84,25 @@ H.describe('fs', function()
     fs.rename_async(src, dst, function(ok, value, err)
       finished, result, move_err = true, ok and value or nil, err
     end, function(stage, copied)
-      if stage == 'copying' then progress_count = progress_count + 1
-      elseif type(stage) == 'number' then progress_count = progress_count + 1 end
+      if stage == 'copying' then
+        progress_count = progress_count + 1
+      elseif type(stage) == 'number' then
+        progress_count = progress_count + 1
+      end
     end)
     fs.rename_noreplace = original_rename
 
     H.assert_false(finished, 'cross-device tree copying returns before completion')
-    H.assert_true(vim.wait(5000, function() return finished end),
-      'the asynchronous directory move completes')
+    H.assert_true(vim.wait(5000, function() return finished end), 'the asynchronous directory move completes')
     H.assert_true(result == true, 'move succeeds: ' .. tostring(move_err))
     H.assert_true(injected, 'the cross-device branch was exercised')
     H.assert_true(progress_count > 0, 'copy progress was reported')
     H.assert_false(fs.exists(src), 'the verified source tree is removed')
-    H.assert_fs_eq(dst, { 'nested/', 'nested/first.txt', 'second.txt' },
-      'the complete directory tree is copied to the destination')
+    H.assert_fs_eq(
+      dst,
+      { 'nested/', 'nested/first.txt', 'second.txt' },
+      'the complete directory tree is copied to the destination'
+    )
   end)
 
   H.it('same_path is ino+dev for two spellings of a symlinked prefix', function()
@@ -110,10 +115,8 @@ H.describe('fs', function()
     local through_link = link .. '/sub/x.txt'
     local direct = sb.root .. '/outer/sub/x.txt'
     H.assert_true(through_link ~= direct, 'the two spellings differ as strings')
-    H.assert_true(fs.same_path(through_link, direct),
-      'same_path is true despite the different spelling')
-    H.assert_true(fs.same_path(link .. '/sub', sb.root .. '/outer/sub'),
-      'same_path works for directories too')
+    H.assert_true(fs.same_path(through_link, direct), 'same_path is true despite the different spelling')
+    H.assert_true(fs.same_path(link .. '/sub', sb.root .. '/outer/sub'), 'same_path works for directories too')
   end)
 
   H.it('same_path falls back to normalized names when either stat fails', function()
@@ -123,9 +126,7 @@ H.describe('fs', function()
     local original_stat = vim.uv.fs_stat
     vim.uv.fs_stat = function(path, ...)
       local normalized = vim.fs.normalize(path)
-      if normalized == sb.root .. '/one.txt' or normalized == sb.root .. '/two.txt' then
-        return nil, 'EACCES'
-      end
+      if normalized == sb.root .. '/one.txt' or normalized == sb.root .. '/two.txt' then return nil, 'EACCES' end
       return original_stat(path, ...)
     end
     local same = fs.same_path(sb.root .. '/one.txt', sb.root .. '/./one.txt')
@@ -140,21 +141,18 @@ H.describe('fs', function()
     local sb = H.sandbox()
     local target = H.mkfile(sb.root, 'target.txt', '')
     local alias = sb.root .. '/alias.txt'
-    if not H.symlink(target, alias) then
-      H.skip('symbolic links are unavailable on this filesystem')
-    end
+    if not H.symlink(target, alias) then H.skip('symbolic links are unavailable on this filesystem') end
 
     local index = fs.path_identity_index({ target })
-    H.assert_true(fs.path_identity_index_contains(index, alias),
-      'filesystem aliases match through device/inode identity')
-    H.assert_false(fs.path_identity_index_contains(index, sb.root .. '/missing.txt'),
-      'a distinct path does not match')
+    H.assert_true(
+      fs.path_identity_index_contains(index, alias),
+      'filesystem aliases match through device/inode identity'
+    )
+    H.assert_false(fs.path_identity_index_contains(index, sb.root .. '/missing.txt'), 'a distinct path does not match')
 
     local original_stat = vim.uv.fs_stat
     vim.uv.fs_stat = function(path, ...)
-      if vim.fs.normalize(path) == vim.fs.normalize(target) then
-        return nil, 'EACCES'
-      end
+      if vim.fs.normalize(path) == vim.fs.normalize(target) then return nil, 'EACCES' end
       return original_stat(path, ...)
     end
     local unknown_index = fs.path_identity_index({ target })
@@ -186,8 +184,7 @@ H.describe('fs', function()
     end
     vim.uv.fs_stat = original_stat
     H.assert_true(all_found, 'every indexed path is found')
-    H.assert_true(stat_calls <= #paths * 2,
-      'index build and lookup use O(N) stats, got ' .. stat_calls)
+    H.assert_true(stat_calls <= #paths * 2, 'index build and lookup use O(N) stats, got ' .. stat_calls)
   end)
 
   H.it('treats missing or zero device/inode values as unknown identity', function()
@@ -227,9 +224,11 @@ H.describe('fs', function()
     H.symlink(root .. '/a.txt', root .. '/linkfile')
     H.symlink(root .. '/missing', root .. '/broken')
 
-    H.assert_eq(fs.read_dir_lines(root),
+    H.assert_eq(
+      fs.read_dir_lines(root),
       { 'adir/', 'linkdir/', 'zdir/', 'a.txt', 'b.txt', 'linkfile' },
-      'dirs first (trailing /), then files; links resolved; broken omitted')
+      'dirs first (trailing /), then files; links resolved; broken omitted'
+    )
 
     local scan = vim.uv.fs_scandir(root)
     local entries = {}
@@ -238,14 +237,18 @@ H.describe('fs', function()
       if name == nil then break end
       entries[#entries + 1] = { name = name, type = kind }
     end
-    H.assert_eq(fs.read_dir_lines(root, nil, entries),
+    H.assert_eq(
+      fs.read_dir_lines(root, nil, entries),
       { 'adir/', 'linkdir/', 'zdir/', 'a.txt', 'b.txt', 'linkfile' },
-      'a pre-scanned entry list gives the same filtered and sorted result')
+      'a pre-scanned entry list gives the same filtered and sorted result'
+    )
 
     -- wildignore ignore_set: an entry is dropped when same_path matches.
-    H.assert_eq(fs.read_dir_lines(root, { root .. '/b.txt' }),
+    H.assert_eq(
+      fs.read_dir_lines(root, { root .. '/b.txt' }),
       { 'adir/', 'linkdir/', 'zdir/', 'a.txt', 'linkfile' },
-      'ignore_set entries are dropped')
+      'ignore_set entries are dropped'
+    )
   end)
 
   H.it('rename falls back through an exclusive temp on EXDEV and removes the source', function()
@@ -254,9 +257,7 @@ H.describe('fs', function()
     H.mkfile(sb.root, 'src.txt', { 'payload' })
     local real = fs.rename_noreplace
     local restore = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == src and to == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if from == src and to == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       return real(from, to)
     end)
     local ok, err = fs.rename(src, dst)
@@ -275,9 +276,7 @@ H.describe('fs', function()
     local real_rename, real_copy = fs.rename_noreplace, fs.copy_file_exclusive
     local collision, injected = nil, false
     local restore_rename = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == src and to == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if from == src and to == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       return real_rename(from, to)
     end)
     local restore_copy = H.stub(fs, 'copy_file_exclusive', function(from, to)
@@ -295,8 +294,7 @@ H.describe('fs', function()
 
     H.assert_true(ok == true, 'EXDEV retries a fresh exclusive temp: ' .. tostring(err))
     H.assert_true(injected, 'the first temp name collided')
-    H.assert_eq(vim.fn.readfile(collision), { 'FOREIGN TEMP' },
-      'the pre-existing temp is not cleaned up')
+    H.assert_eq(vim.fn.readfile(collision), { 'FOREIGN TEMP' }, 'the pre-existing temp is not cleaned up')
     H.assert_false(fs.exists(src), 'source removed after commit')
     H.assert_eq(vim.fn.readfile(dst), { 'payload' }, 'destination committed')
   end)
@@ -307,9 +305,7 @@ H.describe('fs', function()
     H.mkfile(sb.root, 'src.txt', { 'SOURCE' })
     local real = fs.rename_noreplace
     local restore_rename = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == src and to == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if from == src and to == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       return real(from, to)
     end)
     local restore_copy = H.stub(fs, 'copy_file_exclusive', function(from, to)
@@ -325,8 +321,7 @@ H.describe('fs', function()
     H.assert_eq(err, 'forced partial copy failure', 'copy error propagates')
     H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, 'source is untouched')
     H.assert_nil(vim.uv.fs_lstat(dst), 'destination is not committed')
-    H.assert_eq(vim.fn.glob(sb.root .. '/.direct-move-file-*'), '',
-      'the operation removes its own partial temp')
+    H.assert_eq(vim.fn.glob(sb.root .. '/.direct-move-file-*'), '', 'the operation removes its own partial temp')
   end)
 
   H.it('exclusive tree temp-directory collisions retry without deleting the occupant', function()
@@ -351,8 +346,11 @@ H.describe('fs', function()
 
     H.assert_true(ok == true, 'exclusive copy retried a unique temp: ' .. tostring(err))
     H.assert_true(injected, 'the first private temp name collided')
-    H.assert_eq(vim.fn.readfile(collision .. '/foreign.txt'), { 'FOREIGN' },
-      'pre-existing temp directory remains untouched')
+    H.assert_eq(
+      vim.fn.readfile(collision .. '/foreign.txt'),
+      { 'FOREIGN' },
+      'pre-existing temp directory remains untouched'
+    )
     H.assert_fs_eq(dst, { 'payload.txt' }, 'copy committed to the requested destination')
   end)
 
@@ -363,11 +361,8 @@ H.describe('fs', function()
     local real = fs.rename_noreplace
     local commit_raced = false
     local restore = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == src and to == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
-      if to == dst and from:find('/.direct-move-file-', 1, true)
-        and not commit_raced then
+      if from == src and to == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
+      if to == dst and from:find('/.direct-move-file-', 1, true) and not commit_raced then
         commit_raced = true
         H.mkfile(sb.root, 'dst.txt', { 'FOREIGN' })
       end
@@ -382,8 +377,7 @@ H.describe('fs', function()
     H.assert_true(tostring(err):find('destination exists', 1, true) ~= nil, tostring(err))
     H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, 'source remains unchanged')
     H.assert_eq(vim.fn.readfile(dst), { 'FOREIGN' }, 'raced destination is unchanged')
-    H.assert_eq(vim.fn.glob(sb.root .. '/.direct-move-file-*'), '',
-      'the operation temp is cleaned')
+    H.assert_eq(vim.fn.glob(sb.root .. '/.direct-move-file-*'), '', 'the operation temp is cleaned')
   end)
 
   H.it('EXDEV reports both paths and treats a committed copy as completed if source removal fails', function()
@@ -392,14 +386,11 @@ H.describe('fs', function()
     H.mkfile(sb.root, 'src.txt', { 'PAYLOAD' })
     local real_rename, real_remove = fs.rename_noreplace, fs.rm_file
     local restore_rename = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == src and to == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if from == src and to == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       return real_rename(from, to)
     end)
     local restore_remove = H.stub(fs, 'rm_file', function(path)
-      if path:find('/.direct-exdev-source-', 1, true)
-        and path:sub(-#'/source') == '/source' then
+      if path:find('/.direct-exdev-source-', 1, true) and path:sub(-#'/source') == '/source' then
         return nil, 'forced source remove failure'
       end
       return real_remove(path)
@@ -423,9 +414,7 @@ H.describe('fs', function()
     local inode = H.inode_of(src)
     local real_rename, real_copy = fs.rename_noreplace, fs.copy_file_exclusive
     local restore_rename = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == src and to == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if from == src and to == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       return real_rename(from, to)
     end)
     local changed = false
@@ -443,8 +432,7 @@ H.describe('fs', function()
     restore_rename()
 
     H.assert_nil(ok, 'changed source aborts before destination commit')
-    H.assert_true(type(err) == 'string' and err:find('changed before placement', 1, true) ~= nil,
-      tostring(err))
+    H.assert_true(type(err) == 'string' and err:find('changed before placement', 1, true) ~= nil, tostring(err))
     H.assert_true(changed, 'source was modified after its bytes were copied')
     H.assert_eq(H.inode_of(src), inode, 'the source was modified in place')
     H.assert_eq(vim.fn.readfile(src), { 'NEW SOURCE' }, 'new source bytes are preserved')
@@ -459,9 +447,7 @@ H.describe('fs', function()
     local real = fs.rename_noreplace
     local changed = false
     local restore = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == src and to == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if from == src and to == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       if to == dst and from:find('/payload$', 1) and not changed then
         changed = true
         H.mkfile(src, 'late.txt', { 'NEW' })
@@ -474,10 +460,8 @@ H.describe('fs', function()
 
     H.assert_true(ok == true, 'the completed copy is recorded as a destination')
     H.assert_true(changed, 'source changed after its tree was copied')
-    H.assert_eq(vim.fn.readfile(src .. '/late.txt'), { 'NEW' },
-      'late source entry is preserved')
-    H.assert_eq(vim.fn.readfile(dst .. '/original.txt'), { 'ORIGINAL' },
-      'destination contains the copied snapshot')
+    H.assert_eq(vim.fn.readfile(src .. '/late.txt'), { 'NEW' }, 'late source entry is preserved')
+    H.assert_eq(vim.fn.readfile(dst .. '/original.txt'), { 'ORIGINAL' }, 'destination contains the copied snapshot')
     H.assert_nil(vim.uv.fs_stat(dst .. '/late.txt'), 'late entry was not silently lost')
     H.assert_notified(src, vim.log.levels.ERROR)
     H.assert_notified(dst, vim.log.levels.ERROR)
@@ -493,9 +477,7 @@ H.describe('fs', function()
     local dst = sb.root .. '/moved-pipe'
     local real = fs.rename_noreplace
     local restore_rename = H.stub(fs, 'rename_noreplace', function(src, target)
-      if src == fifo and target == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if src == fifo and target == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       return real(src, target)
     end)
     local copies = 0
@@ -523,9 +505,7 @@ H.describe('fs', function()
     H.assert_true(H.symlink(target, src) == true, 'source symlink created')
     local real = fs.rename_noreplace
     local restore = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == src and to == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if from == src and to == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       return real(from, to)
     end)
 
@@ -536,18 +516,18 @@ H.describe('fs', function()
     H.assert_nil(vim.uv.fs_lstat(src), 'source link removed')
     H.assert_eq(vim.uv.fs_readlink(dst), target, 'link target text is recreated')
     H.assert_true(fs.is_dir(dst), 'the directory symlink retains its target kind')
-    H.assert_eq(vim.fn.readfile(dst .. '/target.txt'), { 'TARGET' },
-      'the link resolves to the unchanged target contents')
-    H.assert_eq(vim.fn.readfile(target .. '/target.txt'), { 'TARGET' },
-      'target bytes remain unchanged')
+    H.assert_eq(
+      vim.fn.readfile(dst .. '/target.txt'),
+      { 'TARGET' },
+      'the link resolves to the unchanged target contents'
+    )
+    H.assert_eq(vim.fn.readfile(target .. '/target.txt'), { 'TARGET' }, 'target bytes remain unchanged')
   end)
 
   H.it('a non-EXDEV rename error propagates and leaves the source intact', function()
     local sb = H.sandbox()
     H.mkfile(sb.root, 'src.txt', { 'payload' })
-    local restore = H.stub(fs, 'rename_noreplace', function()
-      return nil, 'EACCES: permission denied', 'EACCES'
-    end)
+    local restore = H.stub(fs, 'rename_noreplace', function() return nil, 'EACCES: permission denied', 'EACCES' end)
     local ok, err = fs.rename(sb.root .. '/src.txt', sb.root .. '/dst.txt')
     restore()
 
@@ -584,11 +564,9 @@ H.describe('fs', function()
     H.mkfile(sb.root, 'second.txt', { 'SECOND' })
     local occupied, occupied_err = fs.rename_noreplace(sb.root .. '/second.txt', dst)
     H.assert_nil(occupied, 'occupied target refuses the move')
-    H.assert_true(tostring(occupied_err):find('destination exists', 1, true) ~= nil,
-      tostring(occupied_err))
+    H.assert_true(tostring(occupied_err):find('destination exists', 1, true) ~= nil, tostring(occupied_err))
     H.assert_eq(vim.fn.readfile(dst), { 'SOURCE' }, 'existing destination is unchanged')
-    H.assert_eq(vim.fn.readfile(sb.root .. '/second.txt'), { 'SECOND' },
-      'second source is unchanged')
+    H.assert_eq(vim.fn.readfile(sb.root .. '/second.txt'), { 'SECOND' }, 'second source is unchanged')
   end)
 
   H.it('rename_noreplace fails closed on unsupported platforms', function()
@@ -607,8 +585,7 @@ H.describe('fs', function()
       local ok, err = fs.rename_noreplace(src, dst)
       restore()
       H.assert_nil(ok, 'unsupported primitive refuses to guess on ' .. sysname)
-      H.assert_true(tostring(err):find('safe no-replace renames', 1, true) ~= nil,
-        sysname .. ': ' .. tostring(err))
+      H.assert_true(tostring(err):find('safe no-replace renames', 1, true) ~= nil, sysname .. ': ' .. tostring(err))
       H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, sysname .. ' preserves the source')
       H.assert_nil(vim.uv.fs_lstat(dst), sysname .. ' leaves the destination absent')
     end
@@ -621,12 +598,8 @@ H.describe('fs', function()
     local sb = H.sandbox()
     local src, dst = sb.root .. '/src.txt', sb.root .. '/dst.txt'
     H.mkfile(sb.root, 'src.txt', { 'SOURCE' })
-    local restore_classifier = H.stub(platform, 'is_unsupported_rename_errno', function(code)
-      return code == 22
-    end)
-    local restore = H.stub(platform, 'rename_noreplace', function()
-      return nil, 'Invalid argument', 22
-    end)
+    local restore_classifier = H.stub(platform, 'is_unsupported_rename_errno', function(code) return code == 22 end)
+    local restore = H.stub(platform, 'rename_noreplace', function() return nil, 'Invalid argument', 22 end)
 
     local ok, err = fs.rename_noreplace(src, dst)
 
@@ -634,29 +607,48 @@ H.describe('fs', function()
     restore_classifier()
     fs._reset_rename_capability_cache()
     H.assert_nil(ok, 'unsupported operation is refused')
-    H.assert_true(tostring(err):find('safe no-replace renames', 1, true) ~= nil,
-      'error explains the unavailable safety capability: ' .. tostring(err))
-    H.assert_true(tostring(err):find(':help direct.vim-data', 1, true) ~= nil,
-      'error points to filesystem documentation: ' .. tostring(err))
+    H.assert_true(
+      tostring(err):find('safe no-replace renames', 1, true) ~= nil,
+      'error explains the unavailable safety capability: ' .. tostring(err)
+    )
+    H.assert_true(
+      tostring(err):find(':help direct.vim-data', 1, true) ~= nil,
+      'error points to filesystem documentation: ' .. tostring(err)
+    )
     H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, 'source remains unchanged')
     H.assert_nil(vim.uv.fs_lstat(dst), 'destination remains absent')
   end)
 
   H.it('maps unsupported errno variants and remembers an unsupported device', function()
     local errno_cases = {
-      { 'Linux', 1 }, { 'Linux', 22 }, { 'Linux', 38 }, { 'Linux', 95 },
-      { 'Darwin', 1 }, { 'Darwin', 22 }, { 'Darwin', 45 }, { 'Darwin', 78 },
-      { 'FreeBSD', 1 }, { 'FreeBSD', 22 }, { 'FreeBSD', 45 }, { 'FreeBSD', 78 },
-      { 'OpenBSD', 91 }, { 'NetBSD', 86 }, { 'DragonFly', 45 },
+      { 'Linux', 1 },
+      { 'Linux', 22 },
+      { 'Linux', 38 },
+      { 'Linux', 95 },
+      { 'Darwin', 1 },
+      { 'Darwin', 22 },
+      { 'Darwin', 45 },
+      { 'Darwin', 78 },
+      { 'FreeBSD', 1 },
+      { 'FreeBSD', 22 },
+      { 'FreeBSD', 45 },
+      { 'FreeBSD', 78 },
+      { 'OpenBSD', 91 },
+      { 'NetBSD', 86 },
+      { 'DragonFly', 45 },
     }
     local sb = H.sandbox()
     if not H.is_windows() then
       for _, case in ipairs(errno_cases) do
-        H.assert_true(unix_platform.is_unsupported_rename_errno(case[2], case[1]),
-          string.format('errno %d is recognized on %s', case[2], case[1]))
+        H.assert_true(
+          unix_platform.is_unsupported_rename_errno(case[2], case[1]),
+          string.format('errno %d is recognized on %s', case[2], case[1])
+        )
       end
-      H.assert_false(unix_platform.is_unsupported_rename_errno(13, 'Linux'),
-        'unrelated permission errors are not classified as unsupported')
+      H.assert_false(
+        unix_platform.is_unsupported_rename_errno(13, 'Linux'),
+        'unrelated permission errors are not classified as unsupported'
+      )
       local bsd_ok, bsd_err, bsd_code =
         unix_platform.rename_noreplace('/unused/source', '/unused/destination', 'FreeBSD')
       H.assert_nil(bsd_ok, 'BSD does not guess at a safe rename primitive')
@@ -668,15 +660,19 @@ H.describe('fs', function()
         local destination = sb.root .. '/errno-' .. tostring(index) .. '-dst.txt'
         fs._reset_rename_capability_cache()
         local restore_uname = H.stub(fs.uv, 'os_uname', function() return { sysname = case[1] } end)
-        local restore_rename = H.stub(platform, 'rename_noreplace', function()
-          return nil, 'simulated errno ' .. tostring(case[2]), case[2]
-        end)
+        local restore_rename = H.stub(
+          platform,
+          'rename_noreplace',
+          function() return nil, 'simulated errno ' .. tostring(case[2]), case[2] end
+        )
         local result, result_err = fs.rename_noreplace(source, destination)
         restore_rename()
         restore_uname()
         H.assert_nil(result, 'unsupported errno is refused')
-        H.assert_true(tostring(result_err):find('safe no-replace renames', 1, true) ~= nil,
-          string.format('%s errno %d is explained: %s', case[1], case[2], tostring(result_err)))
+        H.assert_true(
+          tostring(result_err):find('safe no-replace renames', 1, true) ~= nil,
+          string.format('%s errno %d is explained: %s', case[1], case[2], tostring(result_err))
+        )
         H.assert_true(fs.exists(source), 'errno refusal preserves the source')
         H.assert_nil(vim.uv.fs_lstat(destination), 'errno refusal leaves the destination absent')
       end
@@ -713,18 +709,14 @@ H.describe('fs', function()
     H.mkfile(sb.root, 'occupied.txt', { 'KEEP' })
     local touched, touch_err = fs.touch(sb.root .. '/occupied.txt')
     H.assert_nil(touched, 'exclusive touch refuses an existing file')
-    H.assert_true(tostring(touch_err):find('destination exists', 1, true) ~= nil,
-      tostring(touch_err))
-    H.assert_eq(vim.fn.readfile(sb.root .. '/occupied.txt'), { 'KEEP' },
-      'existing file was not truncated')
+    H.assert_true(tostring(touch_err):find('destination exists', 1, true) ~= nil, tostring(touch_err))
+    H.assert_eq(vim.fn.readfile(sb.root .. '/occupied.txt'), { 'KEEP' }, 'existing file was not truncated')
 
     H.mkdir(sb.root, 'occupied-dir')
     local made, mkdir_err = fs.mkdir_exclusive(sb.root .. '/occupied-dir')
     H.assert_nil(made, 'exclusive mkdir refuses an existing directory')
-    H.assert_true(tostring(mkdir_err):find('destination exists', 1, true) ~= nil,
-      tostring(mkdir_err))
-    H.assert_eq(vim.fn.readdir(sb.root .. '/occupied-dir'), {},
-      'existing directory contents are unchanged')
+    H.assert_true(tostring(mkdir_err):find('destination exists', 1, true) ~= nil, tostring(mkdir_err))
+    H.assert_eq(vim.fn.readdir(sb.root .. '/occupied-dir'), {}, 'existing directory contents are unchanged')
   end)
 
   H.it('exclusive copy refuses an occupied file without changing either side', function()
@@ -743,8 +735,7 @@ H.describe('fs', function()
     H.mkfile(sb.root, 'tree/sub/deep.txt', { 'deep' })
     H.mkfile(sb.root, 'tree/top.txt', { 'top' })
     H.assert_true(fs.copy_tree(sb.root .. '/tree', sb.root .. '/nested/copy') == true, 'copy_tree')
-    H.assert_fs_eq(sb.root .. '/nested/copy',
-      { 'sub/', 'sub/deep.txt', 'top.txt' }, 'tree copied recursively')
+    H.assert_fs_eq(sb.root .. '/nested/copy', { 'sub/', 'sub/deep.txt', 'top.txt' }, 'tree copied recursively')
   end)
 
   -- EXDEV moves remove their source after copying, so they require a complete
@@ -763,11 +754,12 @@ H.describe('fs', function()
 
     local ok, err = fs.copy_tree(root, sb.root .. '/dst', { require_complete = true })
     H.assert_nil(ok, 'copy_tree refuses a tree holding a symlink')
-    H.assert_true(type(err) == 'string' and err:find('sub/link', 1, true) ~= nil,
-      'the error names the offending entry: ' .. tostring(err))
+    H.assert_true(
+      type(err) == 'string' and err:find('sub/link', 1, true) ~= nil,
+      'the error names the offending entry: ' .. tostring(err)
+    )
     H.assert_false(fs.exists(sb.root .. '/dst'), 'no partial destination left behind')
-    H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt', 'sub/link@' },
-      'the source tree is untouched')
+    H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt', 'sub/link@' }, 'the source tree is untouched')
   end)
 
   -- Non-destructive copies still copy reproducible entries, skip unsupported
@@ -784,14 +776,15 @@ H.describe('fs', function()
     local dst = sb.root .. '/dst'
     local ok, skipped = fs.copy_tree(root, dst)
     H.assert_true(ok == true, 'a copy that destroys nothing succeeds: ' .. tostring(skipped))
-    H.assert_true(type(skipped) == 'table' and #skipped == 1,
-      'exactly one skipped entry is reported: ' .. vim.inspect(skipped))
+    H.assert_true(
+      type(skipped) == 'table' and #skipped == 1,
+      'exactly one skipped entry is reported: ' .. vim.inspect(skipped)
+    )
     H.assert_eq(skipped[1].path, root .. '/sub/link', 'the report names the symlink')
     H.assert_eq(skipped[1].kind, 'symlink', 'the report names what the entry is')
     -- Everything reproducible is copied; the symlink is the only omission.
     H.assert_fs_eq(dst, { 'a.txt', 'sub/', 'sub/b.txt' }, 'the copyable entries are copied')
-    H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt', 'sub/link@' },
-      'the source tree is untouched')
+    H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt', 'sub/link@' }, 'the source tree is untouched')
   end)
 
   H.it('an EXDEV move recreates symlinks without following them', function()
@@ -805,9 +798,7 @@ H.describe('fs', function()
     local dst = sb.root .. '/moved'
     local real = fs.rename_noreplace
     local restore = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == root and to == dst then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if from == root and to == dst then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       return real(from, to)
     end)
     local ok, err = fs.rename(root, dst)
@@ -816,11 +807,9 @@ H.describe('fs', function()
     H.assert_true(ok == true, 'the complete move succeeds: ' .. tostring(err))
     H.assert_false(fs.exists(root), 'source tree removed after commit')
     H.assert_fs_eq(dst, { 'link@' }, 'symlink was recreated without copying its target')
-    H.assert_eq(vim.uv.fs_readlink(dst .. '/link'), target,
-      'symlink target text is copied verbatim')
+    H.assert_eq(vim.uv.fs_readlink(dst .. '/link'), target, 'symlink target text is copied verbatim')
     H.assert_true(fs.is_dir(dst .. '/link'), 'the directory symlink retains its target kind')
-    H.assert_eq(vim.fn.readfile(dst .. '/link/a.txt'), { 'a' },
-      'file is copied separately; symlink is not followed')
+    H.assert_eq(vim.fn.readfile(dst .. '/link/a.txt'), { 'a' }, 'file is copied separately; symlink is not followed')
     H.assert_eq(vim.fn.readfile(target .. '/a.txt'), { 'a' }, 'target remains unchanged')
   end)
 
@@ -832,13 +821,13 @@ H.describe('fs', function()
     local created, reason = H.mkfifo(fifo)
     if not created then H.skip(reason) end
     local st = vim.uv.fs_lstat(fifo)
-    if st == nil or st.type ~= 'fifo' then
-      H.skip('the host did not create a FIFO')
-    end
+    if st == nil or st.type ~= 'fifo' then H.skip('the host did not create a FIFO') end
     local ok, err = fs.copy_tree(root, sb.root .. '/dst', { require_complete = true })
     H.assert_nil(ok, 'copy_tree refuses a FIFO')
-    H.assert_true(type(err) == 'string' and err:find('pipe', 1, true) ~= nil,
-      'the error names the FIFO: ' .. tostring(err))
+    H.assert_true(
+      type(err) == 'string' and err:find('pipe', 1, true) ~= nil,
+      'the error names the FIFO: ' .. tostring(err)
+    )
     H.assert_false(fs.exists(sb.root .. '/dst'), 'no partial destination left behind')
   end)
 
@@ -848,12 +837,8 @@ H.describe('fs', function()
   -- bypasses permission bits, and Windows does not implement POSIX directory
   -- permission semantics, so those hosts report the test as skipped.
   H.it('copy_tree with require_complete refuses an unreadable directory, leaving no destination', function()
-    if H.is_windows() then
-      H.skip('POSIX directory permission semantics are unavailable on Windows')
-    end
-    if vim.uv.getuid ~= nil and vim.uv.getuid() == 0 then
-      H.skip('root bypasses directory permission bits')
-    end
+    if H.is_windows() then H.skip('POSIX directory permission semantics are unavailable on Windows') end
+    if vim.uv.getuid ~= nil and vim.uv.getuid() == 0 then H.skip('root bypasses directory permission bits') end
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'tree')
     H.mkfile(root, 'a.txt', { 'a' })
@@ -871,22 +856,23 @@ H.describe('fs', function()
     vim.uv.fs_chmod(locked, 448)
 
     H.assert_nil(ok, 'copy_tree refuses an unreadable directory')
-    H.assert_true(type(err) == 'string' and err:find('locked', 1, true) ~= nil,
-      'the error names the offending entry: ' .. tostring(err))
+    H.assert_true(
+      type(err) == 'string' and err:find('locked', 1, true) ~= nil,
+      'the error names the offending entry: ' .. tostring(err)
+    )
     H.assert_false(fs.exists(sb.root .. '/dst'), 'no partial destination left behind')
-    H.assert_fs_eq(root, { 'a.txt', 'keep/', 'keep/inner.txt', 'locked/',
-      'locked/inner.txt' }, 'the source is untouched')
+    H.assert_fs_eq(
+      root,
+      { 'a.txt', 'keep/', 'keep/inner.txt', 'locked/', 'locked/inner.txt' },
+      'the source is untouched'
+    )
   end)
 
   -- Best-effort copies may skip unreadable subtrees, but must report them rather
   -- than silently creating an empty stand-in.
   H.it('copy_tree without require_complete reports an unreadable directory it skipped', function()
-    if H.is_windows() then
-      H.skip('POSIX directory permission semantics are unavailable on Windows')
-    end
-    if vim.uv.getuid ~= nil and vim.uv.getuid() == 0 then
-      H.skip('root bypasses directory permission bits')
-    end
+    if H.is_windows() then H.skip('POSIX directory permission semantics are unavailable on Windows') end
+    if vim.uv.getuid ~= nil and vim.uv.getuid() == 0 then H.skip('root bypasses directory permission bits') end
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'tree')
     H.mkfile(root, 'a.txt', { 'a' })
@@ -899,13 +885,13 @@ H.describe('fs', function()
     vim.uv.fs_chmod(locked, 448)
 
     H.assert_true(ok == true, 'a copy that destroys nothing succeeds: ' .. tostring(skipped))
-    H.assert_true(type(skipped) == 'table' and #skipped == 1,
-      'exactly one skipped entry is reported: ' .. vim.inspect(skipped))
+    H.assert_true(
+      type(skipped) == 'table' and #skipped == 1,
+      'exactly one skipped entry is reported: ' .. vim.inspect(skipped)
+    )
     H.assert_eq(skipped[1].path, root .. '/locked', 'the report names the locked directory')
-    H.assert_fs_eq(dst, { 'a.txt' },
-      'the readable entries are copied and no stand-in for the locked tree is created')
-    H.assert_fs_eq(root, { 'a.txt', 'locked/', 'locked/inner.txt' },
-      'the source is untouched')
+    H.assert_fs_eq(dst, { 'a.txt' }, 'the readable entries are copied and no stand-in for the locked tree is created')
+    H.assert_fs_eq(root, { 'a.txt', 'locked/', 'locked/inner.txt' }, 'the source is untouched')
   end)
 
   -- An up-front scan can miss entries created during copying. The walk must
@@ -937,11 +923,12 @@ H.describe('fs', function()
 
     H.assert_true(injected, 'the entry was created during the copy')
     H.assert_nil(ok, 'the late entry refuses the copy: ' .. tostring(err))
-    H.assert_true(type(err) == 'string' and err:find('late', 1, true) ~= nil,
-      'the error names the entry that appeared late: ' .. tostring(err))
+    H.assert_true(
+      type(err) == 'string' and err:find('late', 1, true) ~= nil,
+      'the error names the entry that appeared late: ' .. tostring(err)
+    )
     H.assert_false(fs.exists(sb.root .. '/dst'), 'no partial destination left behind')
-    H.assert_fs_eq(root, { 'a.txt', 'late@', 'sub/', 'sub/b.txt' },
-      'the source is untouched, the late entry included')
+    H.assert_fs_eq(root, { 'a.txt', 'late@', 'sub/', 'sub/b.txt' }, 'the source is untouched, the late entry included')
   end)
 
   -- Best-effort copies must also report late entries instead of silently omitting them.
@@ -966,13 +953,17 @@ H.describe('fs', function()
 
     H.assert_true(injected, 'the entry was created during the copy')
     H.assert_true(ok == true, 'a copy that destroys nothing succeeds')
-    H.assert_true(type(skipped) == 'table' and #skipped == 1,
-      'the late entry is reported, not dropped: ' .. vim.inspect(skipped))
+    H.assert_true(
+      type(skipped) == 'table' and #skipped == 1,
+      'the late entry is reported, not dropped: ' .. vim.inspect(skipped)
+    )
     H.assert_eq(skipped[1].path, root .. '/late', 'the report names it')
-    H.assert_fs_eq(dst, { 'a.txt', 'sub/', 'sub/b.txt' },
-      'the copyable entries are copied and the late symlink is not followed')
-    H.assert_fs_eq(root, { 'a.txt', 'late@', 'sub/', 'sub/b.txt' },
-      'the source is untouched')
+    H.assert_fs_eq(
+      dst,
+      { 'a.txt', 'sub/', 'sub/b.txt' },
+      'the copyable entries are copied and the late symlink is not followed'
+    )
+    H.assert_fs_eq(root, { 'a.txt', 'late@', 'sub/', 'sub/b.txt' }, 'the source is untouched')
   end)
 
   -- Verify the destructive EXDEV path too: a move must never remove a source it
@@ -995,9 +986,7 @@ H.describe('fs', function()
     local real_rename = fs.rename_noreplace
     local moved = sb.root .. '/moved'
     local rrestore = H.stub(fs, 'rename_noreplace', function(src, dst)
-      if src == root and dst == moved then
-        return nil, 'EXDEV: cross-device link not permitted', 'EXDEV'
-      end
+      if src == root and dst == moved then return nil, 'EXDEV: cross-device link not permitted', 'EXDEV' end
       return real_rename(src, dst)
     end)
     local ok, err = fs.rename(root, moved)
@@ -1006,8 +995,7 @@ H.describe('fs', function()
 
     H.assert_true(injected, 'the exclusive copy failure was injected')
     H.assert_nil(ok, 'the move fails instead of losing the entry: ' .. tostring(err))
-    H.assert_eq(err, 'forced exclusive-copy failure',
-      'the exclusive-copy error propagates')
+    H.assert_eq(err, 'forced exclusive-copy failure', 'the exclusive-copy error propagates')
     H.assert_true(fs.exists(sb.root .. '/tree'), 'the source tree is intact')
     H.assert_false(fs.exists(sb.root .. '/moved'), 'no destination left behind')
     H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt' }, 'nothing was destroyed')
@@ -1027,8 +1015,11 @@ H.describe('fs', function()
     local ok, err = fs.copy_tree(root, dst, { require_complete = true })
 
     H.assert_nil(ok, 'the copy is refused: ' .. tostring(err))
-    H.assert_fs_eq(dst, { 'keep.txt' },
-      'only the entries the copy created are undone, never the pre-existing destination')
+    H.assert_fs_eq(
+      dst,
+      { 'keep.txt' },
+      'only the entries the copy created are undone, never the pre-existing destination'
+    )
   end)
 
   -- A failed copy once recorded a destination file without checking
@@ -1048,8 +1039,11 @@ H.describe('fs', function()
 
     H.assert_nil(ok, 'the copy fails: ' .. tostring(err))
     H.assert_true(fs.is_dir(dst .. '/clash'), 'the pre-existing directory survives')
-    H.assert_fs_eq(dst, { 'clash/', 'clash/keep.txt' },
-      'the pre-existing entry and its contents survive; only this copy remains undone')
+    H.assert_fs_eq(
+      dst,
+      { 'clash/', 'clash/keep.txt' },
+      'the pre-existing entry and its contents survive; only this copy remains undone'
+    )
     H.assert_fs_eq(src, { 'a.txt', 'clash' }, 'the source is untouched')
   end)
 
@@ -1066,8 +1060,7 @@ H.describe('fs', function()
     local ok, err = fs.copy_tree(src, dst)
 
     H.assert_nil(ok, 'the copy fails: ' .. tostring(err))
-    H.assert_fs_eq(dst, { 'clash/', 'clash/keep.txt' },
-      'the pre-existing entry and its contents survive')
+    H.assert_fs_eq(dst, { 'clash/', 'clash/keep.txt' }, 'the pre-existing entry and its contents survive')
     H.assert_fs_eq(src, { 'a.txt', 'clash' }, 'the source is untouched')
   end)
 
@@ -1107,22 +1100,25 @@ H.describe('fs', function()
 
     H.assert_true(injected, 'the foreign entry and the late entry were created during the copy')
     H.assert_nil(ok, 'the late entry refuses the copy: ' .. tostring(err))
-    H.assert_true(type(err) == 'string' and err:find('zz-late', 1, true) ~= nil,
-      'the error names the entry that appeared late: ' .. tostring(err))
-    H.assert_true(fs.exists(dst .. '/foreign.txt'),
-      'the foreign file the copy did not create survives the cleanup')
-    H.assert_eq(vim.fn.readfile(dst .. '/foreign.txt'), { 'FOREIGN' },
-      'the foreign file keeps its contents')
-    H.assert_false(fs.exists(dst .. '/a.txt'),
-      'the copy\'s own partial file is removed')
-    H.assert_false(fs.exists(dst .. '/sub'),
-      'the created directory that the cleanup emptied is removed')
-    H.assert_true(fs.is_dir(dst),
-      'the created directory that is no longer empty is left behind, not force-deleted')
-    H.assert_fs_eq(dst, { 'foreign.txt' },
-      'the destination holds exactly the foreign entry and nothing this copy created')
-    H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt', 'zz-late@' },
-      'the source is untouched, the late entry included')
+    H.assert_true(
+      type(err) == 'string' and err:find('zz-late', 1, true) ~= nil,
+      'the error names the entry that appeared late: ' .. tostring(err)
+    )
+    H.assert_true(fs.exists(dst .. '/foreign.txt'), 'the foreign file the copy did not create survives the cleanup')
+    H.assert_eq(vim.fn.readfile(dst .. '/foreign.txt'), { 'FOREIGN' }, 'the foreign file keeps its contents')
+    H.assert_false(fs.exists(dst .. '/a.txt'), "the copy's own partial file is removed")
+    H.assert_false(fs.exists(dst .. '/sub'), 'the created directory that the cleanup emptied is removed')
+    H.assert_true(fs.is_dir(dst), 'the created directory that is no longer empty is left behind, not force-deleted')
+    H.assert_fs_eq(
+      dst,
+      { 'foreign.txt' },
+      'the destination holds exactly the foreign entry and nothing this copy created'
+    )
+    H.assert_fs_eq(
+      root,
+      { 'a.txt', 'sub/', 'sub/b.txt', 'zz-late@' },
+      'the source is untouched, the late entry included'
+    )
   end)
 
   -- Complete mode pre-scans unsupported trees so common refusals happen before
@@ -1135,10 +1131,8 @@ H.describe('fs', function()
     pcall(H.symlink, root .. '/a.txt', root .. '/zz-link')
     H.assert_true(vim.uv.fs_lstat(root .. '/zz-link') ~= nil, 'symlink created')
 
-    local primitives = { 'mkdirp', 'mkdir_exclusive', 'copy_file',
-      'copy_file_exclusive', 'rm_file', 'rm_tree' }
-    local calls = { mkdirp = 0, mkdir_exclusive = 0, copy_file = 0,
-      copy_file_exclusive = 0, rm_file = 0, rm_tree = 0 }
+    local primitives = { 'mkdirp', 'mkdir_exclusive', 'copy_file', 'copy_file_exclusive', 'rm_file', 'rm_tree' }
+    local calls = { mkdirp = 0, mkdir_exclusive = 0, copy_file = 0, copy_file_exclusive = 0, rm_file = 0, rm_tree = 0 }
     local restores = {}
     for _, name in ipairs(primitives) do
       local real = fs[name]
@@ -1154,14 +1148,17 @@ H.describe('fs', function()
     end
 
     H.assert_nil(ok, 'the copy is refused: ' .. tostring(err))
-    H.assert_true(type(err) == 'string' and err:find('zz-link', 1, true) ~= nil,
-      'the refusal names the offending entry: ' .. tostring(err))
-    H.assert_eq(calls, { mkdirp = 0, mkdir_exclusive = 0, copy_file = 0,
-      copy_file_exclusive = 0, rm_file = 0, rm_tree = 0 },
-      'the common-case refusal writes nothing: not even a directory')
+    H.assert_true(
+      type(err) == 'string' and err:find('zz-link', 1, true) ~= nil,
+      'the refusal names the offending entry: ' .. tostring(err)
+    )
+    H.assert_eq(
+      calls,
+      { mkdirp = 0, mkdir_exclusive = 0, copy_file = 0, copy_file_exclusive = 0, rm_file = 0, rm_tree = 0 },
+      'the common-case refusal writes nothing: not even a directory'
+    )
     H.assert_false(fs.exists(dst), 'no destination was created')
-    H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt', 'zz-link@' },
-      'the source is untouched')
+    H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt', 'zz-link@' }, 'the source is untouched')
   end)
 
   -- fs.taken uses lstat so a dangling destination symlink is treated as
@@ -1172,23 +1169,23 @@ H.describe('fs', function()
     local root = H.mkdir(sb.root, 'tree')
     H.mkfile(root, 'a.txt', { 'a' })
     local dst = sb.root .. '/dst'
-    H.assert_true(H.symlink(sb.root .. '/nowhere', dst) == true,
-      'dangling symlink occupying the destination name')
-    H.assert_true(fs.taken(dst) == true,
-      'the shared helper counts a dangling symlink as taken')
-    H.assert_false(fs.exists(dst),
-      'the following check reports the name free')
+    H.assert_true(H.symlink(sb.root .. '/nowhere', dst) == true, 'dangling symlink occupying the destination name')
+    H.assert_true(fs.taken(dst) == true, 'the shared helper counts a dangling symlink as taken')
+    H.assert_false(fs.exists(dst), 'the following check reports the name free')
 
     local ok, err = fs.copy_tree(root, dst, { require_complete = true })
 
     H.assert_nil(ok, 'the copy refuses the taken destination: ' .. tostring(err))
-    H.assert_true(type(err) == 'string' and err:find('destination exists', 1, true) ~= nil,
-      'the refusal names the destination clash: ' .. tostring(err))
+    H.assert_true(
+      type(err) == 'string' and err:find('destination exists', 1, true) ~= nil,
+      'the refusal names the destination clash: ' .. tostring(err)
+    )
     local st = vim.uv.fs_lstat(dst)
-    H.assert_true(st ~= nil and st.type == 'link',
-      'the dangling link is itself untouched, not replaced or written through')
-    H.assert_false(fs.exists(sb.root .. '/nowhere'),
-      'nothing was created at the link target')
+    H.assert_true(
+      st ~= nil and st.type == 'link',
+      'the dangling link is itself untouched, not replaced or written through'
+    )
+    H.assert_false(fs.exists(sb.root .. '/nowhere'), 'nothing was created at the link target')
     H.assert_fs_eq(root, { 'a.txt' }, 'the source is untouched')
   end)
 
@@ -1205,18 +1202,22 @@ H.describe('fs', function()
     local ok, err = fs.copy_tree(src, dst, { require_complete = true })
 
     H.assert_nil(ok, 'complete mode refuses the taken destination: ' .. tostring(err))
-    H.assert_true(type(err) == 'string' and err:find('destination exists', 1, true) ~= nil,
-      'the refusal names the destination clash: ' .. tostring(err))
-    H.assert_eq(vim.fn.readfile(dst .. '/a.txt'), { 'OLD' },
-      'the existing destination file is not overwritten')
+    H.assert_true(
+      type(err) == 'string' and err:find('destination exists', 1, true) ~= nil,
+      'the refusal names the destination clash: ' .. tostring(err)
+    )
+    H.assert_eq(vim.fn.readfile(dst .. '/a.txt'), { 'OLD' }, 'the existing destination file is not overwritten')
     H.assert_fs_eq(dst, { 'a.txt' }, 'the destination is exactly as it was')
     H.assert_fs_eq(src, { 'a.txt' }, 'the source is untouched')
 
     -- The same tree on the path that destroys nothing: the overwrite stays.
     local bok = fs.copy_tree(src, dst)
     H.assert_true(bok == true, 'best-effort mode still succeeds on the same tree')
-    H.assert_eq(vim.fn.readfile(dst .. '/a.txt'), { 'NEW' },
-      'best-effort mode keeps its overwrite semantics (yank/paste)')
+    H.assert_eq(
+      vim.fn.readfile(dst .. '/a.txt'),
+      { 'NEW' },
+      'best-effort mode keeps its overwrite semantics (yank/paste)'
+    )
   end)
 
   -- A pre-scan cannot see destinations created during copying, so the walk
@@ -1243,16 +1244,26 @@ H.describe('fs', function()
     restore()
 
     H.assert_true(injected, 'the foreign destination entry was created during the copy')
-    H.assert_true(fs.exists(dst .. '/zz-clash/keep.txt'),
-      'the foreign entry the copy did not create survives the cleanup')
-    H.assert_eq(vim.fn.readfile(dst .. '/zz-clash/keep.txt'), { 'PRE-EXISTING DATA' },
-      'the foreign entry keeps its contents')
+    H.assert_true(
+      fs.exists(dst .. '/zz-clash/keep.txt'),
+      'the foreign entry the copy did not create survives the cleanup'
+    )
+    H.assert_eq(
+      vim.fn.readfile(dst .. '/zz-clash/keep.txt'),
+      { 'PRE-EXISTING DATA' },
+      'the foreign entry keeps its contents'
+    )
     H.assert_nil(ok, 'the copy refuses instead of writing to it: ' .. tostring(err))
-    H.assert_true(type(err) == 'string' and err:find('destination exists', 1, true) ~= nil,
-      'the refusal names the destination clash: ' .. tostring(err))
-    H.assert_false(fs.exists(dst .. '/a.txt'), 'the copy\'s own partial file is removed')
-    H.assert_fs_eq(dst, { 'zz-clash/', 'zz-clash/keep.txt' },
-      'the destination holds exactly the foreign entry and nothing this copy created')
+    H.assert_true(
+      type(err) == 'string' and err:find('destination exists', 1, true) ~= nil,
+      'the refusal names the destination clash: ' .. tostring(err)
+    )
+    H.assert_false(fs.exists(dst .. '/a.txt'), "the copy's own partial file is removed")
+    H.assert_fs_eq(
+      dst,
+      { 'zz-clash/', 'zz-clash/keep.txt' },
+      'the destination holds exactly the foreign entry and nothing this copy created'
+    )
     H.assert_fs_eq(src, { 'a.txt', 'zz-clash' }, 'the source is untouched')
   end)
 
@@ -1262,8 +1273,7 @@ H.describe('fs', function()
     H.mkfile(sb.root, 'a.txt', { 'a' })
     H.mkfile(sb.root, 'b.txt', { 'b' })
     H.mkdir(sb.root, 'sub')
-    H.assert_eq(fs.list_dir(sb.root), { 'a.txt', 'b.txt', 'c.txt', 'data', 'sub' },
-      'list_dir sorted ascending')
+    H.assert_eq(fs.list_dir(sb.root), { 'a.txt', 'b.txt', 'c.txt', 'data', 'sub' }, 'list_dir sorted ascending')
 
     local separator = package.config:sub(1, 1)
     local a_b = vim.fs.joinpath('a', 'b')
@@ -1273,10 +1283,8 @@ H.describe('fs', function()
     H.assert_eq(fs.dirname(a_b_c), a_b, 'dirname')
     H.assert_eq(fs.join('a', 'b', 'c'), a_b_c, 'join')
     H.assert_true(H.is_absolute_path(fs.abspath('x')), 'abspath is absolute')
-    H.assert_eq(fs.realpath(sb.root .. '/a.txt'), vim.uv.fs_realpath(sb.root .. '/a.txt'),
-      'realpath resolves')
-    H.assert_eq(fs.realpath(sb.root .. '/missing'), sb.root .. '/missing',
-      'realpath falls back to the input')
+    H.assert_eq(fs.realpath(sb.root .. '/a.txt'), vim.uv.fs_realpath(sb.root .. '/a.txt'), 'realpath resolves')
+    H.assert_eq(fs.realpath(sb.root .. '/missing'), sb.root .. '/missing', 'realpath falls back to the input')
 
     local st = fs.stat(sb.root .. '/a.txt')
     H.assert_true(st ~= nil and st.type == 'file', 'stat returns a stat table')
@@ -1302,9 +1310,7 @@ H.describe('fs', function()
     -- M.copy_tree; this test protects that injection seam.
     local sb = H.sandbox()
     H.mkfile(sb.root, 'tree/a.txt', { 'a' })
-    local restore = H.stub(fs, 'copy_file', function()
-      return nil, 'forced'
-    end)
+    local restore = H.stub(fs, 'copy_file', function() return nil, 'forced' end)
     local ok, err = fs.copy_tree(sb.root .. '/tree', sb.root .. '/copy')
     restore()
 
@@ -1325,14 +1331,16 @@ H.describe('fs', function()
     local r, e = fs.mkdirp(42)
     H.assert_nil(r, 'mkdirp(42) returns nil')
     H.assert_true(type(e) == 'string' and #e > 0, 'mkdirp(42) carries an err')
-    H.assert_eq(vim.fn.isdirectory(vim.fs.joinpath(cwd, '42')), 0,
-      'mkdirp(42) created nothing in the cwd')
+    H.assert_eq(vim.fn.isdirectory(vim.fs.joinpath(cwd, '42')), 0, 'mkdirp(42) created nothing in the cwd')
 
     r, e = fs.mkdirp(nil)
     H.assert_nil(r, 'mkdirp(nil) returns nil')
     H.assert_true(type(e) == 'string' and #e > 0, 'mkdirp(nil) carries an err')
-    H.assert_eq(vim.fn.isdirectory(vim.fs.joinpath(cwd, 'v:null')), 0,
-      'mkdirp(nil) created no literal v:null directory in the cwd')
+    H.assert_eq(
+      vim.fn.isdirectory(vim.fs.joinpath(cwd, 'v:null')),
+      0,
+      'mkdirp(nil) created no literal v:null directory in the cwd'
+    )
 
     r, e = fs.touch(nil)
     H.assert_nil(r, 'touch(nil) returns nil')

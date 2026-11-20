@@ -5,9 +5,7 @@ local buffer = require('direct.buffer.buffer')
 local highlight = require('direct.highlight')
 local FILE_ICON = '\u{f15b}'
 
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 local function highlight_marks(bufnr)
   local ns = vim.api.nvim_get_namespaces()['direct-listing-highlights']
@@ -21,9 +19,7 @@ local function row_mark(bufnr, row)
   end
 end
 
-local function syntax_group(row, col)
-  return vim.fn.synIDattr(vim.fn.synID(row, col, true), 'name')
-end
+local function syntax_group(row, col) return vim.fn.synIDattr(vim.fn.synID(row, col, true), 'name') end
 
 local function listing_icon_marks(bufnr)
   local ns = vim.api.nvim_get_namespaces()['direct-listing-icons']
@@ -42,8 +38,7 @@ local function assert_folder_icon(bufnr, row, column, glyph)
   H.assert_not_nil(found, 'directory row ' .. row .. ' has a folder icon')
   if found then
     H.assert_eq(found[3], column, 'icon is placed at the indentation column')
-    H.assert_eq(found[4].virt_text, { { glyph .. ' ', 'DirectFolderIcon' } },
-      'icon glyph and highlight group')
+    H.assert_eq(found[4].virt_text, { { glyph .. ' ', 'DirectFolderIcon' } }, 'icon glyph and highlight group')
     H.assert_eq(found[4].virt_text_pos, 'inline', 'icon is inline virtual text')
   end
 end
@@ -53,11 +48,9 @@ local function assert_icon_spacer(bufnr, row, column)
   H.assert_not_nil(found, 'row ' .. row .. ' reserves an icon slot')
   if found then
     H.assert_eq(found[3], column, 'spacer is placed at the indentation column')
-    H.assert_eq(found[4].virt_text, { { '  ', 'Normal' } },
-      'disabled icon kind gets a two-cell spacer')
+    H.assert_eq(found[4].virt_text, { { '  ', 'Normal' } }, 'disabled icon kind gets a two-cell spacer')
   end
 end
-
 
 H.describe('listing filename highlights', function()
   H.it('matches hidden entries at every indentation depth without visible filename groups', function()
@@ -66,9 +59,20 @@ H.describe('listing filename highlights', function()
     vim.cmd('syntax on')
     vim.bo[bufnr].syntax = 'direct'
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
-      '.root-dir/', '.root-file', '  .child-dir/', '    .deep-file',
-      '.d/', '.f', 'a/', 'visible-dir/', 'visible-file', '  child-dir/', 'sample.js', 'Dockerfile',
-      'Makefile', 'README.md',
+      '.root-dir/',
+      '.root-file',
+      '  .child-dir/',
+      '    .deep-file',
+      '.d/',
+      '.f',
+      'a/',
+      'visible-dir/',
+      'visible-file',
+      '  child-dir/',
+      'sample.js',
+      'Dockerfile',
+      'Makefile',
+      'README.md',
     })
 
     H.assert_eq(syntax_group(1, 1), 'DirectHiddenDirectory', 'root hidden directory')
@@ -82,18 +86,19 @@ H.describe('listing filename highlights', function()
     H.assert_true(syntax_group(9, 1) ~= 'DirectFile', 'visible file has no Direct group')
     H.assert_eq(syntax_group(10, 3), 'DirectDirectory', 'indented visible directory')
     for _, case in ipairs({
-      { 9, 'visible-file' }, { 11, 'sample.js' }, { 12, 'Dockerfile' },
-      { 13, 'Makefile' }, { 14, 'README.md' },
+      { 9, 'visible-file' },
+      { 11, 'sample.js' },
+      { 12, 'Dockerfile' },
+      { 13, 'Makefile' },
+      { 14, 'README.md' },
     }) do
       H.assert_eq(syntax_group(case[1], 1), '', case[2] .. ' has no filename syntax highlight')
     end
     H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectDirectory', link = true }), {
       link = 'Directory',
     }, 'visible directory group links to Directory by default')
-    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectFile', link = true }), {},
-      'visible file group is not defined')
-    H.assert_eq(vim.b[bufnr].current_syntax, 'direct',
-      'the syntax file marks the buffer as loaded')
+    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectFile', link = true }), {}, 'visible file group is not defined')
+    H.assert_eq(vim.b[bufnr].current_syntax, 'direct', 'the syntax file marks the buffer as loaded')
   end)
 
   H.it('does not render icon marks when folder icons are disabled', function()
@@ -133,8 +138,10 @@ H.describe('listing filename highlights', function()
       screencol = icon.col,
     }
     local click_map = vim.fn.maparg('<LeftMouse>', 'n', false, true)
-    H.assert_true(type(click_map and click_map.callback) == 'function',
-      'direct buffers install the folder-icon mouse handler')
+    H.assert_true(
+      type(click_map and click_map.callback) == 'function',
+      'direct buffers install the folder-icon mouse handler'
+    )
     local function click_at(position)
       local restore = H.stub(vim.fn, 'getmousepos', function() return position end)
       local ok, err = pcall(click_map.callback)
@@ -143,19 +150,15 @@ H.describe('listing filename highlights', function()
     end
 
     click_at(click)
-    H.assert_buf_eq({ 'sub/', '  inside.txt', 'other.txt' }, 0,
-      'clicking the icon expands its directory')
+    H.assert_buf_eq({ 'sub/', '  inside.txt', 'other.txt' }, 0, 'clicking the icon expands its directory')
 
     click_at(click)
-    H.assert_buf_eq({ 'sub/', 'other.txt' }, 0,
-      'clicking the open icon collapses its directory')
+    H.assert_buf_eq({ 'sub/', 'other.txt' }, 0, 'clicking the open icon collapses its directory')
 
     click.screencol = icon.curscol
     click_at(click)
-    H.assert_buf_eq({ 'sub/', 'other.txt' }, 0,
-      'clicking the directory name does not toggle it')
-    H.assert_eq(vim.api.nvim_win_get_cursor(winid)[1], 1,
-      'a non-icon click still moves the cursor to its row')
+    H.assert_buf_eq({ 'sub/', 'other.txt' }, 0, 'clicking the directory name does not toggle it')
+    H.assert_eq(vim.api.nvim_win_get_cursor(winid)[1], 1, 'a non-icon click still moves the cursor to its row')
   end)
 
   H.it('renders closed/open icons idempotently without changing buffer lines', function()
@@ -174,15 +177,17 @@ H.describe('listing filename highlights', function()
     config.setup({ show_folder_icons = true, show_file_icons = false })
     listing:list()
 
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), plain_lines,
-      'icons do not alter buffer text')
+    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), plain_lines, 'icons do not alter buffer text')
     local closed, opened = '\u{f07b}', '\u{f07c}'
     H.assert_eq(#listing_icon_marks(0), 3, 'initial render reserves an icon slot on every row')
     assert_folder_icon(0, 0, 0, closed)
     assert_folder_icon(0, 1, 0, closed)
     assert_icon_spacer(0, 2, 0)
-    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectFolderIcon', link = true }),
-      { default = true, link = 'Directory' }, 'icon group links to Directory by default')
+    H.assert_eq(
+      vim.api.nvim_get_hl(0, { name = 'DirectFolderIcon', link = true }),
+      { default = true, link = 'Directory' },
+      'icon group links to Directory by default'
+    )
 
     listing:expand(2)
     local expanded_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -192,15 +197,22 @@ H.describe('listing filename highlights', function()
     assert_folder_icon(0, 2, 2, closed)
     assert_icon_spacer(0, 3, 2)
     assert_icon_spacer(0, 4, 0)
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), expanded_lines,
-      'virt_text leaves expanded lines unchanged')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      expanded_lines,
+      'virt_text leaves expanded lines unchanged'
+    )
     H.assert_eq(listing:get_paths(3, 4), {
-      ws .. '/sub/nested/', ws .. '/sub/inside.txt',
+      ws .. '/sub/nested/',
+      ws .. '/sub/inside.txt',
     }, 'path/yank selection remains based on unchanged row identities')
 
     listing:collapse(2)
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), plain_lines,
-      'collapse removes rows without icon text entering the buffer')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      plain_lines,
+      'collapse removes rows without icon text entering the buffer'
+    )
     H.assert_eq(#listing_icon_marks(0), 3, 'collapse clears stale nested icons')
     assert_folder_icon(0, 1, 0, closed)
     listing:list()
@@ -208,8 +220,7 @@ H.describe('listing filename highlights', function()
 
     config.setup({ show_folder_icons = false, show_file_icons = false })
     listing:list()
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), plain_lines,
-      'disabling icons leaves line data unchanged')
+    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), plain_lines, 'disabling icons leaves line data unchanged')
     H.assert_eq(listing_icon_marks(0), {}, 'next disabled refresh clears existing icons')
     config.setup({ show_folder_icons = true, show_file_icons = false })
     listing:list()
@@ -222,8 +233,11 @@ H.describe('listing filename highlights', function()
     local before_sync = H.fs_snapshot(ws)
     H.assert_true(listing:sync() == true, 'sync succeeds with virtual icons enabled')
     H.assert_eq(H.fs_snapshot(ws), before_sync, 'icons do not alter sync effects')
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), plain_lines,
-      'sync keeps the same line data when icons are enabled')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      plain_lines,
+      'sync keeps the same line data when icons are enabled'
+    )
   end)
 
   H.it('keeps the icon before text inserted at the start of a filename', function()
@@ -240,16 +254,16 @@ H.describe('listing filename highlights', function()
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
     vim.api.nvim_feedkeys('ix\27', 'xt', false)
 
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), { 'xalpha.txt' },
-      'typing at the first character edits the filename')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      { 'xalpha.txt' },
+      'typing at the first character edits the filename'
+    )
     local mark = icon_mark(0, 0)
     H.assert_not_nil(mark, 'the filename row keeps its icon extmark')
-    if mark then
-      H.assert_eq(mark[3], 0, 'the icon remains anchored before inserted text')
-    end
+    if mark then H.assert_eq(mark[3], 0, 'the icon remains anchored before inserted text') end
     local pos = vim.fn.screenpos(0, 1, 1)
-    H.assert_true(pos.curscol > pos.col,
-      'cursor on the inserted first character is displayed after the inline icon')
+    H.assert_true(pos.curscol > pos.col, 'cursor on the inserted first character is displayed after the inline icon')
   end)
 
   H.it('removes the joined row icon when two filenames are joined', function()
@@ -322,8 +336,11 @@ H.describe('listing filename highlights', function()
     local closed, opened = '\u{f07b}', '\u{f07c}'
     assert_folder_icon(0, 0, 0, closed)
     listing:expand(1)
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), { 'empty/', 'file.txt' },
-      'expanding empty directory does not materialize a fake child row')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      { 'empty/', 'file.txt' },
+      'expanding empty directory does not materialize a fake child row'
+    )
     assert_folder_icon(0, 0, 0, opened)
 
     local files_only = H.mkdir(sb.root, 'files-only')
@@ -358,12 +375,18 @@ H.describe('listing filename highlights', function()
       H.assert_not_nil(mark, 'file row has a generic icon')
       if mark then
         H.assert_eq(mark[3], 0, 'file icon starts at its indentation column')
-        H.assert_eq(mark[4].virt_text, { { FILE_ICON .. ' ', 'DirectFileIcon' } },
-          'all filetypes use the same generic file icon')
+        H.assert_eq(
+          mark[4].virt_text,
+          { { FILE_ICON .. ' ', 'DirectFileIcon' } },
+          'all filetypes use the same generic file icon'
+        )
       end
     end
-    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectFileIcon', link = true }),
-      { default = true, link = 'Normal' }, 'file icon group links to Normal by default')
+    H.assert_eq(
+      vim.api.nvim_get_hl(0, { name = 'DirectFileIcon', link = true }),
+      { default = true, link = 'Normal' },
+      'file icon group links to Normal by default'
+    )
 
     config.setup({
       show_folder_icons = true,
@@ -373,14 +396,18 @@ H.describe('listing filename highlights', function()
     listing:list()
     assert_folder_icon(0, 0, 0, '\u{f07b}')
     for row = 1, 2 do
-      H.assert_eq(icon_mark(0, row)[4].virt_text,
-        { { FILE_ICON .. ' ', 'DirectFileIcon' } }, 'combined settings show file icons')
+      H.assert_eq(
+        icon_mark(0, row)[4].virt_text,
+        { { FILE_ICON .. ' ', 'DirectFileIcon' } },
+        'combined settings show file icons'
+      )
     end
 
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), lines,
-      'icons never alter listing buffer text')
+    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), lines, 'icons never alter listing buffer text')
     H.assert_eq(listing:get_paths(1, 3), {
-      ws .. '/folder/', ws .. '/alpha.txt', ws .. '/script.lua',
+      ws .. '/folder/',
+      ws .. '/alpha.txt',
+      ws .. '/script.lua',
     }, 'icons leave row paths unchanged')
 
     config.setup({ show_folder_icons = false, show_file_icons = false })
@@ -404,8 +431,7 @@ H.describe('listing filename highlights', function()
 
     local listing = buffer.list(ws)
     assert_folder_icon(0, 0, 0, 'D')
-    H.assert_eq(icon_mark(0, 1)[4].virt_text,
-      { { 'F ', 'DirectFileIcon' } }, 'configured generic file glyph renders')
+    H.assert_eq(icon_mark(0, 1)[4].virt_text, { { 'F ', 'DirectFileIcon' } }, 'configured generic file glyph renders')
 
     listing:expand(1)
     assert_folder_icon(0, 0, 0, 'O')
@@ -439,15 +465,26 @@ H.describe('listing filename highlights', function()
     package.loaded['nvim-web-devicons'] = previous
 
     H.assert_eq(H.buf_lines(), { 'source.lua/', 'Dockerfile', 'script.lua', 'script.py' })
-    H.assert_eq(icon_mark(0, 0)[4].virt_text,
+    H.assert_eq(
+      icon_mark(0, 0)[4].virt_text,
       { { '\u{f07b} ', 'DirectFolderIcon' } },
-      'directories keep their existing folder icons')
-    H.assert_eq(icon_mark(0, 2)[4].virt_text,
-      { { 'L ', 'DirectFileIcon' } }, 'extension lookup uses the devicons glyph and DirectFileIcon')
-    H.assert_eq(icon_mark(0, 1)[4].virt_text,
-      { { 'D ', 'DirectFileIcon' } }, 'exact filename lookup handles special files')
-    H.assert_eq(icon_mark(0, 3)[4].virt_text,
-      { { 'G ', 'DirectFileIcon' } }, 'provider default glyphs also use DirectFileIcon')
+      'directories keep their existing folder icons'
+    )
+    H.assert_eq(
+      icon_mark(0, 2)[4].virt_text,
+      { { 'L ', 'DirectFileIcon' } },
+      'extension lookup uses the devicons glyph and DirectFileIcon'
+    )
+    H.assert_eq(
+      icon_mark(0, 1)[4].virt_text,
+      { { 'D ', 'DirectFileIcon' } },
+      'exact filename lookup handles special files'
+    )
+    H.assert_eq(
+      icon_mark(0, 3)[4].virt_text,
+      { { 'G ', 'DirectFileIcon' } },
+      'provider default glyphs also use DirectFileIcon'
+    )
     H.assert_eq(requests, {
       { filename = 'Dockerfile', extension = false, opts = { default = true } },
       { filename = 'script.lua', extension = false, opts = { default = true } },
@@ -456,8 +493,11 @@ H.describe('listing filename highlights', function()
 
     config.setup({ show_folder_icons = true, show_file_icons = true, show_filetype_icons = false })
     listing:list()
-    H.assert_eq(icon_mark(0, 2)[4].virt_text,
-      { { FILE_ICON .. ' ', 'DirectFileIcon' } }, 'the option disables filetype icons')
+    H.assert_eq(
+      icon_mark(0, 2)[4].virt_text,
+      { { FILE_ICON .. ' ', 'DirectFileIcon' } },
+      'the option disables filetype icons'
+    )
   end)
 
   H.it('styles hidden names and icons with Comment', function()
@@ -475,8 +515,7 @@ H.describe('listing filename highlights', function()
     local bufnr = vim.api.nvim_get_current_buf()
     H.assert_eq(vim.bo[bufnr].filetype, 'direct', 'listing has the direct filetype')
     H.assert_eq(vim.bo[bufnr].syntax, 'direct', 'direct syntax is active')
-    H.assert_eq(vim.b[bufnr].current_syntax, 'direct',
-      'listing loads its syntax even when global syntax is off')
+    H.assert_eq(vim.b[bufnr].current_syntax, 'direct', 'listing loads its syntax even when global syntax is off')
     H.assert_eq(H.buf_lines(), { '.hidden-dir/', '.hidden-file' })
     config.setup({ show_folder_icons = false, show_file_icons = false })
 
@@ -485,23 +524,27 @@ H.describe('listing filename highlights', function()
       { row = 1, group = 'DirectHiddenFile', icon_group = 'DirectHiddenFileIcon' },
     }
     for _, case in ipairs(cases) do
-      H.assert_eq(syntax_group(case.row + 1, 1), case.group,
-        'hidden entry uses its hidden syntax group')
-      H.assert_eq(vim.api.nvim_get_hl(0, { name = case.group, link = true }).link, 'Comment',
-        case.group .. ' links to Comment')
+      H.assert_eq(syntax_group(case.row + 1, 1), case.group, 'hidden entry uses its hidden syntax group')
+      H.assert_eq(
+        vim.api.nvim_get_hl(0, { name = case.group, link = true }).link,
+        'Comment',
+        case.group .. ' links to Comment'
+      )
 
       local mark = icon_mark(bufnr, case.row)
       H.assert_not_nil(mark, 'hidden entry has an icon extmark')
       if mark then
         local icon_group = mark[4].virt_text[1][2]
         H.assert_eq(icon_group, case.icon_group, 'hidden icon uses its hidden highlight group')
-        H.assert_eq(vim.api.nvim_get_hl(0, { name = icon_group, link = true }).link, 'Comment',
-          'hidden icon links to the same Comment style as its name')
+        H.assert_eq(
+          vim.api.nvim_get_hl(0, { name = icon_group, link = true }).link,
+          'Comment',
+          'hidden icon links to the same Comment style as its name'
+        )
       end
     end
     H.assert_not_nil(listing, 'listing rendered')
   end)
-
 
   H.it('default-links visible directories to Directory and hidden entries to Comment after ColorScheme', function()
     local expected = {
@@ -515,14 +558,14 @@ H.describe('listing filename highlights', function()
     }
     local function assert_defaults()
       for group, target in pairs(expected) do
-        H.assert_eq(vim.api.nvim_get_hl(0, { name = group, link = true }).link,
-          target, group .. ' default link')
+        H.assert_eq(vim.api.nvim_get_hl(0, { name = group, link = true }).link, target, group .. ' default link')
       end
     end
 
     assert_defaults()
     H.assert_eq(#vim.api.nvim_get_autocmds({
-      group = 'direct_hidden_highlight_defaults', event = 'ColorScheme',
+      group = 'direct_hidden_highlight_defaults',
+      event = 'ColorScheme',
     }), 1, 'one ColorScheme autocmd owns default reapplication')
 
     vim.cmd('highlight clear DirectDirectory')
@@ -544,16 +587,31 @@ H.describe('listing filename highlights', function()
     vim.api.nvim_set_hl(0, 'DirectHiddenFileIcon', { fg = 0x765432 })
 
     vim.api.nvim_exec_autocmds('ColorScheme', {})
-    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectDirectory', link = true }),
-      { fg = 0x234567 }, 'default directory link does not overwrite a user highlight')
-    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectHiddenDirectory', link = true }),
-      { fg = 0x123456 }, 'default directory link does not overwrite a user highlight')
-    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectHiddenFile', link = true }),
-      { fg = 0x654321 }, 'default file link does not overwrite a user highlight')
-    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectHiddenFolderIcon', link = true }),
-      { fg = 0x234567 }, 'default hidden-folder icon link preserves a user highlight')
-    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectHiddenFileIcon', link = true }),
-      { fg = 0x765432 }, 'default hidden-file icon link preserves a user highlight')
+    H.assert_eq(
+      vim.api.nvim_get_hl(0, { name = 'DirectDirectory', link = true }),
+      { fg = 0x234567 },
+      'default directory link does not overwrite a user highlight'
+    )
+    H.assert_eq(
+      vim.api.nvim_get_hl(0, { name = 'DirectHiddenDirectory', link = true }),
+      { fg = 0x123456 },
+      'default directory link does not overwrite a user highlight'
+    )
+    H.assert_eq(
+      vim.api.nvim_get_hl(0, { name = 'DirectHiddenFile', link = true }),
+      { fg = 0x654321 },
+      'default file link does not overwrite a user highlight'
+    )
+    H.assert_eq(
+      vim.api.nvim_get_hl(0, { name = 'DirectHiddenFolderIcon', link = true }),
+      { fg = 0x234567 },
+      'default hidden-folder icon link preserves a user highlight'
+    )
+    H.assert_eq(
+      vim.api.nvim_get_hl(0, { name = 'DirectHiddenFileIcon', link = true }),
+      { fg = 0x765432 },
+      'default hidden-file icon link preserves a user highlight'
+    )
 
     vim.api.nvim_set_hl(0, 'DirectDirectory', {})
     vim.api.nvim_set_hl(0, 'DirectHiddenDirectory', {})
@@ -572,38 +630,93 @@ H.describe('listing filename highlights', function()
     local sb = H.sandbox()
     local ws = H.mkdir(sb.root, 'ws')
     local files = {
-      'sample.js', 'sample.py', 'sample.ts', 'sample.sh', 'sample.lua', 'Dockerfile',
-      'sample.java', 'sample.cpp', 'sample.c', 'Makefile', 'sample.bat',
-      'sample.cs', 'sample.php', 'CMakeLists.txt', 'sample.ps1', 'sample.kt',
-      'sample.rb', 'sample.go', 'sample.swift', 'sample.rs',
-      'GNUmakefile', 'Rakefile', 'justfile', 'Containerfile', 'Jenkinsfile',
-      'Vagrantfile', 'README.md', 'LICENSE', 'CODEOWNERS', 'Gemfile',
-      '.hidden.js', 'unknown.extension',
+      'sample.js',
+      'sample.py',
+      'sample.ts',
+      'sample.sh',
+      'sample.lua',
+      'Dockerfile',
+      'sample.java',
+      'sample.cpp',
+      'sample.c',
+      'Makefile',
+      'sample.bat',
+      'sample.cs',
+      'sample.php',
+      'CMakeLists.txt',
+      'sample.ps1',
+      'sample.kt',
+      'sample.rb',
+      'sample.go',
+      'sample.swift',
+      'sample.rs',
+      'GNUmakefile',
+      'Rakefile',
+      'justfile',
+      'Containerfile',
+      'Jenkinsfile',
+      'Vagrantfile',
+      'README.md',
+      'LICENSE',
+      'CODEOWNERS',
+      'Gemfile',
+      '.hidden.js',
+      'unknown.extension',
     }
-    for _, name in ipairs(files) do H.mkfile(ws, name, '') end
+    for _, name in ipairs(files) do
+      H.mkfile(ws, name, '')
+    end
     H.mkdir(ws, 'directory.py')
     local listing = buffer.list(ws)
     local lines = H.buf_lines()
     local by_name = {}
-    for row, line in ipairs(lines) do by_name[line] = row - 1 end
+    for row, line in ipairs(lines) do
+      by_name[line] = row - 1
+    end
 
     local filename_cases = {
-      'sample.js', 'sample.py', 'sample.ts', 'sample.sh', 'sample.lua',
-      'sample.java', 'sample.cpp', 'sample.c', 'sample.bat', 'sample.cs',
-      'sample.php', 'sample.ps1', 'sample.kt', 'sample.rb', 'sample.go',
-      'sample.swift', 'sample.rs', 'unknown.extension',
-      'Dockerfile', 'Makefile', 'CMakeLists.txt', 'GNUmakefile', 'Rakefile',
-      'justfile', 'Containerfile', 'Jenkinsfile', 'Vagrantfile', 'README.md',
-      'LICENSE', 'CODEOWNERS', 'Gemfile',
+      'sample.js',
+      'sample.py',
+      'sample.ts',
+      'sample.sh',
+      'sample.lua',
+      'sample.java',
+      'sample.cpp',
+      'sample.c',
+      'sample.bat',
+      'sample.cs',
+      'sample.php',
+      'sample.ps1',
+      'sample.kt',
+      'sample.rb',
+      'sample.go',
+      'sample.swift',
+      'sample.rs',
+      'unknown.extension',
+      'Dockerfile',
+      'Makefile',
+      'CMakeLists.txt',
+      'GNUmakefile',
+      'Rakefile',
+      'justfile',
+      'Containerfile',
+      'Jenkinsfile',
+      'Vagrantfile',
+      'README.md',
+      'LICENSE',
+      'CODEOWNERS',
+      'Gemfile',
     }
     for _, name in ipairs(filename_cases) do
       H.assert_nil(row_mark(0, by_name[name]), name .. ' has no filename-derived highlight')
     end
     H.assert_nil(row_mark(0, by_name['.hidden.js']), 'dotfiles remain deferred to existing styling')
-    H.assert_nil(row_mark(0, by_name['directory.py/']),
-      'directories have no filename-derived extmark')
-    H.assert_eq(vim.api.nvim_get_hl(0, { name = 'DirectSpecialFile', link = true }), {},
-      'listing does not define a special-file highlight group')
+    H.assert_nil(row_mark(0, by_name['directory.py/']), 'directories have no filename-derived extmark')
+    H.assert_eq(
+      vim.api.nvim_get_hl(0, { name = 'DirectSpecialFile', link = true }),
+      {},
+      'listing does not define a special-file highlight group'
+    )
 
     H.assert_not_nil(listing, 'listing rendered')
   end)
@@ -618,8 +731,10 @@ H.describe('listing filename highlights', function()
     local listing = buffer.list(ws)
     local bufnr = vim.api.nvim_get_current_buf()
     local ns = vim.api.nvim_get_namespaces()['direct-listing-highlights']
-    H.assert_true(ns ~= vim.api.nvim_get_namespaces()['direct-listing-rows'],
-      'highlight extmarks are separate from row identity extmarks')
+    H.assert_true(
+      ns ~= vim.api.nvim_get_namespaces()['direct-listing-rows'],
+      'highlight extmarks are separate from row identity extmarks'
+    )
 
     listing:expand(1)
     H.assert_buf_eq({ 'sub/', '  child.py', 'root.js' })
@@ -633,8 +748,9 @@ H.describe('listing filename highlights', function()
     H.assert_buf_eq({ 'sub/', '  child.py', 'new.unknown' })
     H.assert_eq(#highlight_marks(bufnr), 0, 'no marks remain after listing replacement')
     local row_ns = vim.api.nvim_get_namespaces()['direct-listing-rows']
-    H.assert_true(#vim.api.nvim_buf_get_extmarks(bufnr, row_ns, 0, -1, {}) > 0,
-      'row identity namespace remains populated and unchanged')
+    H.assert_true(
+      #vim.api.nvim_buf_get_extmarks(bufnr, row_ns, 0, -1, {}) > 0,
+      'row identity namespace remains populated and unchanged'
+    )
   end)
-
 end)

@@ -37,8 +37,7 @@ H.describe('content-proof Unpaste', function()
     H.assert_true(history.undo() ~= nil, 'unchanged paste is safely undone')
 
     H.assert_fs_eq(dest, {}, 'captured copies were deleted')
-    H.assert_fs_eq(content, { 'file.txt', 'tree/', 'tree/child.txt' },
-      'register copy remains untouched')
+    H.assert_fs_eq(content, { 'file.txt', 'tree/', 'tree/child.txt' }, 'register copy remains untouched')
     H.assert_eq(vim.fn.glob(dest .. '/.direct-unpaste-*'), '', 'no quarantine remains')
     local undo_path, redo_path = history_paths(sb)
     H.assert_eq(vim.fn.readfile(undo_path), { history.HEADER }, 'undo source was drained')
@@ -82,8 +81,7 @@ H.describe('content-proof Unpaste', function()
 
       H.assert_nil(history.undo(), mutation .. ' child change refuses the whole operation')
       H.assert_eq(H.fs_snapshot(dest), before, mutation .. ' directory remains intact')
-      H.assert_eq(vim.fn.glob(dest .. '/.direct-unpaste-*'), '',
-        mutation .. ' is rejected before capture')
+      H.assert_eq(vim.fn.glob(dest .. '/.direct-unpaste-*'), '', mutation .. ' is rejected before capture')
     end
   end)
 
@@ -107,13 +105,11 @@ H.describe('content-proof Unpaste', function()
     local outside_b = H.mkfile(sb.root, 'outside-b.txt', { 'B' })
     local reg_root = paths.ensure_data_dir('register')
     local reg = H.mkdir(reg_root, 'symlink-fixture')
-    H.assert_true(H.symlink(outside_a, reg .. '/link') == true,
-      'register symlink created')
+    H.assert_true(H.symlink(outside_a, reg .. '/link') == true, 'register symlink created')
     vim.fn.writefile({ reg }, paths.join(reg_root, 'content'))
     local dest = H.mkdir(sb.root, 'dest')
     local pasted = dest .. '/link'
-    H.assert_true(H.symlink(outside_b, pasted) == true,
-      'same-name symlink replacement points elsewhere')
+    H.assert_true(H.symlink(outside_b, pasted) == true, 'same-name symlink replacement points elsewhere')
     local record = action.Paste(reg, dest, { 'link' }, { 'link' })
     H.assert_true(history.log(record) == true, 'paste record fixture')
     local undo_path = history_paths(sb)
@@ -165,12 +161,12 @@ H.describe('content-proof Unpaste', function()
     H.assert_eq(vim.fn.glob(pasted), '', 'the captured entry remains out of P')
     local quarantines = vim.fn.glob(dest .. '/.direct-unpaste-*', false, true)
     H.assert_eq(#quarantines, 1, 'the captured Q is retained for recovery')
-    H.assert_eq(vim.fn.readfile(quarantines[1]), { 'REGISTER-file.txt' },
-      'the original data remains in the quarantine')
+    H.assert_eq(vim.fn.readfile(quarantines[1]), { 'REGISTER-file.txt' }, 'the original data remains in the quarantine')
     H.assert_eq(log.read_raw(undo_path), history_before, 'source record remains')
-    H.assert_true(vim.uv.fs_stat(vim.fs.joinpath(sb.data_home,
-      'direct/history/transaction.json')) ~= nil,
-      'the in-progress Unpaste journal is preserved')
+    H.assert_true(
+      vim.uv.fs_stat(vim.fs.joinpath(sb.data_home, 'direct/history/transaction.json')) ~= nil,
+      'the in-progress Unpaste journal is preserved'
+    )
   end)
 
   H.it('U7 a mismatch in one item prevents deletion of every item', function()
@@ -199,8 +195,7 @@ H.describe('content-proof Unpaste', function()
     local injected = false
     local restore = H.stub(fs, 'rename_noreplace', function(src, target, expected)
       local moved, err, code = real(src, target, expected)
-      if moved and src == pasted and target:find('/.direct-unpaste-', 1, true)
-        and not injected then
+      if moved and src == pasted and target:find('/.direct-unpaste-', 1, true) and not injected then
         injected = true
         H.mkfile(dest, 'file.txt', { 'NEW P OBJECT' })
       end
@@ -224,8 +219,7 @@ H.describe('content-proof Unpaste', function()
     local real = fs.rename_noreplace
     local restore = H.stub(fs, 'rename_noreplace', function(src, target, expected)
       local moved, err, code = real(src, target, expected)
-      if moved and src == pasted and target:find('/.direct-unpaste-', 1, true)
-        and not injected then
+      if moved and src == pasted and target:find('/.direct-unpaste-', 1, true) and not injected then
         injected, quarantine = true, target
         vim.fn.writefile({ 'CHANGED AFTER CAPTURE' }, target)
         H.mkfile(dest, 'file.txt', { 'NEW P OBJECT' })
@@ -239,8 +233,7 @@ H.describe('content-proof Unpaste', function()
     H.assert_nil(result, 'post-capture content mismatch refuses Unpaste')
     H.assert_true(injected, 'captured object was changed and P was reoccupied')
     H.assert_eq(vim.fn.readfile(pasted), { 'NEW P OBJECT' }, 'new P object remains')
-    H.assert_eq(vim.fn.readfile(quarantine), { 'CHANGED AFTER CAPTURE' },
-      'captured Q is preserved for recovery')
+    H.assert_eq(vim.fn.readfile(quarantine), { 'CHANGED AFTER CAPTURE' }, 'captured Q is preserved for recovery')
     H.assert_eq(log.read_raw(undo_path), history_before, 'history source is retained')
     H.assert_notified(quarantine, vim.log.levels.ERROR)
   end)
@@ -256,9 +249,7 @@ H.describe('content-proof Unpaste', function()
     local real = fs.rename_noreplace
     local q_for_a = nil
     local restore = H.stub(fs, 'rename_noreplace', function(src, target, expected)
-      if src == pasted_b and target:find('/.direct-unpaste-', 1, true) then
-        return nil, 'forced Phase B failure'
-      end
+      if src == pasted_b and target:find('/.direct-unpaste-', 1, true) then return nil, 'forced Phase B failure' end
       if src == pasted_a and target:find('/.direct-unpaste-', 1, true) then
         local moved, err, code = real(src, target, expected)
         if moved then
@@ -277,12 +268,12 @@ H.describe('content-proof Unpaste', function()
     H.assert_true(q_for_a ~= nil, 'the first captured entry has a quarantine path')
     H.assert_true(fs.taken(q_for_a), 'captured Q remains for recovery')
     H.assert_eq(vim.fn.readfile(pasted_a), { 'NEW P OBJECT' }, 'new P object is untouched')
-    H.assert_eq(vim.fn.readfile(pasted_b), { 'B' },
-      'uncaptured second entry remains untouched')
+    H.assert_eq(vim.fn.readfile(pasted_b), { 'B' }, 'uncaptured second entry remains untouched')
     H.assert_notified(q_for_a, vim.log.levels.ERROR)
-    H.assert_true(vim.uv.fs_stat(vim.fs.joinpath(sb.data_home,
-      'direct/history/transaction.json')) ~= nil,
-      'the journal records which captures completed')
+    H.assert_true(
+      vim.uv.fs_stat(vim.fs.joinpath(sb.data_home, 'direct/history/transaction.json')) ~= nil,
+      'the journal records which captures completed'
+    )
   end)
 
   H.it('U11 a raised Phase C deletion failure preserves and reports every remaining Q', function()
@@ -326,8 +317,7 @@ H.describe('content-proof Unpaste', function()
     vim.uv.fs_unlink(pasted)
     H.mkfile(vim.fs.dirname(pasted), vim.fs.basename(pasted), { 'REGISTER-file.txt' })
 
-    H.assert_true(history.undo() ~= nil,
-      'identical-byte replacement matches the register and can be removed')
+    H.assert_true(history.undo() ~= nil, 'identical-byte replacement matches the register and can be removed')
     H.assert_nil(vim.uv.fs_lstat(pasted), 'the indistinguishable replacement was deleted')
   end)
 
@@ -347,8 +337,7 @@ H.describe('content-proof Unpaste', function()
       local before = log.read_raw(undo_path)
 
       H.assert_nil(history.undo(), mode .. ' register refuses Unpaste')
-      H.assert_eq(vim.fn.readfile(pasted), { 'REGISTER-file.txt' },
-        mode .. ' register leaves the pasted target')
+      H.assert_eq(vim.fn.readfile(pasted), { 'REGISTER-file.txt' }, mode .. ' register leaves the pasted target')
       H.assert_eq(log.read_raw(undo_path), before, mode .. ' register preserves history')
     end
   end)

@@ -18,8 +18,7 @@ H.describe('paths', function()
     H.assert_eq(vim.fn.isdirectory(sb.data_home), 1, 'sandbox data_home is a directory')
 
     -- XDG_DATA_HOME is pointed inside the sandbox for isolation.
-    H.assert_eq(vim.env.XDG_DATA_HOME, sb.data_home,
-      'sandbox redirects XDG_DATA_HOME into itself')
+    H.assert_eq(vim.env.XDG_DATA_HOME, sb.data_home, 'sandbox redirects XDG_DATA_HOME into itself')
 
     H.mkdir(sb.root, 'sub')
     H.mkfile(sb.root, 'a.txt', { 'hello' })
@@ -41,15 +40,12 @@ H.describe('paths', function()
   H.it('root() absolutises relative inputs', function()
     for _, input in ipairs({ '.', '..', 'a/b' }) do
       local resolved = paths.root(input)
-      H.assert_true(H.is_absolute_path(resolved),
-        string.format('root(%q) is absolute: %s', input, resolved))
+      H.assert_true(H.is_absolute_path(resolved), string.format('root(%q) is absolute: %s', input, resolved))
     end
     -- vim.fs.normalize alone leaves 'a/b' relative, so root() must not be just
     -- normalize().
-    H.assert_eq(paths.root('.'), vim.fs.abspath(vim.fs.normalize('.')),
-      "root('.') == abspath(normalize('.'))")
-    H.assert_true(paths.root('a/b') ~= vim.fs.normalize('a/b'),
-      'root() is not just vim.fs.normalize()')
+    H.assert_eq(paths.root('.'), vim.fs.abspath(vim.fs.normalize('.')), "root('.') == abspath(normalize('.'))")
+    H.assert_true(paths.root('a/b') ~= vim.fs.normalize('a/b'), 'root() is not just vim.fs.normalize()')
   end)
 
   H.it('root() denotes the same directory as a stored buffer name (fs.same_path)', function()
@@ -61,16 +57,13 @@ H.describe('paths', function()
     -- attach compares nvim_buf_get_name(b) against root with fs.same_path,
     -- never `==`: nvim_buf_set_name resolves a symlinked prefix while
     -- paths.root() does not, so string equality would miss.
-    H.assert_true(fs.same_path(name, root),
-      'buffer name and root denote the same directory by ino+dev')
+    H.assert_true(fs.same_path(name, root), 'buffer name and root denote the same directory by ino+dev')
   end)
 
   H.it('data_home() honours a set XDG_DATA_HOME', function()
     local sb = H.sandbox()
     local xdg = sb.root .. '/data-alt'
-    H.with_env({ XDG_DATA_HOME = xdg }, function()
-      H.assert_eq(paths.data_home(), xdg, 'XDG_DATA_HOME is used')
-    end)
+    H.with_env({ XDG_DATA_HOME = xdg }, function() H.assert_eq(paths.data_home(), xdg, 'XDG_DATA_HOME is used') end)
   end)
 
   H.it('data_home() falls back to $HOME/.local/share', function()
@@ -78,8 +71,11 @@ H.describe('paths', function()
     -- the window (a nil value cannot be a table-literal key, harness).
     H.with_env({ HOME = '/home/direct-probe' }, function()
       vim.env.XDG_DATA_HOME = nil
-      H.assert_eq(paths.data_home(), '/home/direct-probe/.local/share',
-        '$HOME/.local/share when XDG_DATA_HOME is unset')
+      H.assert_eq(
+        paths.data_home(),
+        '/home/direct-probe/.local/share',
+        '$HOME/.local/share when XDG_DATA_HOME is unset'
+      )
     end)
   end)
 
@@ -89,8 +85,7 @@ H.describe('paths', function()
       vim.env.XDG_DATA_HOME = nil
       vim.env.HOME = nil
       vim.env.USERPROFILE = nil
-      H.assert_eq(paths.data_home(), vim.fn.stdpath('data'),
-        'stdpath fallback when both are unset')
+      H.assert_eq(paths.data_home(), vim.fn.stdpath('data'), 'stdpath fallback when both are unset')
     end)
     H.assert_notified('$XDG_DATA_HOME')
   end)
@@ -107,10 +102,8 @@ H.describe('paths', function()
     local expected = vim.fs.joinpath(sb.data_home, 'direct', 'history')
     local resolved = paths.data_dir_path('history')
     H.assert_eq(resolved, expected, 'pure resolver returns the expected path')
-    H.assert_eq(vim.fn.isdirectory(vim.fs.dirname(resolved)), 0,
-      'pure resolution did not create the data directory')
-    H.assert_eq(paths.ensure_data_dir('history'), expected,
-      'creating resolver returns the resolved path')
+    H.assert_eq(vim.fn.isdirectory(vim.fs.dirname(resolved)), 0, 'pure resolution did not create the data directory')
+    H.assert_eq(paths.ensure_data_dir('history'), expected, 'creating resolver returns the resolved path')
     H.assert_eq(vim.fn.isdirectory(expected), 1, 'creating resolver created it')
   end)
 
@@ -127,17 +120,13 @@ H.describe('paths', function()
     H.assert_nil(dir, 'data_dir returns nil when the data dir is occupied by a file')
     H.assert_true(type(err) == 'string' and #err > 0, 'data_dir carries an err string')
     H.assert_eq(vim.fn.isdirectory(sb.data_home .. '/direct'), 0, 'direct is still a file, not a dir')
-    H.assert_eq(vim.fn.readfile(sb.data_home .. '/direct'), { 'i am a file' },
-      'the occupying file is untouched')
+    H.assert_eq(vim.fn.readfile(sb.data_home .. '/direct'), { 'i am a file' }, 'the occupying file is untouched')
   end)
 
   H.it('data_dir() returns nil, err on a read-only data home', function()
-    if H.is_windows() then
-      H.skip('Windows does not enforce POSIX directory mode bits')
-    end
+    if H.is_windows() then H.skip('Windows does not enforce POSIX directory mode bits') end
     local sb = H.sandbox()
-    H.assert_true(vim.uv.fs_chmod(sb.data_home, tonumber('500', 8)) == true,
-      'precondition: data home chmod 0500')
+    H.assert_true(vim.uv.fs_chmod(sb.data_home, tonumber('500', 8)) == true, 'precondition: data home chmod 0500')
     local dir, err = paths.data_dir('register')
     H.assert_nil(dir, 'data_dir returns nil on a read-only data home')
     H.assert_true(type(err) == 'string' and #err > 0, 'data_dir carries an err string')
@@ -156,21 +145,19 @@ H.describe('paths', function()
     if oracle_ok then
       H.assert_eq(oracle, expected, 'oracle agrees with vim.fn.sha256')
     else
-      H.assert_true(tostring(oracle):find('E976', 1, true) ~= nil,
-        'older Neovim rejects NUL strings, so the byte-safe fallback is used')
+      H.assert_true(
+        tostring(oracle):find('E976', 1, true) ~= nil,
+        'older Neovim rejects NUL strings, so the byte-safe fallback is used'
+      )
     end
-    H.assert_true(paths.digest('a', 'b') ~= paths.digest('b', 'a'),
-      'argument order is significant (the caller sorts)')
+    H.assert_true(paths.digest('a', 'b') ~= paths.digest('b', 'a'), 'argument order is significant (the caller sorts)')
   end)
 
   H.it('the byte-safe SHA-256 fallback matches standard vectors', function()
     local sha256 = require('direct.sha256')
-    H.assert_eq(sha256(''),
-      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
-    H.assert_eq(sha256('abc'),
-      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
-    H.assert_eq(sha256('a\0b\0c'),
-      '8badde10c760e9b702defb4b5e225de79c515b1d2a5cfb000e140f3c6fbb5629')
+    H.assert_eq(sha256(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+    H.assert_eq(sha256('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+    H.assert_eq(sha256('a\0b\0c'), '8badde10c760e9b702defb4b5e225de79c515b1d2a5cfb000e140f3c6fbb5629')
   end)
 
   H.it('basename() strips a trailing slash', function()

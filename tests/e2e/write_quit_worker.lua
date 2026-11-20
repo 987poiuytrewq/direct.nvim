@@ -100,9 +100,7 @@ local function run_ctrl_c(api)
   local returned = assert(vim.env.DIRECT_E2E_RETURNED)
   -- Feed Ctrl-C while :write is inside its wait. The delayed filesystem task is
   -- independent and must still complete after the command stops waiting.
-  vim.defer_fn(function()
-    vim.api.nvim_input(string.char(3))
-  end, 150)
+  vim.defer_fn(function() vim.api.nvim_input(string.char(3)) end, 150)
   local ok, err = pcall(vim.cmd, 'write')
   write_marker(returned, ok and 'write completed normally' or tostring(err))
   wait_for_path(assert(vim.env.DIRECT_E2E_EXPECTED_DST), 'the background save after Ctrl-C')

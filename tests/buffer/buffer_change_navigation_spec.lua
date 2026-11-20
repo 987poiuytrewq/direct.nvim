@@ -5,17 +5,15 @@ local buffer = require('direct.buffer.buffer')
 
 local function git(root, ...)
   local args = { 'git', '-C', root }
-  for _, arg in ipairs({ ... }) do args[#args + 1] = arg end
-  local result = vim.system(args, { text = true }):wait()
-  if result.code ~= 0 then
-    error(string.format('git %s failed: %s', table.concat({ ... }, ' '), result.stderr))
+  for _, arg in ipairs({ ... }) do
+    args[#args + 1] = arg
   end
+  local result = vim.system(args, { text = true }):wait()
+  if result.code ~= 0 then error(string.format('git %s failed: %s', table.concat({ ... }, ' '), result.stderr)) end
   return (result.stdout or ''):gsub('[\r\n]+$', '')
 end
 
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 H.describe('buffer navigation', function()
   H.it('moves through changed rows in either direction without wrapping', function()
@@ -41,10 +39,13 @@ H.describe('buffer navigation', function()
     H.mkfile(root, 'ignored.txt', 'ignored')
 
     buffer.list(root)
-    H.assert_true(vim.wait(5000, function()
-      local state = buffer._state_for_test(vim.api.nvim_get_current_buf())
-      return state and not state.git_status_pending
-    end), 'Git status is ready before changed-row navigation')
+    H.assert_true(
+      vim.wait(5000, function()
+        local state = buffer._state_for_test(vim.api.nvim_get_current_buf())
+        return state and not state.git_status_pending
+      end),
+      'Git status is ready before changed-row navigation'
+    )
     H.assert_buf_eq({ 'a.txt', 'b.txt', 'c.txt', 'ignored.txt' })
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
 
@@ -102,8 +103,7 @@ H.describe('buffer navigation', function()
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
 
     H.assert_true(buffer.next_file(), 'next file is found after directory rows')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 3,
-      'expanded nested files are included and directories are skipped')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 3, 'expanded nested files are included and directories are skipped')
     H.assert_true(buffer.next_file(), 'the following file is found')
     H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 4, 'navigation follows listing order')
     H.assert_true(buffer.next_file(), 'the last file is found')
@@ -116,7 +116,6 @@ H.describe('buffer navigation', function()
     H.assert_true(buffer.previous_file(), 'previous navigation finds an expanded child file')
     H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 3, 'nested file is the prior target')
     H.assert_false(buffer.previous_file(), 'navigation does not wrap before the first file')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 3,
-      'start boundary leaves cursor in place')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 3, 'start boundary leaves cursor in place')
   end)
 end)

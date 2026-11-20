@@ -12,17 +12,13 @@
 
 local H = require('tests.support.harness')
 
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 -- fileexplorer_bufenter_count() -> the number of FileExplorer BufEnter
 -- autocmds, or 0 when the group does not exist. nvim_get_autocmds raises on a
 -- missing group, hence the exists() guard.
 local function fileexplorer_bufenter_count()
-  if vim.fn.exists('#FileExplorer') == 0 then
-    return 0
-  end
+  if vim.fn.exists('#FileExplorer') == 0 then return 0 end
   local n = 0
   for _ in ipairs(vim.api.nvim_get_autocmds({ group = 'FileExplorer', event = 'BufEnter' })) do
     n = n + 1
@@ -136,8 +132,10 @@ H.describe('netrw neutralisation', function()
     --
     --   (a) netrw's plugin file sourced after our plugin (the rtp order);
     load_netrw()
-    H.assert_true(fileexplorer_bufenter_count() > 0,
-      'netrw installed its BufEnter autocmd after our plugin was sourced')
+    H.assert_true(
+      fileexplorer_bufenter_count() > 0,
+      'netrw installed its BufEnter autocmd after our plugin was sourced'
+    )
 
     --   (b) netrw's plugin file sourced again *inside the VimEnter batch*, after
     --       our handler has already run. This is what a plugin manager's own
@@ -153,12 +151,13 @@ H.describe('netrw neutralisation', function()
     })
 
     vim.api.nvim_exec_autocmds('VimEnter', {})
-    H.assert_true(fileexplorer_bufenter_count() > 0,
-      'the late source re-registered FileExplorer after the synchronous clear')
+    H.assert_true(
+      fileexplorer_bufenter_count() > 0,
+      'the late source re-registered FileExplorer after the synchronous clear'
+    )
 
     -- The tick-deferred clear is what removes it; the count must be 0 once
     -- startup completes (i.e. after that scheduled callback has run).
-    H.assert_eq(settle_netrw(), 0,
-      'zero FileExplorer BufEnter autocmds once startup completes')
+    H.assert_eq(settle_netrw(), 0, 'zero FileExplorer BufEnter autocmds once startup completes')
   end)
 end)

@@ -13,9 +13,7 @@ local fixtures = require('tests.support.history_fixtures')
 local MARKER = fixtures.header
 
 H.describe('history', function()
-  local function history_dir(sb)
-    return vim.fs.joinpath(sb.data_home, 'direct/history')
-  end
+  local function history_dir(sb) return vim.fs.joinpath(sb.data_home, 'direct/history') end
 
   local function write_touch_apply_intent(sb, target)
     H.assert_true(history.preflight() ~= nil, 'initialize history before the fixture intent')
@@ -34,8 +32,7 @@ H.describe('history', function()
       destination_identity = vim.NIL,
     })
     local path = vim.fs.joinpath(history_dir(sb), 'transaction.json')
-    H.assert_true(log.write_raw_atomic(path, transaction .. '\n') == true,
-      'write the prepared action intent')
+    H.assert_true(log.write_raw_atomic(path, transaction .. '\n') == true, 'write the prepared action intent')
     return path
   end
 
@@ -53,25 +50,30 @@ H.describe('history', function()
     end
     local ok, err = xpcall(fn, debug.traceback)
     for k in pairs(package.loaded) do
-      if k == 'direct' or k:match('^direct%.') then
-        package.loaded[k] = nil
-      end
+      if k == 'direct' or k:match('^direct%.') then package.loaded[k] = nil end
     end
     for k, value in pairs(saved) do
       package.loaded[k] = value
     end
-    if not ok then
-      error(err, 0)
-    end
+    if not ok then error(err, 0) end
   end
 
   H.it('completes DirectHistory drop directions', function()
-    H.assert_eq(history.complete_history('d', 'DirectHistory d', #'DirectHistory d'),
-      { 'drop' }, 'the history subcommand completes')
-    H.assert_eq(history.complete_history('', 'DirectHistory drop ', #'DirectHistory drop '),
-      { 'undo', 'redo' }, 'drop completes both stack directions')
-    H.assert_eq(history.complete_history('r', 'DirectHistory drop r', #'DirectHistory drop r'),
-      { 'redo' }, 'the current direction prefix is respected')
+    H.assert_eq(
+      history.complete_history('d', 'DirectHistory d', #'DirectHistory d'),
+      { 'drop' },
+      'the history subcommand completes'
+    )
+    H.assert_eq(
+      history.complete_history('', 'DirectHistory drop ', #'DirectHistory drop '),
+      { 'undo', 'redo' },
+      'drop completes both stack directions'
+    )
+    H.assert_eq(
+      history.complete_history('r', 'DirectHistory drop r', #'DirectHistory drop r'),
+      { 'redo' },
+      'the current direction prefix is respected'
+    )
   end)
 
   H.it('trims the oldest undo records to history_limit and warns once', function()
@@ -149,8 +151,11 @@ H.describe('history', function()
     action.deserialize = original_deserialize
 
     H.assert_true(logged, 'the new save is logged')
-    H.assert_eq(deserialize_calls, 2,
-      'only history preflight decodes the two existing records; pruning skips non-paste records')
+    H.assert_eq(
+      deserialize_calls,
+      2,
+      'only history preflight decodes the two existing records; pruning skips non-paste records'
+    )
     config.setup({})
   end)
 
@@ -182,73 +187,83 @@ H.describe('history', function()
 
     -- t.txt: touch roundtrip re-creates the file; remove it so the next
     -- roundtrip starts from an empty workspace.
-    roundtrip('touch',
+    roundtrip(
+      'touch',
       function() return action.Touch(ws .. '/t.txt') end,
-      { 't.txt' }, {},
-      function() vim.fn.delete(ws .. '/t.txt') end)
+      { 't.txt' },
+      {},
+      function() vim.fn.delete(ws .. '/t.txt') end
+    )
 
     -- b.txt: the mv roundtrip ends with a.txt renamed to b.txt.
     H.mkfile(ws, 'a.txt', { 'a' })
-    roundtrip('mv',
+    roundtrip(
+      'mv',
       function() return action.Move(ws .. '/a.txt', ws .. '/b.txt') end,
-      { 'b.txt' }, { 'a.txt' },
-      function() vim.fn.delete(ws .. '/b.txt') end)
+      { 'b.txt' },
+      { 'a.txt' },
+      function() vim.fn.delete(ws .. '/b.txt') end
+    )
 
     -- rm / rmdir roundtrips end with an empty workspace (the entry sits in the
     -- trash), so no cleanup is needed between them.
     H.mkfile(ws, 'f.txt', { 'f' })
-    roundtrip('rm',
-      function() return action.Remove(ws .. '/f.txt') end,
-      {}, { 'f.txt' })
+    roundtrip('rm', function() return action.Remove(ws .. '/f.txt') end, {}, { 'f.txt' })
 
     H.mkdir(ws, 'd')
     H.mkfile(ws, 'd/sub.txt', { 's' })
-    roundtrip('rmdir',
-      function() return action.RemoveDirectory(ws .. '/d') end,
-      {}, { 'd/', 'd/sub.txt' })
+    roundtrip('rmdir', function() return action.RemoveDirectory(ws .. '/d') end, {}, { 'd/', 'd/sub.txt' })
 
     -- rs: a restore from trash, using a throwaway (unlogged) removal to put a
     -- file into the trash first. The file must exist before the removal.
     H.mkfile(ws, 'f2.txt', { 'f2' })
     local rm_f = action.Remove(ws .. '/f2.txt')
     H.assert_true(rm_f['do']() ~= nil, 'setup: throwaway removal for rs')
-    roundtrip('rs',
+    roundtrip(
+      'rs',
       function() return action.Restore(rm_f.dst, ws .. '/f2.txt') end,
-      { 'f2.txt' }, {},
-      function() vim.fn.delete(ws .. '/f2.txt') end)
+      { 'f2.txt' },
+      {},
+      function() vim.fn.delete(ws .. '/f2.txt') end
+    )
 
     -- rsdir: same pattern for a directory tree, restored and then cleaned up.
     local rm_d = action.RemoveDirectory(ws .. '/d2')
     H.mkdir(ws, 'd2')
     H.mkfile(ws, 'd2/sub.txt', { 's' })
     H.assert_true(rm_d['do']() ~= nil, 'setup: throwaway removal for rsdir')
-    roundtrip('rsdir',
+    roundtrip(
+      'rsdir',
       function() return action.RestoreDirectory(rm_d.dst, ws .. '/d2') end,
-      { 'd2/', 'd2/sub.txt' }, {},
-      function() vim.fs.rm(ws .. '/d2', { recursive = true, force = true }) end)
+      { 'd2/', 'd2/sub.txt' },
+      {},
+      function() vim.fs.rm(ws .. '/d2', { recursive = true, force = true }) end
+    )
 
     -- mkdir / p / up roundtrips leave their entries behind after redo.
-    roundtrip('mkdir',
+    roundtrip(
+      'mkdir',
       function() return action.MakeDirectory(ws .. '/d3') end,
-      { 'd3/' }, {},
-      function() vim.fs.rm(ws .. '/d3', { recursive = true, force = true }) end)
+      { 'd3/' },
+      {},
+      function() vim.fs.rm(ws .. '/d3', { recursive = true, force = true }) end
+    )
 
-    roundtrip('p',
+    roundtrip(
+      'p',
       function() return action.Paste(reg, ws, { 'f.txt', 'tree' }, { 'f.txt', 'tree' }) end,
-      { 'f.txt', 'tree/', 'tree/sub.txt' }, {},
+      { 'f.txt', 'tree/', 'tree/sub.txt' },
+      {},
       function()
         vim.fn.delete(ws .. '/f.txt')
         vim.fs.rm(ws .. '/tree', { recursive = true, force = true })
-      end)
+      end
+    )
 
     -- up: a manual (unlogged) paste first, then an unpaste that is undone
     -- and redone. The roundtrip ends with an empty workspace again.
-    H.assert_true(
-      action.Paste(reg, ws, { 'u.txt' }, { 'u.txt' })['do']() ~= nil,
-      'setup: manual paste for up')
-    roundtrip('up',
-      function() return action.Unpaste(ws, reg, { 'u.txt' }, { 'u.txt' }) end,
-      {}, { 'u.txt' })
+    H.assert_true(action.Paste(reg, ws, { 'u.txt' }, { 'u.txt' })['do']() ~= nil, 'setup: manual paste for up')
+    roundtrip('up', function() return action.Unpaste(ws, reg, { 'u.txt' }, { 'u.txt' }) end, {}, { 'u.txt' })
   end)
 
   -- Ten stacked mutations verify strict LIFO undo followed by ordered redo.
@@ -265,21 +280,21 @@ H.describe('history', function()
     local states = { H.fs_snapshot(ws) }
     local function step(build)
       local a = build()
-      H.assert_true(a['do']() ~= nil, 'step ' .. (#states) .. ': do() succeeds')
-      H.assert_true(history.log(a) == true, 'step ' .. (#states) .. ': log() succeeds')
+      H.assert_true(a['do']() ~= nil, 'step ' .. #states .. ': do() succeeds')
+      H.assert_true(history.log(a) == true, 'step ' .. #states .. ': log() succeeds')
       states[#states + 1] = H.fs_snapshot(ws)
     end
 
-    step(function() return action.MakeDirectory(ws .. '/tree') end)          -- 1 mkdir
-    step(function() return action.Touch(ws .. '/tree/inner.txt') end)        -- 2 create file
-    step(function() return action.RemoveDirectory(ws .. '/tree') end)        -- 3 delete dir
-    step(function() return action.Touch(ws .. '/same.txt') end)              -- 4 create file
-    step(function() return action.Remove(ws .. '/same.txt') end)             -- 5 delete file
-    step(function() return action.Touch(ws .. '/same.txt') end)              -- 6 recreate it
-    step(function() return action.Remove(ws .. '/same.txt') end)             -- 7 delete it again
-    step(function() return action.Touch(ws .. '/a.txt') end)                 -- 8 create file
-    step(function() return action.Move(ws .. '/a.txt', ws .. '/b.txt') end)  -- 9 rename/move
-    step(function() return action.Touch(ws .. '/c.txt') end)                 -- 10 create file
+    step(function() return action.MakeDirectory(ws .. '/tree') end) -- 1 mkdir
+    step(function() return action.Touch(ws .. '/tree/inner.txt') end) -- 2 create file
+    step(function() return action.RemoveDirectory(ws .. '/tree') end) -- 3 delete dir
+    step(function() return action.Touch(ws .. '/same.txt') end) -- 4 create file
+    step(function() return action.Remove(ws .. '/same.txt') end) -- 5 delete file
+    step(function() return action.Touch(ws .. '/same.txt') end) -- 6 recreate it
+    step(function() return action.Remove(ws .. '/same.txt') end) -- 7 delete it again
+    step(function() return action.Touch(ws .. '/a.txt') end) -- 8 create file
+    step(function() return action.Move(ws .. '/a.txt', ws .. '/b.txt') end) -- 9 rename/move
+    step(function() return action.Touch(ws .. '/c.txt') end) -- 10 create file
 
     -- The repeated removal really did take the collision slot: after step 7 the
     -- trash holds BOTH `<digest(same.txt)>` (step 5) and its `-1` sibling
@@ -287,18 +302,18 @@ H.describe('history', function()
     -- collision path was never reached.
     local trash = paths.data_dir('trash')
     local digest = paths.digest(ws .. '/same.txt')
-    H.assert_true(fs.exists(paths.join(trash, digest)),
-      'the first rm of same.txt occupies <digest>')
-    H.assert_true(fs.exists(paths.join(trash, digest .. '-1')),
-      'the repeated rm of same.txt took the <digest>-1 collision slot')
+    H.assert_true(fs.exists(paths.join(trash, digest)), 'the first rm of same.txt occupies <digest>')
+    H.assert_true(
+      fs.exists(paths.join(trash, digest .. '-1')),
+      'the repeated rm of same.txt took the <digest>-1 collision slot'
+    )
 
     -- Undo: step 10 first, ..., step 1 last; after each undo the workspace must
     -- equal the state that step originally produced only AFTER its predecessor.
     local n = #states - 1 -- number of steps (10)
     for j = n, 1, -1 do
       H.assert_true(history.undo() ~= nil, 'undo of step ' .. j .. ' succeeds')
-      H.assert_eq(H.fs_snapshot(ws), states[j],
-        'state after undoing step ' .. j .. ' (LIFO)')
+      H.assert_eq(H.fs_snapshot(ws), states[j], 'state after undoing step ' .. j .. ' (LIFO)')
     end
     -- Exactly ten steps were drained: an eleventh undo is the original state.
     H.assert_eq(H.fs_snapshot(ws), states[1], 'all ten steps undone to the original state')
@@ -311,11 +326,9 @@ H.describe('history', function()
     -- equal the state that step produced.
     for j = 1, n do
       H.assert_true(history.redo() ~= nil, 'redo of step ' .. j .. ' succeeds')
-      H.assert_eq(H.fs_snapshot(ws), states[j + 1],
-        'state after redoing step ' .. j)
+      H.assert_eq(H.fs_snapshot(ws), states[j + 1], 'state after redoing step ' .. j)
     end
-    H.assert_eq(H.fs_snapshot(ws), states[n + 1],
-      'redo re-applied all ten steps to the final state')
+    H.assert_eq(H.fs_snapshot(ws), states[n + 1], 'redo re-applied all ten steps to the final state')
   end)
 
   H.it('undo/redo on empty logs notify Nothing to undo / Nothing to redo', function()
@@ -338,15 +351,16 @@ H.describe('history', function()
     local undo_path = vim.fs.joinpath(history_dir(sb), 'undo.log')
     local redo_path = vim.fs.joinpath(history_dir(sb), 'redo.log')
     local record = fixtures.move(sb.root .. '/a.txt', sb.root .. '/b.txt')
-    H.assert_eq(vim.fn.readfile(undo_path), { MARKER, record },
-      'the JSONL header plus one canonical record is recorded')
+    H.assert_eq(
+      vim.fn.readfile(undo_path),
+      { MARKER, record },
+      'the JSONL header plus one canonical record is recorded'
+    )
 
     -- The reversal of the move is Move(b -> a); make fs.rename fail so the
     -- undo cannot execute. cwd is the workspace so the failure message is
     -- Descriptions are relative to the current working directory.
-    local restore = H.stub(fs, 'rename', function()
-      return nil, 'forced failure'
-    end)
+    local restore = H.stub(fs, 'rename', function() return nil, 'forced failure' end)
     H.capture_messages()
     H.with_cwd(sb.root, function()
       local res = history.undo()
@@ -355,20 +369,19 @@ H.describe('history', function()
     restore()
 
     H.assert_notified('Failed to undo action - Moved b.txt to a.txt')
-    H.assert_eq(vim.fn.readfile(undo_path), { MARKER, record },
-      'the original JSON record was restored to undo.log')
-    H.assert_eq(vim.fn.readfile(redo_path), { MARKER },
-      'nothing was pushed to redo.log')
+    H.assert_eq(vim.fn.readfile(undo_path), { MARKER, record }, 'the original JSON record was restored to undo.log')
+    H.assert_eq(vim.fn.readfile(redo_path), { MARKER }, 'nothing was pushed to redo.log')
 
     -- With the stub restored the same undo succeeds and re-logs the reversal.
     H.assert_true(history.undo() ~= nil, 'undo succeeds after the stub is restored')
     H.assert_true(fs.exists(sb.root .. '/a.txt'), 'file restored')
     H.assert_false(fs.exists(sb.root .. '/b.txt'), 'renamed name gone')
-    H.assert_eq(vim.fn.readfile(undo_path), { MARKER },
-      'undo.log drained back to the header')
-    H.assert_eq(vim.fn.readfile(redo_path),
+    H.assert_eq(vim.fn.readfile(undo_path), { MARKER }, 'undo.log drained back to the header')
+    H.assert_eq(
+      vim.fn.readfile(redo_path),
       { MARKER, fixtures.move(sb.root .. '/b.txt', sb.root .. '/a.txt') },
-      'the inverse record was appended to redo.log')
+      'the inverse record was appended to redo.log'
+    )
   end)
 
   H.it('a missing undo source explains how to drop the irrecoverable step', function()
@@ -381,15 +394,15 @@ H.describe('history', function()
     H.assert_true(vim.uv.fs_unlink(destination), 'the undo source disappears externally')
 
     H.capture_messages()
-    local restore_rename = H.stub(fs, 'rename', function()
-      return nil, 'The system cannot find the file specified'
-    end)
+    local restore_rename = H.stub(fs, 'rename', function() return nil, 'The system cannot find the file specified' end)
     local result, err = history.undo()
     restore_rename()
 
     H.assert_nil(result, 'undo refuses when its source is missing')
-    H.assert_true(tostring(err):find(':DirectHistory drop undo', 1, true) ~= nil,
-      'the returned error explains how to discard this step')
+    H.assert_true(
+      tostring(err):find(':DirectHistory drop undo', 1, true) ~= nil,
+      'the returned error explains how to discard this step'
+    )
     H.assert_notified(':DirectHistory drop undo', vim.log.levels.ERROR)
     H.assert_true(history.drop_top('undo'), 'the explicit drop command removes the stuck step')
     local state = history.preflight()
@@ -405,14 +418,12 @@ H.describe('history', function()
     history.undo()
 
     local redo_path = vim.fs.joinpath(history_dir(sb), 'redo.log')
-    H.assert_eq(#vim.fn.readfile(redo_path), 2,
-      'redo holds the marker and the reversal')
+    H.assert_eq(#vim.fn.readfile(redo_path), 2, 'redo holds the marker and the reversal')
 
     local touch = action.Touch(sb.root .. '/c.txt')
     touch['do']()
     history.log(touch)
-    H.assert_eq(vim.fn.readfile(redo_path), { MARKER },
-      'log() resets redo to its header')
+    H.assert_eq(vim.fn.readfile(redo_path), { MARKER }, 'log() resets redo to its header')
 
     H.capture_messages()
     H.assert_nil(history.redo(), 'redo is now a no-op')
@@ -428,30 +439,35 @@ H.describe('history', function()
     H.mkfile(ws, 'file.txt', { 'UNRELATED-B' })
     -- A legacy `p` line whose destination is the workspace, so replaying it as
     -- an Unpaste deletes ws/my and ws/file.txt.
-    local legacy_line = 'p\t' .. sb.root .. '/reg\t' .. ws
-      .. '\tmy file.txt\tmy file.txt'
+    local legacy_line = 'p\t' .. sb.root .. '/reg\t' .. ws .. '\tmy file.txt\tmy file.txt'
     H.mkfile(history_dir(sb), 'undo.log', { legacy_line })
 
     H.capture_messages()
     local res = history.undo()
     H.assert_nil(res, 'a foreign log yields no undo action')
-    H.assert_true(H.messages():find('legacy history was backed up and reset', 1, true) ~= nil,
-      'legacy reset emits a warning')
+    H.assert_true(
+      H.messages():find('legacy history was backed up and reset', 1, true) ~= nil,
+      'legacy reset emits a warning'
+    )
 
     -- The deleted-file oracle: these readfile calls raise E484 if the foreign
     -- line is ever executed.
-    H.assert_eq(vim.fn.readfile(ws .. '/my'), { 'UNRELATED-A' },
-      'the unrelated ws/my survives with its content')
-    H.assert_eq(vim.fn.readfile(ws .. '/file.txt'), { 'UNRELATED-B' },
-      'the unrelated ws/file.txt survives with its content')
+    H.assert_eq(vim.fn.readfile(ws .. '/my'), { 'UNRELATED-A' }, 'the unrelated ws/my survives with its content')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/file.txt'),
+      { 'UNRELATED-B' },
+      'the unrelated ws/file.txt survives with its content'
+    )
 
     local undo_path = vim.fs.joinpath(history_dir(sb), 'undo.log')
-    H.assert_eq(vim.fn.readfile(undo_path), { MARKER },
-      'the recognized legacy log was reset to a header-only JSONL file')
+    H.assert_eq(
+      vim.fn.readfile(undo_path),
+      { MARKER },
+      'the recognized legacy log was reset to a header-only JSONL file'
+    )
     local backup = vim.fn.glob(undo_path .. '.backup-*')
     H.assert_true(backup ~= '', 'a timestamped backup was created')
-    H.assert_eq(log.read_raw(backup), legacy_line .. '\n',
-      'the original Python bytes are preserved exactly')
+    H.assert_eq(log.read_raw(backup), legacy_line .. '\n', 'the original Python bytes are preserved exactly')
 
     -- With the foreign log gone, a second undo sees empty history.
     H.capture_messages()
@@ -470,12 +486,17 @@ H.describe('history', function()
     H.capture_messages()
     H.assert_nil(history.undo(), 'an unknown log yields no action')
     H.assert_notified(undo_path, vim.log.levels.ERROR)
-    H.assert_eq(log.read_raw(undo_path), '#direct-history-v99\n',
-      'unknown bytes remain byte-for-byte')
-    H.assert_eq(vim.fn.readfile(undo_path .. '.legacy'), { 'legacy-older' },
-      'an unrelated pre-existing .legacy file is untouched')
-    H.assert_eq(vim.fn.readfile(undo_path .. '.legacy.1'), { 'legacy-even-older' },
-      'an unrelated pre-existing .legacy.1 file is untouched')
+    H.assert_eq(log.read_raw(undo_path), '#direct-history-v99\n', 'unknown bytes remain byte-for-byte')
+    H.assert_eq(
+      vim.fn.readfile(undo_path .. '.legacy'),
+      { 'legacy-older' },
+      'an unrelated pre-existing .legacy file is untouched'
+    )
+    H.assert_eq(
+      vim.fn.readfile(undo_path .. '.legacy.1'),
+      { 'legacy-even-older' },
+      'an unrelated pre-existing .legacy.1 file is untouched'
+    )
   end)
 
   H.it('a malformed legacy log is preserved and blocks a new history action', function()
@@ -486,10 +507,8 @@ H.describe('history', function()
     H.capture_messages()
     H.assert_nil(history.undo(), 'damaged history yields no undo action')
     H.assert_notified(undo_path, vim.log.levels.ERROR)
-    H.assert_eq(log.read_raw(undo_path), '#direct-history-v3\nmv\t/a\n',
-      'malformed legacy bytes remain byte-for-byte')
-    H.assert_nil(vim.uv.fs_stat(sb.root .. '/c.txt'),
-      'no later action is accidentally executed')
+    H.assert_eq(log.read_raw(undo_path), '#direct-history-v3\nmv\t/a\n', 'malformed legacy bytes remain byte-for-byte')
+    H.assert_nil(vim.uv.fs_stat(sb.root .. '/c.txt'), 'no later action is accidentally executed')
   end)
 
   H.it('a marker-only log is empty history', function()
@@ -522,8 +541,7 @@ H.describe('history', function()
       H.assert_true(h.log(move) == true, 'process A logged the move')
     end)
 
-    H.assert_eq(vim.fn.readfile(undo_path)[1], MARKER,
-      'the on-disk log carries the JSONL header')
+    H.assert_eq(vim.fn.readfile(undo_path)[1], MARKER, 'the on-disk log carries the JSONL header')
     H.assert_true(H.exists(sb.root, 'b.txt'), 'process A left the moved file')
 
     local undone = false
@@ -540,39 +558,45 @@ H.describe('history', function()
     local sb = H.sandbox()
     H.assert_true(history.lock.acquire(), 'the first process takes the lock')
     local script = H.mkfile(sb.root, 'try_lock.lua', {
-      "local root = assert(vim.env.DIRECT_FRESH_ROOT)",
+      'local root = assert(vim.env.DIRECT_FRESH_ROOT)',
       "package.path = root .. '/lua/?.lua;' .. package.path",
       "local lock = require('direct.history.lock')",
-      "local ok, err = lock.acquire()",
+      'local ok, err = lock.acquire()',
       "if ok then io.stdout:write('ACQUIRED\\n'); lock.release()",
       "else io.stdout:write('BLOCKED\\n' .. tostring(err) .. '\\n') end",
     })
     local output
-    H.with_env({ XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() },
-      function()
-        output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script })
-      end)
+    H.with_env(
+      { XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() },
+      function() output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script }) end
+    )
     H.assert_true(history.lock.release(), 'the first process releases the lock')
-    H.assert_true(output:find('BLOCKED', 1, true) ~= nil,
-      'the concurrent process fails closed instead of entering the critical section')
-    H.assert_true(output:find('another Neovim instance is using direct.vim', 1, true) ~= nil,
-      'the busy-lock error explains the cause')
-    H.assert_true(output:find(tostring(vim.uv.os_getpid()), 1, true) ~= nil,
-      'the busy-lock message names the holder PID')
+    H.assert_true(
+      output:find('BLOCKED', 1, true) ~= nil,
+      'the concurrent process fails closed instead of entering the critical section'
+    )
+    H.assert_true(
+      output:find('another Neovim instance is using direct.vim', 1, true) ~= nil,
+      'the busy-lock error explains the cause'
+    )
+    H.assert_true(
+      output:find(tostring(vim.uv.os_getpid()), 1, true) ~= nil,
+      'the busy-lock message names the holder PID'
+    )
   end)
 
   H.it('retries a busy lock until the other process releases it', function()
     local sb = H.sandbox()
     local marker = vim.fs.joinpath(sb.root, 'lock-held')
     local script = H.mkfile(sb.root, 'hold_lock.lua', {
-      "local root = assert(vim.env.DIRECT_FRESH_ROOT)",
+      'local root = assert(vim.env.DIRECT_FRESH_ROOT)',
       "package.path = root .. '/lua/?.lua;' .. package.path",
       "local lock = require('direct.history.lock')",
-      "local ok, err = lock.acquire()",
+      'local ok, err = lock.acquire()',
       "if not ok then io.stdout:write('BLOCKED ' .. tostring(err)); return end",
       'vim.fn.writefile({"held"}, ' .. string.format('%q', marker) .. ')',
       'vim.wait(350, function() return false end, 20)',
-      "lock.release()",
+      'lock.release()',
       "io.stdout:write('RELEASED')",
     })
     local process = vim.system({ vim.v.progpath, '--headless', '-l', script }, {
@@ -582,25 +606,26 @@ H.describe('history', function()
       },
       text = true,
     })
-    H.assert_true(vim.wait(3000, function() return fs.exists(marker) end),
-      'the second process acquired the lock')
+    H.assert_true(vim.wait(3000, function() return fs.exists(marker) end), 'the second process acquired the lock')
 
     local acquired, acquire_err = history.lock.acquire()
     H.assert_true(acquired == true, tostring(acquire_err))
     H.assert_true(history.lock.release(), 'the waiting process releases the lock')
     local result = process:wait(5000)
     H.assert_eq(result.code, 0, tostring(result.stderr))
-    H.assert_true(result.stdout:find('RELEASED', 1, true) ~= nil,
-      'the holder released the lock inside the retry window')
+    H.assert_true(
+      result.stdout:find('RELEASED', 1, true) ~= nil,
+      'the holder released the lock inside the retry window'
+    )
   end)
 
   H.it('apply holds the process lock through filesystem execution and history commit', function()
     local sb = H.sandbox()
     local script = H.mkfile(sb.root, 'try_lock_during_apply.lua', {
-      "local root = assert(vim.env.DIRECT_FRESH_ROOT)",
+      'local root = assert(vim.env.DIRECT_FRESH_ROOT)',
       "package.path = root .. '/lua/?.lua;' .. package.path",
       "local lock = require('direct.history.lock')",
-      "local ok = lock.acquire()",
+      'local ok = lock.acquire()',
       "if ok then io.stdout:write('ACQUIRED\\n'); lock.release()",
       "else io.stdout:write('BLOCKED\\n') end",
     })
@@ -608,15 +633,17 @@ H.describe('history', function()
     local action_path = sb.root .. '/created.txt'
     local create = action.Touch(action_path)
     local applied = history.apply(create, function()
-      H.with_env({ XDG_DATA_HOME = sb.data_home,
-        DIRECT_FRESH_ROOT = vim.fn.getcwd() }, function()
-        output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script })
-      end)
+      H.with_env(
+        { XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() },
+        function() output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script }) end
+      )
       return create['do']()
     end)
     H.assert_true(applied == true, 'the action and its history commit complete')
-    H.assert_true(output:find('BLOCKED', 1, true) ~= nil,
-      'another Direct process cannot enter while the filesystem action is running')
+    H.assert_true(
+      output:find('BLOCKED', 1, true) ~= nil,
+      'another Direct process cannot enter while the filesystem action is running'
+    )
     H.assert_true(fs.exists(action_path), 'the filesystem action completed')
     H.assert_true(history.undo() ~= nil, 'the committed action is undoable')
     H.assert_false(fs.exists(action_path), 'undo removes the created file')
@@ -634,10 +661,12 @@ H.describe('history', function()
     end)
 
     H.assert_true(fs.exists(target), 'recovery completes the not-yet-started creation')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
-      { MARKER, fixtures.touch(target) }, 'the recovered action is in undo history')
-    H.assert_nil(vim.uv.fs_stat(transaction_path),
-      'the completed journal is removed')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
+      { MARKER, fixtures.touch(target) },
+      'the recovered action is in undo history'
+    )
+    H.assert_nil(vim.uv.fs_stat(transaction_path), 'the completed journal is removed')
   end)
 
   H.it('a grouped move resumes when the process stops after a staged rename', function()
@@ -659,32 +688,33 @@ H.describe('history', function()
       end
       return real_write(path, bytes)
     end)
-    local result = history.apply(group, function()
-      error('group execution must use its persisted move plan')
-    end)
+    local result = history.apply(group, function() error('group execution must use its persisted move plan') end)
     restore()
 
     H.assert_nil(result, 'the interrupted group reports its journal failure')
-    H.assert_true(fs.exists(ws .. '/.direct-tmp-1'),
-      'the first source is staged before the progress write fails')
+    H.assert_true(fs.exists(ws .. '/.direct-tmp-1'), 'the first source is staged before the progress write fails')
 
     with_fresh_process(function()
       local fresh_history = require('direct.history.history')
-      H.assert_true(fresh_history.preflight() ~= nil,
-        'restart resumes the persisted sequence from the filesystem state')
+      H.assert_true(
+        fresh_history.preflight() ~= nil,
+        'restart resumes the persisted sequence from the filesystem state'
+      )
     end)
 
-    H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'B' },
-      'the second entry lands at a.txt')
-    H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'A' },
-      'the staged first entry lands at b.txt')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
-      { MARKER, fixtures.group({
+    H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'B' }, 'the second entry lands at a.txt')
+    H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'A' }, 'the staged first entry lands at b.txt')
+    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')), {
+      MARKER,
+      fixtures.group({
         { ws .. '/a.txt', ws .. '/b.txt' },
         { ws .. '/b.txt', ws .. '/a.txt' },
-      }) }, 'the completed group is committed as one undo record')
-    H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(history_dir(sb), 'transaction.json')),
-      'recovery clears the completed operation journal')
+      }),
+    }, 'the completed group is committed as one undo record')
+    H.assert_nil(
+      vim.uv.fs_stat(vim.fs.joinpath(history_dir(sb), 'transaction.json')),
+      'recovery clears the completed operation journal'
+    )
   end)
 
   H.it('a paste completed before its journal update is recognized after restart', function()
@@ -697,25 +727,31 @@ H.describe('history', function()
     local pair = paste.renames[1]
     local source_path = vim.fs.joinpath(source, pair.src)
     local destination_path = vim.fs.joinpath(destination, pair.dst)
-    H.assert_true(history.note_paste_pending(operation, pair,
-      source_path, destination_path), 'the chosen destination is journaled first')
-    H.assert_true(fs.copy_file_exclusive(source_path, destination_path),
-      'the file copy lands before the completion update')
+    H.assert_true(
+      history.note_paste_pending(operation, pair, source_path, destination_path),
+      'the chosen destination is journaled first'
+    )
+    H.assert_true(
+      fs.copy_file_exclusive(source_path, destination_path),
+      'the file copy lands before the completion update'
+    )
 
     H.assert_true(history.lock.release(), 'simulate process exit and OS lock release')
     with_fresh_process(function()
       local fresh_history = require('direct.history.history')
-      H.assert_true(fresh_history.preflight() ~= nil,
-        'restart verifies the pending copy and commits its history')
+      H.assert_true(fresh_history.preflight() ~= nil, 'restart verifies the pending copy and commits its history')
     end)
 
-    H.assert_eq(vim.fn.readfile(destination_path), { 'payload' },
-      'recovery preserves the copied file')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
-      { MARKER, fixtures.paste('p', source, destination,
-        { 'file.txt' }, { 'file.txt' }) }, 'the recovered paste is undoable')
-    H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(history_dir(sb), 'transaction.json')),
-      'the settled paste journal is cleared')
+    H.assert_eq(vim.fn.readfile(destination_path), { 'payload' }, 'recovery preserves the copied file')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
+      { MARKER, fixtures.paste('p', source, destination, { 'file.txt' }, { 'file.txt' }) },
+      'the recovered paste is undoable'
+    )
+    H.assert_nil(
+      vim.uv.fs_stat(vim.fs.joinpath(history_dir(sb), 'transaction.json')),
+      'the settled paste journal is cleared'
+    )
   end)
 
   H.it('a redo paste pending at restart is verified and moved to the undo stack', function()
@@ -726,15 +762,13 @@ H.describe('history', function()
     H.mkfile(destination, 'file.txt', { 'payload' })
     local paste = action.Paste(source, destination, { 'file.txt' }, { 'file.txt' })
     local paste_record = assert(action.serialize(paste))
-    local unpaste_record = fixtures.paste('up', destination, source,
-      { 'file.txt' }, { 'file.txt' })
+    local unpaste_record = fixtures.paste('up', destination, source, { 'file.txt' }, { 'file.txt' })
     local undo_path = vim.fs.joinpath(history_dir(sb), 'undo.log')
     local redo_path = vim.fs.joinpath(history_dir(sb), 'redo.log')
     local transaction_path = vim.fs.joinpath(history_dir(sb), 'transaction.json')
     H.assert_true(history.preflight() ~= nil, 'initialize the history directory')
     H.assert_true(log.write(undo_path, { MARKER }) == true, 'initialize undo stack')
-    H.assert_true(log.write(redo_path, { MARKER, unpaste_record }) == true,
-      'the async redo source record is present')
+    H.assert_true(log.write(redo_path, { MARKER, unpaste_record }) == true, 'the async redo source record is present')
     local source_path = source .. '/file.txt'
     local transaction = vim.json.encode({
       format = 'direct-operation-journal',
@@ -747,24 +781,29 @@ H.describe('history', function()
       base_redo = { MARKER, unpaste_record },
       completed = {},
       pending = {
-        src = 'file.txt', dst = 'file.txt',
-        source = source_path, destination = destination .. '/file.txt',
+        src = 'file.txt',
+        dst = 'file.txt',
+        source = source_path,
+        destination = destination .. '/file.txt',
         source_identity = fs.entry_identity(source_path),
       },
     })
-    H.assert_true(log.write_raw_atomic(transaction_path, transaction .. '\n') == true,
-      'the pending redo copy intent is durable')
+    H.assert_true(
+      log.write_raw_atomic(transaction_path, transaction .. '\n') == true,
+      'the pending redo copy intent is durable'
+    )
 
     with_fresh_process(function()
       local fresh_history = require('direct.history.history')
-      H.assert_true(fresh_history.preflight() ~= nil,
-        'restart recognizes the completely copied destination')
+      H.assert_true(fresh_history.preflight() ~= nil, 'restart recognizes the completely copied destination')
     end)
 
-    H.assert_eq(vim.fn.readfile(undo_path), { MARKER, paste_record },
-      'the verified Paste reversal is committed to undo')
-    H.assert_eq(vim.fn.readfile(redo_path), { MARKER },
-      'the Unpaste source record is removed from redo')
+    H.assert_eq(
+      vim.fn.readfile(undo_path),
+      { MARKER, paste_record },
+      'the verified Paste reversal is committed to undo'
+    )
+    H.assert_eq(vim.fn.readfile(redo_path), { MARKER }, 'the Unpaste source record is removed from redo')
     H.assert_nil(vim.uv.fs_stat(transaction_path), 'the paste journal is cleared')
   end)
 
@@ -778,9 +817,7 @@ H.describe('history', function()
 
     local real_remove = fs.rm_file
     local restore = H.stub(fs, 'rm_file', function(path)
-      if path:find('.direct-unpaste-', 1, true) then
-        return nil, 'simulated interruption before quarantine deletion'
-      end
+      if path:find('.direct-unpaste-', 1, true) then return nil, 'simulated interruption before quarantine deletion' end
       return real_remove(path)
     end)
     H.assert_nil(history.undo(), 'the forced Unpaste deletion failure is reported')
@@ -790,18 +827,21 @@ H.describe('history', function()
     H.assert_true(quarantine ~= '', 'the captured file remains quarantined')
     with_fresh_process(function()
       local fresh_history = require('direct.history.history')
-      H.assert_true(fresh_history.preflight() ~= nil,
-        'restart verifies and finishes the pending Unpaste deletion')
+      H.assert_true(fresh_history.preflight() ~= nil, 'restart verifies and finishes the pending Unpaste deletion')
     end)
 
-    H.assert_nil(vim.uv.fs_lstat(destination .. '/file.txt'),
-      'the pasted path remains removed')
+    H.assert_nil(vim.uv.fs_lstat(destination .. '/file.txt'), 'the pasted path remains removed')
     H.assert_nil(vim.uv.fs_lstat(quarantine), 'the verified quarantine is deleted')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
-      { MARKER }, 'undo source stack is committed')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'redo.log')),
-      { MARKER, fixtures.paste('up', destination, register_dir,
-        { 'file.txt' }, { 'file.txt' }) }, 'redo receives the inverse action')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
+      { MARKER },
+      'undo source stack is committed'
+    )
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'redo.log')),
+      { MARKER, fixtures.paste('up', destination, register_dir, { 'file.txt' }, { 'file.txt' }) },
+      'redo receives the inverse action'
+    )
   end)
 
   H.it('ambiguous recovery retains its journal and blocks later history changes', function()
@@ -813,10 +853,11 @@ H.describe('history', function()
     H.capture_messages()
     local state, err = history.preflight()
     H.assert_nil(state, 'an unexpected destination is not treated as a completed create')
-    H.assert_true(type(err) == 'string' and err:find('ambiguous', 1, true) ~= nil,
-      'the recovery error explains the uncertainty')
-    H.assert_true(fs.exists(transaction_path),
-      'the recovery journal is preserved')
+    H.assert_true(
+      type(err) == 'string' and err:find('ambiguous', 1, true) ~= nil,
+      'the recovery error explains the uncertainty'
+    )
+    H.assert_true(fs.exists(transaction_path), 'the recovery journal is preserved')
     H.assert_notified('inspect the affected paths')
   end)
 
@@ -831,9 +872,7 @@ H.describe('history', function()
       local source_identity = fs.entry_identity(ws .. '/b.txt')
       local reversal = action.Move(ws .. '/b.txt', ws .. '/a.txt')
       local inverse_record = action.serialize(reversal)
-      if complete_before_restart then
-        H.assert_true(reversal['do']() ~= nil, 'simulate rename landing before crash')
-      end
+      if complete_before_restart then H.assert_true(reversal['do']() ~= nil, 'simulate rename landing before crash') end
       local transaction = vim.json.encode({
         format = 'direct-operation-journal',
         version = 1,
@@ -848,18 +887,22 @@ H.describe('history', function()
         destination_identity = vim.NIL,
       })
       local transaction_path = vim.fs.joinpath(history_dir(sb), 'transaction.json')
-      H.assert_true(log.write_raw_atomic(transaction_path, transaction .. '\n') == true,
-        'the prepared reversal intent is durable')
+      H.assert_true(
+        log.write_raw_atomic(transaction_path, transaction .. '\n') == true,
+        'the prepared reversal intent is durable'
+      )
       with_fresh_process(function()
         local fresh_history = require('direct.history.history')
         H.assert_true(fresh_history.preflight() ~= nil, 'restart recovers the transaction')
       end)
       H.assert_true(H.exists(ws, 'a.txt'), 'undo state is applied')
       H.assert_false(H.exists(ws, 'b.txt'), 'source path is vacated')
-      H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
-        { MARKER }, 'undo stack is committed')
-      H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'redo.log')),
-        { MARKER, inverse_record }, 'redo stack is committed')
+      H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')), { MARKER }, 'undo stack is committed')
+      H.assert_eq(
+        vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'redo.log')),
+        { MARKER, inverse_record },
+        'redo stack is committed'
+      )
     end
 
     interrupted_reverse(false)
@@ -876,24 +919,32 @@ H.describe('history', function()
     local operation = assert(history.begin_paste(paste))
     local pair = paste.renames[1]
     local source_path, destination_path = source .. '/file.txt', destination .. '/file.txt'
-    H.assert_true(history.note_paste_pending(operation, pair,
-      source_path, destination_path), 'the pending destination is durably recorded')
+    H.assert_true(
+      history.note_paste_pending(operation, pair, source_path, destination_path),
+      'the pending destination is durably recorded'
+    )
     H.assert_true(history.lock.release(), 'simulate process exit and OS lock release')
 
     with_fresh_process(function()
       local fresh_history = require('direct.history.history')
       local state, err = fresh_history.preflight()
       H.assert_nil(state, 'an unrelated occupant is not mistaken for Direct output')
-      H.assert_true(type(err) == 'string' and err:find('ambiguous', 1, true) ~= nil,
-        'recovery explains the ambiguous destination')
+      H.assert_true(
+        type(err) == 'string' and err:find('ambiguous', 1, true) ~= nil,
+        'recovery explains the ambiguous destination'
+      )
     end)
 
-    H.assert_eq(vim.fn.readfile(destination_path), { 'unrelated occupant' },
-      'the occupant is preserved')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
-      { MARKER }, 'no paste record is committed')
-    H.assert_true(fs.exists(vim.fs.joinpath(history_dir(sb), 'transaction.json')),
-      'the ambiguous transaction journal remains for inspection')
+    H.assert_eq(vim.fn.readfile(destination_path), { 'unrelated occupant' }, 'the occupant is preserved')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(history_dir(sb), 'undo.log')),
+      { MARKER },
+      'no paste record is committed'
+    )
+    H.assert_true(
+      fs.exists(vim.fs.joinpath(history_dir(sb), 'transaction.json')),
+      'the ambiguous transaction journal remains for inspection'
+    )
   end)
 
   H.it('a paired history transaction is replayed after a simulated mid-commit crash', function()
@@ -910,18 +961,16 @@ H.describe('history', function()
       undo = { MARKER, action_line },
       redo = { MARKER },
     })
-    H.assert_true(log.write_raw_atomic(transaction_path, transaction .. '\n') == true,
-      'write-ahead stack snapshot')
-    H.assert_true(log.write(undo_path, { MARKER }) == true,
-      'simulate only the first stack rename landing')
-    H.assert_true(log.write(redo_path, { MARKER, fixtures.move('/a', '/b') }) == true,
-      'leave the other stack with stale content')
+    H.assert_true(log.write_raw_atomic(transaction_path, transaction .. '\n') == true, 'write-ahead stack snapshot')
+    H.assert_true(log.write(undo_path, { MARKER }) == true, 'simulate only the first stack rename landing')
+    H.assert_true(
+      log.write(redo_path, { MARKER, fixtures.move('/a', '/b') }) == true,
+      'leave the other stack with stale content'
+    )
 
     H.assert_true(history.preflight() ~= nil, 'startup replays the paired update')
-    H.assert_eq(vim.fn.readfile(undo_path), { MARKER, action_line },
-      'the desired undo stack is restored')
-    H.assert_eq(vim.fn.readfile(redo_path), { MARKER },
-      'the desired redo stack is restored')
+    H.assert_eq(vim.fn.readfile(undo_path), { MARKER, action_line }, 'the desired undo stack is restored')
+    H.assert_eq(vim.fn.readfile(redo_path), { MARKER }, 'the desired redo stack is restored')
     H.assert_nil(vim.uv.fs_stat(transaction_path), 'the replayed journal is removed')
   end)
 
@@ -933,16 +982,12 @@ H.describe('history', function()
     history.log(touch)
 
     H.capture_messages()
-    H.with_cwd(sb.root, function()
-      H.assert_true(history.undo() ~= nil, 'undo succeeds')
-    end)
+    H.with_cwd(sb.root, function() H.assert_true(history.undo() ~= nil, 'undo succeeds') end)
     local text = H.messages()
-    H.assert_true(text:find('Removed a.txt', 1, true) ~= nil,
-      'the summary names the executed reversal (Remove a.txt)')
+    H.assert_true(text:find('Removed a.txt', 1, true) ~= nil, 'the summary names the executed reversal (Remove a.txt)')
     local _, count = text:gsub('Removed a.txt', '')
     H.assert_eq(count, 1, 'the summary is emitted exactly once')
-    H.assert_false(text:find('touch', 1, true) ~= nil,
-      'the serialized form is never used in the message')
+    H.assert_false(text:find('touch', 1, true) ~= nil, 'the serialized form is never used in the message')
   end)
 
   H.it('history reports an unavailable data dir instead of raising', function()
@@ -959,7 +1004,9 @@ H.describe('history', function()
     local res = history.undo()
     H.assert_nil(res, 'undo() reports the failure')
     H.assert_notified('history unavailable')
-    H.assert_false(H.messages():find('Nothing to undo', 1, true) ~= nil,
-      'the data-dir failure is not reported as an empty log')
+    H.assert_false(
+      H.messages():find('Nothing to undo', 1, true) ~= nil,
+      'the data-dir failure is not reported as an empty log'
+    )
   end)
 end)

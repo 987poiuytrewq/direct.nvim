@@ -38,9 +38,18 @@ local platform = require('direct.platform')
 ---@field reuse? boolean Reuse an existing Direct listing for the same directory.
 ---@field open_in? 'current'|'new' Open targets in the current buffer or preserve the source buffer.
 
+---@class direct.ListEntry
+---@field name string
+---@field type string
+
+---@alias direct.SortComparator fun(a: direct.ListEntry, b: direct.ListEntry): boolean
+
 ---@class direct.Config
 ---@field map_default_keys? boolean
 ---@field directory_separator? '/'|'\\'
+---@field sort? 'name'|'natural'|direct.SortComparator
+---@field sort_directories_first? boolean
+---@field is_hidden? fun(name: string, path: string, type: string): boolean|nil
 ---@field show_hidden? boolean
 ---@field respect_gitignore? boolean
 ---@field collapse_single_entry_directories? boolean
@@ -61,6 +70,8 @@ local platform = require('direct.platform')
 local defaults = {
   map_default_keys = true,
   directory_separator = platform.separator,
+  sort = 'name',
+  sort_directories_first = true,
   show_hidden = true,
   respect_gitignore = true,
   collapse_single_entry_directories = true,
@@ -325,6 +336,29 @@ local option_schema = {
     validate = function(value)
       if value == '/' or value == '\\' then return value end
       return nil, error_list('direct: directory_separator must be "/" or "\\\\"')
+    end,
+  },
+  {
+    key = 'sort',
+    default = defaults.sort,
+    type = "'name', 'natural', or a comparator function",
+    validate = function(value)
+      if value == 'name' or value == 'natural' or type(value) == 'function' then return value end
+      return nil, error_list("direct: sort must be 'name', 'natural', or a comparator function")
+    end,
+  },
+  {
+    key = 'sort_directories_first',
+    default = defaults.sort_directories_first,
+    validate = boolean_rule('sort_directories_first'),
+  },
+  {
+    key = 'is_hidden',
+    default = defaults.is_hidden,
+    type = 'function',
+    validate = function(value)
+      if type(value) == 'function' then return value end
+      return nil, error_list('direct: is_hidden must be a function')
     end,
   },
   { key = 'show_hidden', default = defaults.show_hidden, validate = boolean_rule('show_hidden') },

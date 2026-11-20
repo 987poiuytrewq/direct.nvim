@@ -747,6 +747,8 @@ Calling `setup()` is optional. These are the defaults:
 >lua
     require('direct').setup({
       map_default_keys = true,
+      sort = 'name',
+      sort_directories_first = true,
       show_hidden = true,
       respect_gitignore = true,
       collapse_single_entry_directories = true,
@@ -846,10 +848,33 @@ mappings                table (default: `{}`)
     `map_default_keys = false` suppresses defaults but not explicit overrides
     or `<Plug>` mappings.
 
-                                                          *direct-show_hidden*
+                                                                  *direct-sort*
+sort                    `'name'`, `'natural'` or a comparator function
+                        (default: `'name'`)
+    `'name'` sorts by byte-wise name order. `'natural'` compares names
+    case-insensitively and treats digit runs numerically. A comparator receives
+    two `{ name, type }` entry records and returns whether the first sorts
+    before the second. If it errors or returns a non-boolean, Direct warns once
+    per listing and falls back to name order for the entire listing.
+
+                                                *direct-sort_directories_first*
+sort_directories_first  boolean (default: `true`)
+    Keep directories in a leading group while sorting within each group. Set to
+    `false` to sort directories and files together using |direct-sort|.
+
+                                                              *direct-is_hidden*
+is_hidden               optional function `(name, path, type) -> boolean|nil`
+    When |direct-show_hidden| is off, return `true` to hide an entry, `false`
+    to show it even when its name starts with a dot, or `nil` to use the
+    default dot-name rule. `gh` reveals both dot- and custom-hidden entries.
+    Git-ignore and `wildignore` filtering remain independent. If the callback
+    errors or returns another type, Direct warns once and uses the default
+    dot-name rule for that entry.
+
+                                                           *direct-show_hidden*
 show_hidden             boolean (default: `true`)
-    Show entries whose names start with a dot. `gh` (|:DirectToggleHidden|)
-    toggles this in the current listing.
+    Show dot- and custom-hidden entries. `gh` (|:DirectToggleHidden|) toggles
+    this in the current listing.
 
                                                     *direct-respect_gitignore*
 respect_gitignore       boolean (default: `true`)

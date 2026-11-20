@@ -21,7 +21,6 @@ local refresh_display_ids = rows.refresh_display_ids
 local row_ids_by_row = rows.row_ids_by_row
 local current_row_record = rows.current_row_record
 local is_dir_line = rows.is_dir_line
-local dirs_then_name = rows.dirs_then_name
 local next_id = rows.next_id
 local row_path = rows.row_path
 local recorded_row_text = rows.recorded_row_text
@@ -84,7 +83,7 @@ local function entry_path(root, line) return buffer_module().entry_path(root, li
 do
   local function is_deleted_record(record) return record ~= nil and record.deleted_kind ~= nil end
 
-  local function merge_deleted_entries(directory, lines, git_snapshot, show_hidden)
+  local function merge_deleted_entries(directory, lines, git_snapshot, show_hidden, sort_options, filter_snapshot)
     local result, seen, deleted = {}, {}, {}
     for _, line in ipairs(lines or {}) do
       result[#result + 1] = line
@@ -93,17 +92,25 @@ do
     for _, entry in ipairs(git.deleted_children(git_snapshot, directory)) do
       local basename = paths.strip_directory_marker(entry.name)
       local raw_name = entry.kind == 'directory' and basename or entry.name
-      if
-        not raw_name:find(paths.directory_separator(), 1, true)
-        and not seen[basename]
-        and (show_hidden ~= false or basename:sub(1, 1) ~= '.')
-      then
+      local hidden
+      if filter_snapshot then
+        hidden = listing.is_hidden_entry(
+          basename,
+          entry.path,
+          entry.kind,
+          filter_snapshot,
+          sort_options and sort_options.context
+        )
+      else
+        hidden = show_hidden == false and basename:sub(1, 1) == '.'
+      end
+      if not raw_name:find(paths.directory_separator(), 1, true) and not seen[basename] and not hidden then
         result[#result + 1] = entry.name
         seen[basename] = true
         deleted[vim.fs.normalize(entry.path)] = entry.kind
       end
     end
-    return dirs_then_name(result), deleted
+    return rows.sort_lines(result, sort_options), deleted
   end
 
   local function hide_deleted_expansions(expanded, records)
@@ -252,6 +259,66 @@ do
     if attached then deleted_guards[bufnr] = true end
   end
 
+  local function insert_materialized_children(bufnr, row, state, rec, path, snapshot, children, materialized)
+    local insert_at, add = row, {}
+    local modified = vim.bo[bufnr].modified
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    for _, child in ipairs(materialized) do
+      add[#add + 1] = child.text
+      state.rows[child.id] = child
+    end
+    -- A view insertion must not join the preceding user edit. Reapply the
+    -- existing undolevels value to close that block without changing undo depth;
+    -- text edits remain undoable as their own sequence.
+    local undo_levels = vim.bo[bufnr].undolevels
+    local base_seq = vim.fn.undotree().seq_cur
+    if undo_levels == -123456 then
+      -- Neovim reports this sentinel when the buffer inherits the global
+      -- option; writing the global value to itself avoids pinning an override.
+      vim.go.undolevels = vim.go.undolevels
+    elseif undo_levels >= 0 then
+      vim.bo[bufnr].undolevels = undo_levels
+    end
+    state.suppress_deleted_guard = true
+    vim.api.nvim_buf_set_lines(bufnr, insert_at, insert_at, false, add)
+    state.suppress_deleted_guard = nil
+    for offset, child in ipairs(materialized) do
+      set_row_mark(bufnr, insert_at + offset - 1, child.id)
+    end
+    state.display_ids = {}
+    local display_row_ids = row_ids_by_row(bufnr)
+    for display_row = 0, vim.api.nvim_buf_line_count(bufnr) - 1 do
+      local id = display_row_ids[display_row]
+      if id then state.display_ids[#state.display_ids + 1] = id end
+    end
+    capture_deleted_guard_snapshot(bufnr, state)
+    refresh_highlights(bufnr, state, display_row_ids)
+    state.materialization_seq = vim.fn.undotree().seq_cur
+    if state.materialization_seq ~= base_seq then
+      local child_ids = {}
+      for _, child in ipairs(materialized) do
+        child_ids[#child_ids + 1] = child.id
+      end
+      local materialization = {
+        parent_id = rec.id,
+        child_ids = child_ids,
+        base_seq = base_seq,
+        seq = state.materialization_seq,
+        parent_path = path,
+        parent_identity = path_identity(path),
+        listing_lines = vim.deepcopy(children),
+        wildignore = snapshot.wildignore or '',
+        filter_snapshot = vim.deepcopy(snapshot),
+        children_snapshot = vim.deepcopy(materialized),
+      }
+      state.materialization_undos = state.materialization_undos or {}
+      state.materialization_undos[#state.materialization_undos + 1] = materialization
+    end
+    vim.bo[bufnr].modified = modified
+    pcall(vim.api.nvim_win_set_cursor, 0, cursor)
+    return display_row_ids
+  end
+
   function M.expand(self, row)
     local bufnr = vim.api.nvim_get_current_buf()
     reconcile_undone_materialization(bufnr)
@@ -273,11 +340,15 @@ do
           wildignore = vim.o.wildignore or '',
           show_hidden = state.view_show_hidden,
           respect_gitignore = state.view_respect_gitignore,
+          sort = state.sort_options.sort,
+          sort_directories_first = state.sort_options.sort_directories_first,
+          is_hidden = state.sort_options.is_hidden,
+          context = state.sort_options.context,
         }
       else
         local err
         physical_children, snapshot, err =
-          list_with_snapshot(path, state.view_show_hidden, state.view_respect_gitignore)
+          list_with_snapshot(path, state.view_show_hidden, state.view_respect_gitignore, state.sort_options.context)
         if not physical_children then
           ui.notify('direct: cannot expand ' .. tostring(path) .. ': ' .. tostring(err), vim.log.levels.ERROR)
           return nil, err
@@ -291,7 +362,8 @@ do
         physical_children,
         show_deleted and git_snapshot or nil,
         state.view_show_hidden,
-        state.view_git_diff_only and state.git_diff_snapshot or nil
+        state.sort_options,
+        snapshot or get_directory_snapshot(state, self.root) or state.sort_options
       )
       -- Keep an unfiltered snapshot for destructive sync preflight. Ignored names
       -- are hidden from the view but still make the directory non-empty.
@@ -330,64 +402,7 @@ do
       if not rec.deleted_kind then set_directory_snapshot(state, snapshot) end
       just_materialized = true
       if #materialized > 0 then
-        local insert_at, add = row, {}
-        local modified = vim.bo[bufnr].modified
-        local cursor = vim.api.nvim_win_get_cursor(0)
-        for _, child in ipairs(materialized) do
-          add[#add + 1] = child.text
-          state.rows[child.id] = child
-        end
-        -- A view insertion must not join the preceding user edit. Setting the
-        -- buffer's existing undolevels value closes the current block without
-        -- changing undo depth (Neovim :help undo-blocks); the insertion then has
-        -- its own undo sequence, while text undo remains enabled.
-        local undo_levels = vim.bo[bufnr].undolevels
-        local base_seq = vim.fn.undotree().seq_cur
-        if undo_levels == -123456 then
-          -- Neovim reports this sentinel when the buffer inherits the global
-          -- option; writing the global value to itself closes the current block
-          -- without pinning a buffer-local override.
-          vim.go.undolevels = vim.go.undolevels
-        elseif undo_levels >= 0 then
-          vim.bo[bufnr].undolevels = undo_levels
-        end
-        state.suppress_deleted_guard = true
-        vim.api.nvim_buf_set_lines(bufnr, insert_at, insert_at, false, add)
-        state.suppress_deleted_guard = nil
-        for offset, child in ipairs(materialized) do
-          set_row_mark(bufnr, insert_at + offset - 1, child.id)
-        end
-        state.display_ids = {}
-        display_row_ids = row_ids_by_row(bufnr)
-        for display_row = 0, vim.api.nvim_buf_line_count(bufnr) - 1 do
-          local id = display_row_ids[display_row]
-          if id then state.display_ids[#state.display_ids + 1] = id end
-        end
-        capture_deleted_guard_snapshot(bufnr, state)
-        refresh_highlights(bufnr, state, display_row_ids)
-        state.materialization_seq = vim.fn.undotree().seq_cur
-        if state.materialization_seq ~= base_seq then
-          local child_ids = {}
-          for _, child in ipairs(materialized) do
-            child_ids[#child_ids + 1] = child.id
-          end
-          local materialization = {
-            parent_id = rec.id,
-            child_ids = child_ids,
-            base_seq = base_seq,
-            seq = state.materialization_seq,
-            parent_path = path,
-            parent_identity = path_identity(path),
-            listing_lines = vim.deepcopy(children),
-            wildignore = snapshot.wildignore or '',
-            filter_snapshot = vim.deepcopy(snapshot),
-            children_snapshot = vim.deepcopy(materialized),
-          }
-          state.materialization_undos = state.materialization_undos or {}
-          state.materialization_undos[#state.materialization_undos + 1] = materialization
-        end
-        vim.bo[bufnr].modified = modified
-        pcall(vim.api.nvim_win_set_cursor, 0, cursor)
+        display_row_ids = insert_materialized_children(bufnr, row, state, rec, path, snapshot, children, materialized)
       end
     end
 

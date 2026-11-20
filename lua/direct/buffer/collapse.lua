@@ -10,7 +10,6 @@ local rows = require('direct.buffer.rows')
 local buffer_state = require('direct.buffer.state')
 
 local is_dir_line = rows.is_dir_line
-local dirs_then_name = rows.dirs_then_name
 
 local function buffer_module()
   local module = buffer_state.list_parent
@@ -22,8 +21,8 @@ local function entry_path(root, line) return buffer_module().entry_path(root, li
 
 local function path_identity(path) return fs.path_identity(path, fs.stat(path)) end
 
-local function list_with_snapshot(root, show_hidden, respect_gitignore)
-  return listing.list_with_snapshot(root, buffer_module().read, show_hidden, respect_gitignore)
+local function list_with_snapshot(root, show_hidden, respect_gitignore, view_context)
+  return listing.list_with_snapshot(root, buffer_module().read, show_hidden, respect_gitignore, view_context)
 end
 
 local function filter_git_status_lines(root, lines, snapshot)
@@ -54,7 +53,12 @@ function M.collapse_single_entry_paths(root, lines, options)
   local function children_for(directory)
     local children, snapshot, err
     if options.capture then
-      children, snapshot, err = list_with_snapshot(directory, options.show_hidden, options.respect_gitignore)
+      children, snapshot, err = list_with_snapshot(
+        directory,
+        options.show_hidden,
+        options.respect_gitignore,
+        options.sort_options and options.sort_options.context
+      )
       if not children then return nil, err end
       snapshots[#snapshots + 1] = snapshot
     else
@@ -68,7 +72,12 @@ function M.collapse_single_entry_paths(root, lines, options)
       else
         -- A newly appeared directory has no saved filter context. Inspect it
         -- only so sync can reject the external change safely.
-        local listed, _, list_err = list_with_snapshot(directory, options.show_hidden, options.respect_gitignore)
+        local listed, _, list_err = list_with_snapshot(
+          directory,
+          options.show_hidden,
+          options.respect_gitignore,
+          options.sort_options and options.sort_options.context
+        )
         children, err = listed, list_err
         if not children then return nil, err end
       end
@@ -121,7 +130,7 @@ function M.collapse_single_entry_paths(root, lines, options)
     if not ok then return nil, nil, nil, err end
   end
 
-  local ordered = dirs_then_name(rendered)
+  local ordered = rows.sort_lines(rendered, options.sort_options)
   local components = {}
   for index, line in ipairs(ordered) do
     components[index] = components_by_line[line]

@@ -9,6 +9,8 @@ Notable changes to direct.vim are documented here. Versions follow
 
 - Show active, overridden Direct listing mappings in a floating help window with
   `g?`; disabled mappings are omitted.
+- Configure name, natural, or comparator-based listing order and custom hidden
+  entry rules while keeping Git-ignore and `wildignore` filtering independent.
 
 ### Changed
 

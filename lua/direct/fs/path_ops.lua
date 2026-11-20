@@ -200,20 +200,99 @@ local function ignored(path, st, index)
   return index_contains_identity(index, identity)
 end
 
+local function entry_name_less(a, b) return a.name < b.name end
+
+local function natural_name_order(a, b)
+  local left, right, i, j = a:lower(), b:lower(), 1, 1
+  while i <= #left and j <= #right do
+    local left_byte, right_byte = left:byte(i), right:byte(j)
+    local left_digit = left_byte >= 48 and left_byte <= 57
+    local right_digit = right_byte >= 48 and right_byte <= 57
+    if left_digit and right_digit then
+      local left_end, right_end = i, j
+      while left_end <= #left and left:byte(left_end) >= 48 and left:byte(left_end) <= 57 do
+        left_end = left_end + 1
+      end
+      while right_end <= #right and right:byte(right_end) >= 48 and right:byte(right_end) <= 57 do
+        right_end = right_end + 1
+      end
+      local left_significant = left:sub(i, left_end - 1):gsub('^0+', '')
+      local right_significant = right:sub(j, right_end - 1):gsub('^0+', '')
+      if #left_significant ~= #right_significant then return #left_significant < #right_significant and -1 or 1 end
+      if left_significant ~= right_significant then return left_significant < right_significant and -1 or 1 end
+      i, j = left_end, right_end
+    elseif left_byte ~= right_byte then
+      return left_byte < right_byte and -1 or 1
+    else
+      i, j = i + 1, j + 1
+    end
+  end
+  if i > #left and j > #right then return 0 end
+  return i > #left and -1 or 1
+end
+
+local function report_sort_error(context, err)
+  if context then
+    context.sort_failed = true
+    if context.sort_error_reported then return end
+    context.sort_error_reported = true
+  end
+  require('direct.ui').notify('direct: custom sort failed; using name order: ' .. tostring(err), vim.log.levels.WARN)
+end
+
+-- sort_entries(entries, options) sorts `{ name, type }` records in place.
+-- A failed comparator never leaves a partially sorted list: the complete set
+-- is sorted by the deterministic name fallback instead.
+function M.sort_entries(entries, options)
+  options = options or {}
+  local context = options.context
+  local sort = context and context.sort_failed and 'name' or options.sort or 'name'
+  local directories_first = options.sort_directories_first ~= false
+
+  local function comparator(a, b)
+    local a_directory, b_directory = a.type == 'directory', b.type == 'directory'
+    if directories_first and a_directory ~= b_directory then return a_directory end
+
+    if sort == 'natural' then
+      local order = natural_name_order(a.name, b.name)
+      if order ~= 0 then return order < 0 end
+      return entry_name_less(a, b)
+    end
+    if type(sort) == 'function' then
+      local forward = sort(a, b)
+      if type(forward) ~= 'boolean' then error('sort comparator must return a boolean', 0) end
+      if forward then return true end
+      local reverse = sort(b, a)
+      if type(reverse) ~= 'boolean' then error('sort comparator must return a boolean', 0) end
+      if reverse then return false end
+      return entry_name_less(a, b)
+    end
+    return entry_name_less(a, b)
+  end
+
+  local ok, err = pcall(table.sort, entries, comparator)
+  if not ok then
+    report_sort_error(context, err)
+    table.sort(entries, function(a, b)
+      local a_directory, b_directory = a.type == 'directory', b.type == 'directory'
+      if directories_first and a_directory ~= b_directory then return a_directory end
+      return entry_name_less(a, b)
+    end)
+  end
+  return entries, not ok
+end
+
 -- read_dir_lines(root, ignore_set) -> the listing pipeline as a string array
--- directories first (each with the configured trailing marker), then files, each
--- group sorted ascending. Symlinks are resolved with a following stat; entries
--- whose stat fails (broken symlink) or whose target is neither a file nor a
--- directory (fifo, socket, device) are omitted. `ignore_set` is a list of paths
--- (the glob results of &wildignore);
--- entries are compared to its stat-indexed filesystem identities. Callers that
--- already scanned the directory may pass those `{ name, type }` records as
--- `entries` to avoid reopening and walking it a second time.
-function M.read_dir_lines(root, ignore_set, entries)
+-- The default order is directories first, then files, each byte-sorted by name.
+-- Symlinks are resolved with a following stat; entries whose stat fails (broken
+-- symlink) or whose target is neither a file nor a directory are omitted.
+-- `ignore_set` contains paths from &wildignore; callers that already scanned the
+-- directory may pass `{ name, type }` records as `entries` to avoid another walk.
+function M.read_dir_lines(root, ignore_set, entries, sort_options)
   if not api.is_dir(root) then return nil, 'not a directory: ' .. tostring(root) end
   local ignored_index = index_identities(ignore_set)
   local display_separator = paths().directory_separator()
-  local dirs, files = {}, {}
+  local visible = {}
   local function add_entry(name, typ)
     local path = api.join(root, name)
     local st, did_stat
@@ -227,11 +306,7 @@ function M.read_dir_lines(root, ignore_set, entries)
     -- would make one component ambiguous, so leave such entries out of the
     -- visible model; list snapshots retain them as hidden for sync safety.
     if not name:find(display_separator, 1, true) and not ignored(path, st, ignored_index) then
-      if typ == 'directory' then
-        dirs[#dirs + 1] = name
-      elseif typ == 'file' then
-        files[#files + 1] = name
-      end
+      if typ == 'directory' or typ == 'file' then visible[#visible + 1] = { name = name, type = typ } end
     end
   end
   if entries then
@@ -243,14 +318,10 @@ function M.read_dir_lines(root, ignore_set, entries)
       add_entry(name, typ)
     end
   end
-  table.sort(dirs)
-  table.sort(files)
+  M.sort_entries(visible, sort_options)
   local lines = {}
-  for _, name in ipairs(dirs) do
-    lines[#lines + 1] = name .. display_separator
-  end
-  for _, name in ipairs(files) do
-    lines[#lines + 1] = name
+  for _, entry in ipairs(visible) do
+    lines[#lines + 1] = entry.type == 'directory' and (entry.name .. display_separator) or entry.name
   end
   return lines
 end

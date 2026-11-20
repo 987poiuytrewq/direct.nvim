@@ -40,8 +40,14 @@ end
 
 local function indent_size() return require('direct.config').options.indent_size end
 
-local function list_with_snapshot(root, show_hidden, respect_gitignore)
-  return listing.list_with_snapshot(root, parent().read, show_hidden, respect_gitignore)
+local function list_with_snapshot(root, show_hidden, respect_gitignore, view_context)
+  return listing.list_with_snapshot(root, parent().read, show_hidden, respect_gitignore, view_context)
+end
+
+local function list_with_view_context(root, show_hidden, respect_gitignore)
+  local view_context = listing.new_view_context(require('direct.config').options)
+  local lines, snapshot, err = list_with_snapshot(root, show_hidden, respect_gitignore, view_context)
+  return lines, snapshot, err
 end
 
 local function filter_git_status_lines(root, lines, snapshot)
@@ -298,7 +304,7 @@ function M.list_buffer(self, options)
   then
     collapse_enabled = old_state.view_collapse_single_entry_directories
   end
-  local lines, snapshot, err = list_with_snapshot(self.root, show_hidden_override, respect_gitignore_override)
+  local lines, snapshot, err = list_with_view_context(self.root, show_hidden_override, respect_gitignore_override)
   if not lines then
     ui.notify('direct: cannot list ' .. tostring(self.root) .. ': ' .. tostring(err), vim.log.levels.ERROR)
     return nil, err
@@ -315,19 +321,16 @@ function M.list_buffer(self, options)
   end
 
   local git_options = require('direct.config').options.git
+  local sort_options = snapshot
+  snapshot.context.diff_snapshot = view_git_diff_only and git_diff_snapshot or nil
   local show_deleted = git_options.enabled and git_options.show_deleted ~= false
   local git_snapshot = false
   if git_options.enabled then git_snapshot = nil end
   if git_options.enabled and options.git_status_resolved then git_snapshot = options.git_status or false end
   if view_git_status_only then safe = filter_git_status_lines(self.root, safe, git_snapshot) end
   if view_git_diff_only then safe = filter_git_diff_lines(self.root, safe, git_diff_snapshot) end
-  local merged, deleted_paths = merge_deleted_entries(
-    self.root,
-    safe,
-    show_deleted and git_snapshot or nil,
-    snapshot.show_hidden,
-    view_git_diff_only and git_diff_snapshot or nil
-  )
+  local merged, deleted_paths =
+    merge_deleted_entries(self.root, safe, show_deleted and git_snapshot or nil, snapshot.show_hidden, snapshot)
   safe = merged
   if view_git_status_only then safe = filter_git_status_lines(self.root, safe, git_snapshot) end
   if view_git_diff_only then safe = filter_git_diff_lines(self.root, safe, git_diff_snapshot) end
@@ -363,6 +366,7 @@ function M.list_buffer(self, options)
       git_diff_only = view_git_diff_only,
       git_diff = git_diff_snapshot,
       deleted_paths = deleted_paths,
+      sort_options = sort_options,
     })
     if not safe then
       ui.notify('direct: cannot inspect single-entry directories: ' .. tostring(collapse_err), vim.log.levels.ERROR)
@@ -422,6 +426,7 @@ function M.list_buffer(self, options)
   local state = {
     root = self.root,
     rows = {},
+    sort_options = sort_options,
     expanded = old_expanded,
     -- This survives collapse and re-listing so a directory previously observed
     -- to be non-empty cannot be trashed just because its rows are hidden.

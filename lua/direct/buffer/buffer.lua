@@ -187,10 +187,13 @@ local row_state = require('direct.buffer.row_state')
 Buffer.expand = row_state.expand
 Buffer.collapse = row_state.collapse
 local merge_status_deleted_entries = row_state.merge_deleted_entries
-merge_deleted_entries = function(directory, lines, git_snapshot, show_hidden, diff_snapshot)
-  local result, deleted = merge_status_deleted_entries(directory, lines, git_snapshot, show_hidden)
+merge_deleted_entries = function(directory, lines, git_snapshot, show_hidden, merge_context)
+  local result, deleted =
+    merge_status_deleted_entries(directory, lines, git_snapshot, show_hidden, merge_context, merge_context)
+  local diff_snapshot = merge_context and merge_context.context and merge_context.context.diff_snapshot
   if not diff_snapshot then return result, deleted end
-  local with_diff, diff_deleted = merge_status_deleted_entries(directory, result, diff_snapshot, show_hidden)
+  local with_diff, diff_deleted =
+    merge_status_deleted_entries(directory, result, diff_snapshot, show_hidden, merge_context, merge_context)
   for path, kind in pairs(diff_deleted) do
     deleted[path] = kind
   end

@@ -15,7 +15,7 @@ ALLOWLIST = {
     "lua/direct/history/reverse.lua:local build@13": 678,
     "lua/direct/buffer/tree.lua:local edited_subtrees@371": 580,
     "lua/direct/history/reverse.lua:M._reverse_async@220": 461,
-    "lua/direct/buffer/list.lua:M.list_buffer@255": 321,
+    "lua/direct/buffer/list.lua:M.list_buffer@261": 320,
     "lua/direct/buffer/sync_plan.lua:local classify_identity@92": 228,
     "lua/direct/history/trash_refs.lua:<anonymous>@4": 267,
     "lua/direct/history/reverse.lua:<anonymous>@450": 223,
@@ -23,11 +23,9 @@ ALLOWLIST = {
     "lua/direct/buffer/undo_state.lua:local reconcile_undone_materialization@323": 190,
     "lua/direct/buffer/sync_plan.lua:local build_actions@408": 177,
     "lua/direct/buffer/undo_state.lua:local restore_undone_collapse@151": 161,
-    "lua/direct/buffer/row_state.lua:M.expand@255": 144,
-    "lua/direct/buffer/buffer.lua:local set_options@224": 137,
+    "lua/direct/buffer/buffer.lua:local set_options@227": 137,
     "lua/direct/history/history.lua:M.apply_async@1084": 132,
     "lua/direct/file_operations.lua:local resource_expectations@272": 126,
-    "lua/direct/buffer/listing.lua:local hidden_descendant@355": 124,
 }
 
 BLOCK_KEYWORDS = {"function", "if", "for", "while", "do", "repeat", "until", "end"}

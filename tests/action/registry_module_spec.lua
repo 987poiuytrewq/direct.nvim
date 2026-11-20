@@ -26,5 +26,34 @@ H.describe('standalone action registry module', function()
     H.assert_eq(type(registry.deserialize), 'function', 'deserialization is exported')
     H.assert_eq(type(registry.reverse_action), 'function', 'action reversal is exported')
     H.assert_eq(type(registry.reverse), 'function', 'serialized reversal is exported')
+
+    local path = require('direct.paths').canonical(vim.fn.tempname())
+    local record = '{"op":"touch","dst":' .. vim.json.encode(path) .. '}'
+    local first_calls, second_calls = 0, 0
+    local first_parent = {
+      path_reason = function() return nil end,
+      Touch = function(dst)
+        first_calls = first_calls + 1
+        return { name = 'touch', _kind = 'touch', dst = dst }
+      end,
+    }
+    local second_parent = {
+      path_reason = function() return nil end,
+      Touch = function(dst)
+        second_calls = second_calls + 1
+        return { name = 'touch', _kind = 'touch', dst = dst }
+      end,
+    }
+
+    registry.attach(first_parent)
+    local first_action, first_err = registry.deserialize(record)
+    H.assert_not_nil(first_action, tostring(first_err))
+    H.assert_eq(first_calls, 1, 'deserialization uses the first attached facade')
+
+    registry.attach(second_parent)
+    local second_action, second_err = registry.deserialize(record)
+    H.assert_not_nil(second_action, tostring(second_err))
+    H.assert_eq(first_calls, 1, 're-attaching replaces rather than retains the previous facade')
+    H.assert_eq(second_calls, 1, 'deserialization uses the latest attached facade')
   end)
 end)

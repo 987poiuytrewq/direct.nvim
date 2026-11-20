@@ -471,7 +471,7 @@ local function confirm_workspace_edit(edit)
   return confirmed_edit
 end
 
-function M.will_rename(files, callback, warn, is_active)
+local function select_rename_clients(files)
   local rename_paths = {}
   for _, file in ipairs(files or {}) do
     rename_paths[#rename_paths + 1] = vim.uri_to_fname(file.oldUri)
@@ -503,14 +503,62 @@ function M.will_rename(files, callback, warn, is_active)
     end
     if #client_files > 0 then clients[#clients + 1] = { client = selected.client, files = client_files } end
   end
-  if #clients == 0 then
-    callback(true, {})
-    return false
-  end
-  local pending, responses = #clients, {}
-  local settled = false
-  local cancelled = false
+  return clients
+end
+
+local function apply_rename_edit(response, active, cancel, is_settled)
+  local verify, preflight_err = resource_expectations(response.edit)
+  if not verify then return false, tostring(preflight_err) end
+  local stale_err = stale_document_edit(response.edit)
+  if stale_err then return false, tostring(stale_err) end
+  local edit, confirm_err = confirm_workspace_edit(response.edit)
+  if edit == false or edit == nil then return false, confirm_err end
+  local applied, result = pcall(function()
+    if not active() then
+      cancel()
+      return nil
+    end
+    return vim.lsp.util.apply_workspace_edit(edit, response.client.offset_encoding or 'utf-16')
+  end)
+  if is_settled() then return nil end
+  if not applied then return false, tostring(result) end
+  if result == false then return false, 'workspace edit application failed' end
+  local verified, verify_err = verify()
+  if not verified then return false, tostring(verify_err) end
+  return true
+end
+
+local function apply_rename_responses(responses, active, cancel, is_settled)
+  local processing_client
+  local ok, outcome, value = xpcall(function()
+    table.sort(responses, function(a, b) return (a.client.id or 0) < (b.client.id or 0) end)
+    local suppressed = {}
+    for _, response in ipairs(responses) do
+      processing_client = response.client
+      if not active() then
+        cancel()
+        return nil
+      end
+      if response.edit ~= nil then
+        local applied, apply_err = apply_rename_edit(response, active, cancel, is_settled)
+        if applied == nil then return nil end
+        if not applied then return false, apply_err end
+        for path in pairs(resource_paths(response.edit)) do
+          suppressed[path] = true
+        end
+      end
+    end
+    return true, suppressed
+  end, debug.traceback)
+  return ok, outcome, value, processing_client
+end
+
+local function make_rename_controller(callback, warn, is_active, client_count)
+  local pending, responses = client_count, {}
+  local settled, cancelled = false, false
   local requests = {}
+  local controller = { responses = responses, requests = requests }
+
   local function cancel_requests()
     for _, request in pairs(requests) do
       if request.id ~= nil and type(request.client.cancel_request) == 'function' then
@@ -518,14 +566,18 @@ function M.will_rename(files, callback, warn, is_active)
       end
     end
     requests = {}
+    controller.requests = requests
   end
+
   local function cancel()
     if settled or cancelled then return false end
     cancelled, settled = true, true
     cancel_requests()
     return true
   end
+
   local function active() return not cancelled and (not is_active or is_active()) end
+
   local function deliver(ok, value)
     if settled or not active() then
       if not settled then cancel() end
@@ -536,6 +588,7 @@ function M.will_rename(files, callback, warn, is_active)
     callback(ok, value)
     return true
   end
+
   local function warning(client, reason)
     local client_id = tostring(client and client.id or 'unknown')
     local message = require('direct.ui').error_message(
@@ -548,49 +601,19 @@ function M.will_rename(files, callback, warn, is_active)
       pcall(require('direct.ui').notify, message, vim.log.levels.WARN)
     end
   end
+
   local function finish()
     if settled or pending > 0 then return end
     if not active() then
       cancel()
       return
     end
-    local processing_client
-    local ok, outcome, value = xpcall(function()
-      table.sort(responses, function(a, b) return (a.client.id or 0) < (b.client.id or 0) end)
-      local suppressed = {}
-      for _, response in ipairs(responses) do
-        processing_client = response.client
-        if not active() then
-          cancel()
-          return nil
-        end
-        if response.edit ~= nil then
-          local verify, preflight_err = resource_expectations(response.edit)
-          if not verify then return false, tostring(preflight_err) end
-          local stale_err = stale_document_edit(response.edit)
-          if stale_err then return false, tostring(stale_err) end
-          local edit, confirm_err = confirm_workspace_edit(response.edit)
-          if edit == false then return false, confirm_err end
-          if edit == nil then return false, confirm_err end
-          local applied, result = pcall(function()
-            if not active() then
-              cancel()
-              return nil
-            end
-            return vim.lsp.util.apply_workspace_edit(edit, response.client.offset_encoding or 'utf-16')
-          end)
-          if settled then return nil end
-          if not applied then return false, tostring(result) end
-          if result == false then return false, 'workspace edit application failed' end
-          local verified, verify_err = verify()
-          if not verified then return false, tostring(verify_err) end
-          for path in pairs(resource_paths(response.edit)) do
-            suppressed[path] = true
-          end
-        end
-      end
-      return true, suppressed
-    end, debug.traceback)
+    local ok, outcome, value, processing_client = apply_rename_responses(
+      responses,
+      active,
+      cancel,
+      function() return settled end
+    )
     if not ok then
       warning(processing_client, outcome)
       deliver(false, tostring(outcome))
@@ -599,50 +622,71 @@ function M.will_rename(files, callback, warn, is_active)
       deliver(outcome, value)
     end
   end
+
   local function complete(index, err, edit)
     local response = responses[index]
     if not response or response.done then return end
     response.done = true
     requests[index] = nil
     if err then warning(response.client, err.message or err) end
-    if edit ~= nil and edit ~= vim.NIL then responses[index].edit = edit end
+    if edit ~= nil and edit ~= vim.NIL then response.edit = edit end
     pending = pending - 1
     finish()
   end
-  for index, selected in ipairs(clients) do
-    local response = { client = selected.client }
-    responses[index] = response
-    local client = selected.client
-    requests[index] = { client = client }
-    if type(client.request) ~= 'function' then
-      complete(index, 'client has no request method')
-    else
-      local ok, started, request_id = pcall(
-        client.request,
-        client,
-        methods.willRenameFiles,
-        { files = vim.deepcopy(selected.files) },
-        function(err, edit) complete(index, err, edit) end
-      )
-      if ok and started ~= false and started ~= nil then
-        local request = requests[index]
-        if request and not response.done and not settled then request.id = request_id end
-      end
-      if not ok or started == false or started == nil then
-        complete(index, ok and (request_id or 'request was not started') or started)
-      else
-        vim.defer_fn(function()
-          if response.done or settled then return end
-          if request_id ~= nil and type(client.cancel_request) == 'function' then
-            pcall(client.cancel_request, client, request_id)
-            requests[index] = nil
-          end
-          complete(index, 'request timed out after ' .. tostring(M._timeout_ms) .. ' ms')
-        end, M._timeout_ms or 1200)
-      end
-    end
+
+  controller.cancel = cancel
+  controller.complete = complete
+  controller.is_settled = function() return settled end
+  return controller
+end
+
+local function request_rename_client(controller, index, selected)
+  local response = controller.responses[index]
+  local client = selected.client
+  controller.requests[index] = { client = client }
+  if type(client.request) ~= 'function' then
+    controller.complete(index, 'client has no request method')
+    return
   end
-  return cancel
+  local ok, started, request_id = pcall(
+    client.request,
+    client,
+    methods.willRenameFiles,
+    { files = vim.deepcopy(selected.files) },
+    function(err, edit) controller.complete(index, err, edit) end
+  )
+  if ok and started ~= false and started ~= nil then
+    local request = controller.requests[index]
+    if request and not response.done and not controller.is_settled() then request.id = request_id end
+  end
+  if not ok or started == false or started == nil then
+    controller.complete(index, ok and (request_id or 'request was not started') or started)
+  else
+    vim.defer_fn(function()
+      if response.done or controller.is_settled() then return end
+      if request_id ~= nil and type(client.cancel_request) == 'function' then
+        pcall(client.cancel_request, client, request_id)
+        controller.requests[index] = nil
+      end
+      controller.complete(index, 'request timed out after ' .. tostring(M._timeout_ms) .. ' ms')
+    end, M._timeout_ms or 1200)
+  end
+end
+
+function M.will_rename(files, callback, warn, is_active)
+  local clients = select_rename_clients(files)
+  if #clients == 0 then
+    callback(true, {})
+    return false
+  end
+  local controller = make_rename_controller(callback, warn, is_active, #clients)
+  for index, selected in ipairs(clients) do
+    controller.responses[index] = { client = selected.client }
+  end
+  for index, selected in ipairs(clients) do
+    request_rename_client(controller, index, selected)
+  end
+  return controller.cancel
 end
 
 local function notify_safely(...)

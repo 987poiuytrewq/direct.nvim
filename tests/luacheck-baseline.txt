@@ -24,7 +24,7 @@ tests/history/history_spec.lua:436:11: (W211) unused variable 'hist'
 tests/plugin/direct_run_spec.lua:231:15: (W431) shadowing upvalue 'state' on line 223
 tests/plugin/direct_run_spec.lua:245:15: (W431) shadowing upvalue 'state' on line 223
 tests/plugin/direct_run_spec.lua:257:15: (W431) shadowing upvalue 'state' on line 223
-tests/plugin/entry_spec.lua:106:3: (W314) value assigned to field 'DirectGitRestore' is overwritten on line 107 before use
+tests/plugin/entry_spec.lua:107:3: (W314) value assigned to field 'DirectGitRestore' is overwritten on line 108 before use
 tests/plugin/highlight_spec.lua:5:7: (W211) unused variable 'highlight'
 tests/register/async_paste_spec.lua:4:7: (W211) unused variable 'buffer'
 tests/register/async_paste_spec.lua:5:7: (W211) unused variable 'direct'

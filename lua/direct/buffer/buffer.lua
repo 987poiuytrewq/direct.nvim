@@ -766,6 +766,7 @@ M.collapse_all = navigation.collapse_all
 local sync = require('direct.buffer.sync')
 Buffer.sync = sync.sync
 Buffer.sync_async = sync.sync_async
+Buffer.plan = sync.plan
 
 -- Opening and row-path operations are kept separate from listing and sync.
 local open = require('direct.buffer.open')

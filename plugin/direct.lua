@@ -100,6 +100,12 @@ vim.api.nvim_create_user_command('DirectSync', function()
 end, { nargs = 0, desc = 'direct: sync the listing with the filesystem' })
 
 vim.api.nvim_create_user_command(
+  'DirectPlan',
+  function() require('direct').plan() end,
+  { nargs = 0, desc = 'direct: preview the listing save plan' }
+)
+
+vim.api.nvim_create_user_command(
   'DirectFoldAll',
   function() require('direct').fold_all() end,
   { nargs = 0, desc = 'direct: collapse all directories in the listing' }

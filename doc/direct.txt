@@ -1062,6 +1062,14 @@ Editing ~
     another filesystem report progress. |:write| waits for this operation; see
     |direct.vim-write|.
 
+                                                                  *:DirectPlan*
+:DirectPlan
+    Show a read-only floating preview of the filesystem actions the current
+    listing would apply, or the refusal that prevents the plan. This does not
+    apply the save, change the listing, or update history. |:write| still saves
+    without prompting. The preview has no default key mapping; configure
+    `mappings.plan` to add one.
+
 Saving and quitting ~                                      *direct.vim-write*
 
 Saving a Direct listing runs filesystem changes and the history commit
@@ -1340,6 +1348,7 @@ The functions in `require('direct')` mirror the commands:
     `expand()` `collapse()` `toggle()`   folder expansion actions
     `expand_recursive()` `collapse_recursive()` `toggle_recursive()` recursive folder actions
     `sync([callback])`             |:DirectSync|
+    `plan()`                       |:DirectPlan|
     `undo()`  `redo()`              |:DirectUndo|  |:DirectRedo|
     `yank(first, last)`           |:DirectYank| on lines {first} to {last}
     `paste(dir)`                  |:DirectPaste|

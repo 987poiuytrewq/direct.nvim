@@ -6,6 +6,7 @@ local rows = require('direct.buffer.rows')
 
 return {
   states = rows.states,
+  deleted_guards = {},
   namespace = rows.namespace,
   pending_sync = {},
   restore_deleted_rows = nil,

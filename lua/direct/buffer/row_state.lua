@@ -1,40 +1,87 @@
 -- Per-buffer row identities, deleted-row protections, and expansion state.
--- The buffer model and its helpers are injected to preserve existing behavior.
+-- Shared row state is read from buffer.state; UI and filesystem dependencies
+-- are required directly so this module can be loaded independently.
 
-return function(context)
-  local M = context.M
-  local Buffer = context.Buffer
-  local fs = context.fs
-  local paths = context.paths
-  local git = context.git
-  local ui = context.ui
-  local states = context.states
-  local deleted_guards = context.deleted_guards
-  local namespace = context.namespace
-  local set_row_mark = context.set_row_mark
-  local refresh_display_ids = context.refresh_display_ids
-  local refresh_highlights = context.refresh_highlights
-  local refresh_icons = context.refresh_icons
-  local row_ids_by_row = context.row_ids_by_row
-  local current_row_record = context.current_row_record
-  local is_dir_line = context.is_dir_line
-  local dirs_then_name = context.dirs_then_name
-  local next_id = context.next_id
-  local row_path = context.row_path
-  local recorded_row_text = context.recorded_row_text
-  local set_directory_snapshot = context.set_directory_snapshot
-  local set_git_timeout_indicator = context.set_git_timeout_indicator
-  local get_directory_snapshot = context.get_directory_snapshot
-  local list_with_snapshot = context.list_with_snapshot
-  local filter_git_status_lines = context.filter_git_status_lines
-  local filter_git_diff_lines = context.filter_git_diff_lines
-  local ensure_git_snapshot = context.ensure_git_snapshot
-  local indent_size = context.indent_size
-  local path_identity = context.path_identity
-  local remove_expanded_subtree = context.remove_expanded_subtree
-  local reconcile_undone_materialization = context.reconcile_undone_materialization
-  local action_mod = context.action_mod
+local M = {}
 
+local action_mod = require('direct.action.action')
+local buffer_state = require('direct.buffer.state')
+local fs = require('direct.fs')
+local git = require('direct.git')
+local listing = require('direct.buffer.listing')
+local paths = require('direct.paths')
+local rows = require('direct.buffer.rows')
+local ui = require('direct.ui')
+
+local states = buffer_state.states
+local deleted_guards = buffer_state.deleted_guards
+local namespace = buffer_state.namespace
+local set_row_mark = rows.set_row_mark
+local refresh_display_ids = rows.refresh_display_ids
+local row_ids_by_row = rows.row_ids_by_row
+local current_row_record = rows.current_row_record
+local is_dir_line = rows.is_dir_line
+local dirs_then_name = rows.dirs_then_name
+local next_id = rows.next_id
+local row_path = rows.row_path
+local recorded_row_text = rows.recorded_row_text
+local set_directory_snapshot = listing.set_directory_snapshot
+local set_git_timeout_indicator = listing.set_git_timeout_indicator
+local get_directory_snapshot = listing.get_directory_snapshot
+local remove_expanded_subtree = rows.remove_expanded_subtree
+
+local function buffer_module()
+  local module = buffer_state.list_parent
+  assert(type(module) == 'table', 'buffer.row_state parent is not attached')
+  return module
+end
+
+local function hook(name)
+  local hooks = buffer_state.list_hooks
+  local callback = hooks and hooks[name]
+  assert(type(callback) == 'function', 'buffer.row_state hook is unavailable: ' .. name)
+  return callback
+end
+
+local function refresh_highlights(...) return hook('refresh_highlights')(...) end
+
+local function refresh_icons(...) return hook('refresh_icons')(...) end
+
+local function ensure_git_snapshot(state) return state.git_status end
+
+local function list_with_snapshot(root, show_hidden, respect_gitignore)
+  return listing.list_with_snapshot(root, buffer_module().read, show_hidden, respect_gitignore)
+end
+
+local function filter_git_status_lines(root, lines, snapshot)
+  local filtered = {}
+  for _, line in ipairs(lines or {}) do
+    if git.status_for(snapshot, buffer_module().entry_path(root, line)) then filtered[#filtered + 1] = line end
+  end
+  return filtered
+end
+
+local function filter_git_diff_lines(root, lines, snapshot)
+  local filtered = {}
+  for _, line in ipairs(lines or {}) do
+    if git.status_for(snapshot, buffer_module().entry_path(root, line)) then filtered[#filtered + 1] = line end
+  end
+  return filtered
+end
+
+local function indent_size() return require('direct.config').options.indent_size end
+
+local function path_identity(path) return fs.path_identity(path, fs.stat(path)) end
+
+local function reconcile_undone_materialization(...)
+  local reconcile = buffer_state.reconcile_undone_materialization
+  assert(type(reconcile) == 'function', 'buffer.row_state undo reconciliation is not attached')
+  return reconcile(...)
+end
+
+local function entry_path(root, line) return buffer_module().entry_path(root, line) end
+
+do
   local function is_deleted_record(record) return record ~= nil and record.deleted_kind ~= nil end
 
   local function merge_deleted_entries(directory, lines, git_snapshot, show_hidden)
@@ -205,7 +252,7 @@ return function(context)
     if attached then deleted_guards[bufnr] = true end
   end
 
-  function Buffer:expand(row)
+  function M.expand(self, row)
     local bufnr = vim.api.nvim_get_current_buf()
     reconcile_undone_materialization(bufnr)
     row = row or vim.api.nvim_win_get_cursor(0)[1]
@@ -254,7 +301,7 @@ return function(context)
       if state.view_git_diff_only then children = filter_git_diff_lines(path, children, state.git_diff_snapshot) end
       local materialized = {}
       for order, child_name in ipairs(children) do
-        local child_path = M.entry_path(path, child_name)
+        local child_path = entry_path(path, child_name)
         local reason = action_mod.path_reason(child_path)
         if not reason then
           materialized[#materialized + 1] = {
@@ -351,7 +398,7 @@ return function(context)
   end
 
   local function collapse_snapshot(bufnr, state, parent, parent_row)
-    local rows, rows_by_id, expansions, directory_snapshots = {}, {}, {}, {}
+    local row_items, rows_by_id, expansions, directory_snapshots = {}, {}, {}, {}
     local visible_ids_by_row = row_ids_by_row(bufnr)
     local cursor = parent_row
     local function visit(parent_id)
@@ -370,7 +417,7 @@ return function(context)
           return false
         end
         local saved = vim.deepcopy(child)
-        rows[#rows + 1] = { id = child.id, row = row, text = line }
+        row_items[#row_items + 1] = { id = child.id, row = row, text = line }
         rows_by_id[child.id] = saved
         if state.expanded[child.id] then
           expansions[child.id] = vim.deepcopy(state.expanded[child.id])
@@ -446,7 +493,7 @@ return function(context)
       parent_identity = path_identity(parent.path),
       parent_text = vim.api.nvim_buf_get_lines(bufnr, parent_row, parent_row + 1, false)[1],
       base_seq = vim.fn.undotree(bufnr).seq_cur,
-      rows = rows,
+      rows = row_items,
       rows_by_id = rows_by_id,
       expansions = expansions,
       directory_snapshots = directory_snapshots,
@@ -458,7 +505,7 @@ return function(context)
     }
   end
 
-  function Buffer.collapse(_, row)
+  function M.collapse(_, row)
     local bufnr = vim.api.nvim_get_current_buf()
     reconcile_undone_materialization(bufnr)
     row = row or vim.api.nvim_win_get_cursor(0)[1]
@@ -504,12 +551,12 @@ return function(context)
     return true
   end
 
-  return {
-    is_deleted_record = is_deleted_record,
-    merge_deleted_entries = merge_deleted_entries,
-    hide_deleted_expansions = hide_deleted_expansions,
-    capture_deleted_guard_snapshot = capture_deleted_guard_snapshot,
-    restore_deleted_rows = restore_deleted_rows,
-    attach_deleted_guard = attach_deleted_guard,
-  }
+  M.is_deleted_record = is_deleted_record
+  M.merge_deleted_entries = merge_deleted_entries
+  M.hide_deleted_expansions = hide_deleted_expansions
+  M.capture_deleted_guard_snapshot = capture_deleted_guard_snapshot
+  M.restore_deleted_rows = restore_deleted_rows
+  M.attach_deleted_guard = attach_deleted_guard
 end
+
+return M

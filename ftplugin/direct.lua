@@ -13,9 +13,7 @@ config.install_buffer_mappings(0)
 local undo = "lua require('direct.config').clear_buffer_mappings(0)"
 local previous = vim.b.undo_ftplugin
 if type(previous) == 'string' and previous ~= '' then
-  if not previous:find(undo, 1, true) then
-    vim.b.undo_ftplugin = previous .. ' | ' .. undo
-  end
+  if not previous:find(undo, 1, true) then vim.b.undo_ftplugin = previous .. ' | ' .. undo end
 else
   vim.b.undo_ftplugin = undo
 end

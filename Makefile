@@ -32,14 +32,31 @@ lint:
 	  if [ "$$result" -gt 1 ] || [ -z "$$warnings" ] || [ "$$warnings" -gt '$(LUACHECK_MAX_WARNINGS)' ]; then \
 	    echo "luacheck failed (exit $$result, warnings=$${warnings:-unknown}, maximum=$(LUACHECK_MAX_WARNINGS))" >&2; exit 1; \
 	  fi
+	@set +e; $(LUACHECK) --no-color --codes --formatter plain plugin ftplugin > .cache/luacheck-plugin.log 2>&1; result=$$?; set -e; \
+	  cat .cache/luacheck-plugin.log; \
+	  if [ "$$result" -ne 0 ]; then echo "luacheck failed for plugin/ftplugin (exit $$result)" >&2; exit 1; fi
+	@set +e; $(LUACHECK) --no-color --codes --formatter plain tests > .cache/luacheck-tests.log 2>&1; result=$$?; set -e; \
+	  grep -E '^tests/.*:.*: \(W[0-9][0-9][0-9]\)' .cache/luacheck-tests.log | sort > .cache/luacheck-tests-warnings.log || true; \
+	  if [ "$$result" -gt 1 ]; then cat .cache/luacheck-tests.log; echo "luacheck found test errors (exit $$result)" >&2; exit 1; fi; \
+	  unexpected=$$(comm -13 tests/luacheck-baseline.txt .cache/luacheck-tests-warnings.log); \
+	  stale=$$(comm -23 tests/luacheck-baseline.txt .cache/luacheck-tests-warnings.log); \
+	  if [ -n "$$unexpected" ] || [ -n "$$stale" ]; then \
+	    cat .cache/luacheck-tests.log; \
+	    if [ -n "$$unexpected" ]; then echo "new Luacheck test warnings:" >&2; printf '%s\n' "$$unexpected" >&2; fi; \
+	    if [ -n "$$stale" ]; then echo "stale Luacheck test baseline entries (remove fixed warnings from tests/luacheck-baseline.txt):" >&2; printf '%s\n' "$$stale" >&2; fi; \
+	    exit 1; \
+	  fi
 	$(PYTHON) tests/test_function_length.py
 	$(PYTHON) scripts/check_function_length.py
-	stylua --check lua/direct
+	stylua --check lua/direct plugin ftplugin
 	@mkdir -p '$(LUALS_LOGPATH)'
 	$(LUALS) --check=lua/direct/init.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'
 	$(LUALS) --check=lua/direct/config.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'
 	$(LUALS) --check=lua/direct/folding.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'
 	$(LUALS) --check=lua/direct/events.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'
+	$(LUALS) --check=lua/direct/fs.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'
+	$(LUALS) --check=lua/direct/paths.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'
+	$(LUALS) --check=lua/direct/register.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'
 	$(LUALS) --check=lua/direct --configpath='$(CURDIR)/.luarc.json' --checklevel=Error --logpath='$(LUALS_LOGPATH)'
 
 coverage-deps:

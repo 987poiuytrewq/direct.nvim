@@ -12,14 +12,10 @@ do
   -- Interlinked moves: staging, grouping, group reversal
   -- ---------------------------------------------------------------------------
 
-  -- parent_dir(path) -> the directory the staging temp for `path` belongs in. The
-  -- trailing filesystem separator of a directory path is stripped BEFORE the
-  -- parent is taken
-  -- `vim.fs.dirname('/ws/old/')` is '/ws/old', not '/ws' (measured on 0.12.5), so
-  -- it cannot be used here. Every entry staged for one sync belongs to the sync
-  -- root, so the temp spelling is exactly the `<root>/.direct-tmp-<n>` the save
-  -- has always used -- and because the temp is created in the entry's OWN
-  -- directory, the staging rename can never cross a filesystem.
+  -- parent_dir(path) -> the directory that contains the staging temp for `path`.
+  -- Strip a trailing separator before taking the parent; otherwise a directory
+  -- path can resolve to itself. Staging in each entry's own directory keeps the
+  -- rename on the same filesystem.
   local function parent_dir(path)
     local trimmed = M.paths.strip_trailing_separator(tostring(path))
     return M.paths.dirname(trimmed)

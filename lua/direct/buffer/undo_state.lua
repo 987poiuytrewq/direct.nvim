@@ -1,26 +1,47 @@
 -- Reconcile extmark-backed expanded rows across Neovim undo/redo transitions.
--- The buffer adapter supplies the state store and row/listing operations.
-return function(deps)
-  local states = deps.states
-  local namespace = deps.namespace
-  local fs = deps.fs
-  local path_identity = deps.path_identity
-  local same_lines = deps.same_lines
-  local row_ids_by_row = deps.row_ids_by_row
-  local set_row_mark = deps.set_row_mark
-  local refresh_display_ids = deps.refresh_display_ids
-  local is_dir_line = deps.is_dir_line
-  local recorded_row_text = deps.recorded_row_text
-  local ignore_set = deps.ignore_set
-  local read = deps.read
-  local read_with_snapshot = deps.read_with_snapshot
-  local entry_path = deps.entry_path
-  local highlight = deps.highlight
-  local refresh_highlights = deps.refresh_highlights or function(bufnr) highlight.render(bufnr) end
-  local refresh_icons = deps.refresh_icons
-  local remove_expanded_subtree = deps.remove_expanded_subtree
-  local indent_size = deps.indent_size
+-- Row identities and lifecycle hooks are read from their owning modules.
 
+local M = {}
+
+local buffer_state = require('direct.buffer.state')
+local fs = require('direct.fs')
+local highlight = require('direct.highlight')
+local listing = require('direct.buffer.listing')
+local rows = require('direct.buffer.rows')
+
+local states = buffer_state.states
+local namespace = buffer_state.namespace
+local row_ids_by_row = rows.row_ids_by_row
+local set_row_mark = rows.set_row_mark
+local refresh_display_ids = rows.refresh_display_ids
+local is_dir_line = rows.is_dir_line
+local recorded_row_text = rows.recorded_row_text
+local ignore_set = listing.ignore_set
+local read = listing.read
+local read_with_snapshot = listing.read_with_snapshot
+local entry_path = listing.entry_path
+local refresh_icons = rows.refresh_icons
+local remove_expanded_subtree = rows.remove_expanded_subtree
+
+local function path_identity(path) return fs.path_identity(path, fs.stat(path)) end
+
+local function same_lines(actual, expected)
+  if #actual ~= #expected then return false end
+  for index, line in ipairs(expected) do
+    if actual[index] ~= line then return false end
+  end
+  return true
+end
+
+local function refresh_highlights(bufnr, state, row_ids)
+  local callback = buffer_state.list_hooks and buffer_state.list_hooks.refresh_highlights
+  if callback then return callback(bufnr, state, row_ids) end
+  return highlight.render(bufnr)
+end
+
+local function indent_size() return require('direct.config').options.indent_size end
+
+do
   local function restore_redone_materialization(bufnr, state, materialization, lines)
     local parent = state.rows[materialization.parent_id]
     if not parent or state.expanded[parent.id] then return false end
@@ -490,7 +511,8 @@ return function(deps)
     return true
   end
 
-  -- ambiguous_message(plan, actual, expected) names the reason and both sides of
-  -- the comparison so the user can see what desynced.
-  return reconcile_undone_materialization
+  -- Expose the single reconciliation hook attached by buffer.lua.
+  M.reconcile_undone_materialization = reconcile_undone_materialization
 end
+
+return M

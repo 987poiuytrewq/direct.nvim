@@ -1211,11 +1211,10 @@ function M.apply_async(action, execute_async, callback, preflight_guard)
   return true
 end
 
-local paste_helpers = require('direct.history.paste')({
-  M = M,
-  log_mod = log_mod,
-  TRANSACTION_FORMAT = TRANSACTION_FORMAT,
-  TRANSACTION_VERSION = TRANSACTION_VERSION,
+-- Attach Paste lifecycle methods together. The coordinator keeps journal and
+-- stack persistence owned by history.lua while paste.lua owns the protocol.
+local paste = require('direct.history.paste')
+local paste_coordinator = {
   preflight_locked = preflight_locked,
   action_paths = action_paths,
   copy_lines = copy_lines,
@@ -1223,8 +1222,14 @@ local paste_helpers = require('direct.history.paste')({
   recovery = recovery,
   clear_transaction = clear_transaction,
   commit_stacks = commit_stacks,
-})
-local write_paste_journal = paste_helpers.write_paste_journal
+}
+M.begin_paste = function(action) return paste.begin_paste(action, paste_coordinator) end
+M.begin_paste_async = function(action, callback) return paste.begin_paste_async(action, callback, paste_coordinator) end
+M.note_paste_pending = paste.note_paste_pending
+M.note_paste_complete = paste.note_paste_complete
+M.cancel_paste_pending = paste.cancel_paste_pending
+M.finish_paste = function(operation) return paste.finish_paste(operation, paste_coordinator) end
+local write_paste_journal = paste.write_paste_journal
 
 -- log(action) appends one action and clears redo through a recoverable paired
 -- stack transaction.

@@ -1,20 +1,19 @@
 -- Durable async Paste history journal lifecycle.
--- Coordinator internals are injected; methods stay on the history API.
+-- History supplies only the coordinator functions that must remain owned by
+-- history.lua; storage, action, path, transaction, and lock modules are direct.
 
-return function(context)
-  local M = context.M
-  local log_mod = context.log_mod
-  local TRANSACTION_FORMAT = context.TRANSACTION_FORMAT
-  local TRANSACTION_VERSION = context.TRANSACTION_VERSION
-  local preflight_locked = context.preflight_locked
-  local action_paths = context.action_paths
-  local copy_lines = context.copy_lines
-  local notify_unavailable = context.notify_unavailable
-  local recovery = context.recovery
-  local clear_transaction = context.clear_transaction
-  local commit_stacks = context.commit_stacks
+local M = {}
 
-  local function write_paste_journal(operation)
+local log_mod = require('direct.log')
+local action_mod = require('direct.action.action')
+local paths = require('direct.paths')
+local lock = require('direct.history.lock')
+local transaction_codec = require('direct.history.transaction')
+local TRANSACTION_FORMAT = transaction_codec.FORMAT
+local TRANSACTION_VERSION = transaction_codec.VERSION
+
+do
+  function M.write_paste_journal(operation)
     local called, ok, err = pcall(
       function()
         return log_mod.write_raw_atomic(operation.transaction_path, vim.json.encode(operation.transaction) .. '\n')
@@ -28,20 +27,20 @@ return function(context)
   local function release_paste_lock(operation)
     if not operation.locked then return true end
     operation.locked = false
-    return M.lock.release()
+    return lock.release()
   end
 
-  local function begin_paste_after_acquire(action, record, acquired, acquire_err)
+  local function begin_paste_after_acquire(action, record, acquired, acquire_err, coordinator)
     if not acquired then
-      notify_unavailable(acquire_err)
+      coordinator.notify_unavailable(acquire_err)
       return nil, acquire_err
     end
     local called, state, preflight_err = xpcall(
-      function() return preflight_locked(action_paths(action)) end,
+      function() return coordinator.preflight_locked(coordinator.action_paths(action)) end,
       debug.traceback
     )
     if not called or not state then
-      M.lock.release()
+      lock.release()
       return nil, called and preflight_err or state
     end
     local transaction = {
@@ -51,8 +50,8 @@ return function(context)
       direction = 'apply',
       action = record,
       source_action = vim.NIL,
-      base_undo = copy_lines(state.undo_lines),
-      base_redo = copy_lines(state.redo_lines),
+      base_undo = coordinator.copy_lines(state.undo_lines),
+      base_redo = coordinator.copy_lines(state.redo_lines),
       completed = {},
       pending = vim.NIL,
     }
@@ -63,10 +62,10 @@ return function(context)
       redo_path = state.redo_path,
       locked = true,
     }
-    local written, write_err = write_paste_journal(operation)
+    local written, write_err = M.write_paste_journal(operation)
     if not written then
       release_paste_lock(operation)
-      notify_unavailable(write_err)
+      coordinator.notify_unavailable(write_err)
       return nil, write_err
     end
     return operation
@@ -74,25 +73,25 @@ return function(context)
 
   -- begin_paste holds the same-host history lock until finish_paste. The initial
   -- journal is durable before the async executor can create its first destination.
-  function M.begin_paste(action)
+  function M.begin_paste(action, coordinator)
     if type(action) ~= 'table' or action.name ~= 'p' then
       return nil, 'history.begin_paste: a Paste action is required'
     end
-    local record, serialize_err = M.action.serialize(action)
+    local record, serialize_err = action_mod.serialize(action)
     if not record then return nil, serialize_err end
-    local acquired, acquire_err = M.lock.acquire()
-    return begin_paste_after_acquire(action, record, acquired, acquire_err)
+    local acquired, acquire_err = lock.acquire()
+    return begin_paste_after_acquire(action, record, acquired, acquire_err, coordinator)
   end
 
-  function M.begin_paste_async(action, callback)
+  function M.begin_paste_async(action, callback, coordinator)
     if type(action) ~= 'table' or action.name ~= 'p' then
       return nil, 'history.begin_paste_async: a Paste action is required'
     end
     if type(callback) ~= 'function' then return nil, 'history.begin_paste_async: a completion callback is required' end
-    local record, serialize_err = M.action.serialize(action)
+    local record, serialize_err = action_mod.serialize(action)
     if not record then return nil, serialize_err end
-    return M.lock.acquire_async(function(acquired, acquire_err)
-      local operation, begin_err = begin_paste_after_acquire(action, record, acquired, acquire_err)
+    return lock.acquire_async(function(acquired, acquire_err)
+      local operation, begin_err = begin_paste_after_acquire(action, record, acquired, acquire_err, coordinator)
       callback(operation, begin_err)
     end)
   end
@@ -107,10 +106,10 @@ return function(context)
     then
       return nil, 'invalid pending paste update'
     end
-    if M.action.entry_name_reason(pair.src) or M.action.entry_name_reason(pair.dst) then
+    if action_mod.entry_name_reason(pair.src) or action_mod.entry_name_reason(pair.dst) then
       return nil, 'invalid paste entry name'
     end
-    local source_identity, source_stat = M.action.fs.entry_identity(source)
+    local source_identity, source_stat = action_mod.fs.entry_identity(source)
     if not source_stat or not source_identity or not source_identity.inode then
       return nil, 'cannot identify paste source: ' .. source
     end
@@ -119,11 +118,11 @@ return function(context)
     operation.transaction.pending = {
       src = pair.src,
       dst = pair.dst,
-      source = M.paths.canonical(source),
-      destination = M.paths.canonical(destination),
+      source = paths.canonical(source),
+      destination = paths.canonical(destination),
       source_identity = source_identity,
     }
-    local written, write_err = write_paste_journal(operation)
+    local written, write_err = M.write_paste_journal(operation)
     if not written then
       operation.transaction.pending = previous
       return nil, write_err
@@ -142,7 +141,7 @@ return function(context)
     end
     transaction.completed[#transaction.completed + 1] = { src = pair.src, dst = pair.dst }
     transaction.pending = vim.NIL
-    local written, write_err = write_paste_journal(operation)
+    local written, write_err = M.write_paste_journal(operation)
     if not written then
       table.remove(transaction.completed)
       transaction.pending = pending
@@ -159,7 +158,7 @@ return function(context)
       return nil, 'paste conflict does not match the pending destination'
     end
     transaction.pending = vim.NIL
-    local written, write_err = write_paste_journal(operation)
+    local written, write_err = M.write_paste_journal(operation)
     if not written then
       transaction.pending = pending
       return nil, write_err
@@ -167,15 +166,15 @@ return function(context)
     return true
   end
 
-  function M.finish_paste(operation)
+  function M.finish_paste(operation, coordinator)
     if type(operation) ~= 'table' or not operation.locked then return nil, 'paste history operation is not active' end
     local called, result, result_err = xpcall(function()
-      local completed, settle_err = recovery.settle_paste_pending(operation.transaction)
+      local completed, settle_err = coordinator.recovery.settle_paste_pending(operation.transaction)
       if not completed then return nil, settle_err end
-      if #completed == 0 then return clear_transaction(operation.transaction_path) end
-      local undo, redo, stack_err = recovery.paste_stack_snapshot(operation.transaction, completed)
+      if #completed == 0 then return coordinator.clear_transaction(operation.transaction_path) end
+      local undo, redo, stack_err = coordinator.recovery.paste_stack_snapshot(operation.transaction, completed)
       if not undo then return nil, stack_err end
-      return commit_stacks(operation.undo_path, operation.redo_path, operation.transaction_path, undo, redo)
+      return coordinator.commit_stacks(operation.undo_path, operation.redo_path, operation.transaction_path, undo, redo)
     end, debug.traceback)
     if not called then
       result, result_err = nil, result
@@ -186,5 +185,5 @@ return function(context)
     return true
   end
 
-  return { write_paste_journal = write_paste_journal }
+  return M
 end

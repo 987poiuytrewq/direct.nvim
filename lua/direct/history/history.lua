@@ -12,7 +12,6 @@ M.paths = require('direct.paths')
 M.ui = require('direct.ui')
 M.pending = require('direct.pending')
 M.lock = require('direct.history.lock')
-local file_operations = require('direct.file_operations')
 local history_lsp = require('direct.history.lsp')({ action = M.action })
 
 local TRANSACTION_FORMAT = transaction_codec.FORMAT
@@ -1300,10 +1299,10 @@ function M.combine_recent(actions, stack_name)
   end)
 end
 
-require('direct.history.reverse')({
-  M = M,
-  file_operations = file_operations,
-  rename_files = history_lsp.rename_files,
+-- Attach undo/redo methods together. History keeps ownership of its lock,
+-- journal, paired-stack commit, and recovery coordination.
+local reverse = require('direct.history.reverse')
+local reverse_owner = {
   preflight_locked = preflight_locked,
   copy_lines = copy_lines,
   commit_stacks = commit_stacks,
@@ -1314,7 +1313,16 @@ require('direct.history.reverse')({
   settle_failed_reverse = settle_failed_reverse,
   attach_unpaste_journal = attach_unpaste_journal,
   recoverable_rename_kinds = recoverable_rename_kinds,
+  rename_files = history_lsp.rename_files,
   write_paste_journal = write_paste_journal,
-})
+}
+M.undo = function() return reverse.undo(M, reverse_owner) end
+M.redo = function() return reverse.redo(M, reverse_owner) end
+M._reverse = function(which) return reverse._reverse(M, reverse_owner, which) end
+M.undo_async = function(callback, options) return reverse.undo_async(M, reverse_owner, callback, options) end
+M.redo_async = function(callback, options) return reverse.redo_async(M, reverse_owner, callback, options) end
+M._reverse_async = function(which, callback, options)
+  return reverse._reverse_async(M, reverse_owner, which, callback, options)
+end
 
 return M

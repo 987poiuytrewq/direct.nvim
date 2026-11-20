@@ -838,7 +838,12 @@ function M.summarize(actions)
   return summary
 end
 
-require('direct.action.moves')(M)
+local moves = require('direct.action.moves')
+M.first_free_temp = moves.first_free_temp
+M.stage_moves = moves.stage_moves
+M.plan_move_steps = moves.plan_move_steps
+M.move_groups = moves.move_groups
+M.Group = function(actions) return moves.make_group(M, actions) end
 require('direct.action.registry')(M)
 
 return M

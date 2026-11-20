@@ -18,13 +18,14 @@ SUMMARY_ROW = re.compile(r"^(?P<path>.+?)\s+(?P<hits>\d+)\s+(?P<missed>\d+)\s+(?
 
 def parse_summary(
     text: str,
-    repo_root: Path | None = None,
+    repo_root: Path | str | None = None,
 ) -> tuple[dict[str, dict[str, float | int]], float]:
     files: dict[str, dict[str, float | int]] = {}
     total: float | None = None
     root_prefix = None
     if repo_root is not None:
-        root_prefix = repo_root.resolve().as_posix().rstrip("/") + "/"
+        root = repo_root.resolve().as_posix() if isinstance(repo_root, Path) else repo_root
+        root_prefix = root.replace("\\", "/").rstrip("/") + "/"
 
     for raw_line in text.splitlines():
         match = SUMMARY_ROW.match(raw_line.strip())

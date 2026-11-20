@@ -32,6 +32,8 @@ lint:
 	  if [ "$$result" -gt 1 ] || [ -z "$$warnings" ] || [ "$$warnings" -gt '$(LUACHECK_MAX_WARNINGS)' ]; then \
 	    echo "luacheck failed (exit $$result, warnings=$${warnings:-unknown}, maximum=$(LUACHECK_MAX_WARNINGS))" >&2; exit 1; \
 	  fi
+	$(PYTHON) tests/test_function_length.py
+	$(PYTHON) scripts/check_function_length.py
 	stylua --check lua/direct
 	@mkdir -p '$(LUALS_LOGPATH)'
 	$(LUALS) --check=lua/direct/init.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'

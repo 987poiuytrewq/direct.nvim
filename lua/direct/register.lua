@@ -145,13 +145,8 @@ function M._yank_one_async(dst, src, callback)
   return callback(false, 'cannot yank: unsupported entry type for ' .. tostring(src))
 end
 
--- yank_async(sources[, callback]) -> true | nil, err. Explicit yanks keep a
--- copy because their source stays in place and may change. The history lock is
--- held only for preflight and the final register-pointer switch; the private
--- snapshot copy runs in the background under the pending guard.
-function M.yank_async(sources, callback)
-  if M.pending.refuse('yank') then return nil, 'another direct operation is pending' end
-  if type(sources) ~= 'table' then return nil, 'register.yank_async: a list of sources is required' end
+-- validate_async_yank_sources(sources) -> true | nil, err.
+local function validate_async_yank_sources(sources)
   for _, src in ipairs(sources) do
     local valid, path_err = M.paths.validate_canonical_path(src)
     if not valid then
@@ -173,131 +168,176 @@ function M.yank_async(sources, callback)
       return nil, message
     end
   end
+  return true
+end
+
+-- new_async_yank_operation(sources, callback) -> invocation-local state.
+local function new_async_yank_operation(sources, callback)
+  return {
+    sources = sources,
+    callback = callback,
+    lock_held = false,
+    finished = false,
+    copied_sources = {},
+    skipped_sources = {},
+  }
+end
+
+local function acquire_async_yank_lock(operation, on_acquired)
+  if operation.lock_held then
+    on_acquired(true)
+    return true
+  end
+  return M.history.lock.acquire_async(function(acquired, err)
+    if acquired then operation.lock_held = true end
+    on_acquired(acquired, err)
+  end)
+end
+
+local function release_async_yank_lock(operation)
+  if not operation.lock_held then return true end
+  operation.lock_held = false
+  local released, err = M.history.lock.release()
+  if not released then
+    M.ui.notify('direct: could not release the history lock: ' .. tostring(err), vim.log.levels.ERROR)
+  end
+  return released, err
+end
+
+local function settle_async_yank(operation, ok, err)
+  if operation.finished then return end
+  operation.finished = true
+  release_async_yank_lock(operation)
+  if not ok then
+    local removed, remove_err = store.discard_async_snapshot(operation.dst)
+    if not removed then
+      M.ui.notify(
+        'direct: incomplete register copy preserved at ' .. tostring(operation.dst) .. ': ' .. tostring(remove_err),
+        vim.log.levels.WARN
+      )
+    end
+  end
+  M.pending.finish()
+  if not ok and err ~= nil then M.ui.notify('direct: cannot yank: ' .. tostring(err), vim.log.levels.ERROR) end
+  if type(operation.callback) == 'function' then
+    local called, callback_err = pcall(operation.callback, ok, err)
+    if not called then M.ui.report_error('refresh after yanking', callback_err) end
+  end
+end
+
+local function fail_async_yank(operation, err)
+  settle_async_yank(operation, false, err)
+  return nil, err
+end
+
+-- prepare_async_yank(operation) -> true | nil, err. Called while the history
+-- lock is held; the allocated snapshot is private while its entries copy.
+local function prepare_async_yank(operation)
+  local initial_state, preflight_err = M.history.preflight(operation.sources)
+  if not initial_state then return nil, preflight_err end
+  operation.previous_content = M.content()
+  operation.previous_identity = content_identity()
+
+  local dir, dir_err = M.paths.ensure_data_dir('register')
+  if not dir then return nil, dir_err end
+  operation.dir = dir
+  operation.sorted_sources = vim.deepcopy(operation.sources)
+  table.sort(operation.sorted_sources)
+  operation.dst, dir_err = store.allocate_async_snapshot_dir(dir)
+  if not operation.dst then return nil, dir_err end
+  return true
+end
+
+local function notify_async_yank_sources(operation)
+  for _, src in ipairs(operation.copied_sources) do
+    M.ui.notify('Yanked ' .. src, vim.log.levels.INFO)
+    local skipped = operation.skipped_sources[src]
+    local count = skipped ~= nil and #skipped or 0
+    if count > 0 then
+      M.ui.notify(
+        'Skipped ' .. count .. ' ' .. (count == 1 and 'entry' or 'entries') .. ' that cannot be copied: ' .. src,
+        vim.log.levels.WARN
+      )
+    end
+  end
+end
+
+-- switch_async_yank_register(operation, callback) -> starts the final locked commit.
+local function switch_async_yank_register(operation, callback)
+  local started, start_err = acquire_async_yank_lock(operation, function(locked, lock_err)
+    if not locked then return callback(nil, lock_err) end
+    local state, preflight_err = M.history.preflight(operation.sources)
+    if not state then return callback(nil, preflight_err) end
+    local current_content = M.content()
+    local current_identity = content_identity()
+    if
+      current_content ~= operation.previous_content
+      or not vim.deep_equal(current_identity, operation.previous_identity)
+    then
+      return callback(nil, 'register changed while yank was copying; the newer register was kept')
+    end
+
+    local snapshot, rename_err = store.commit_async_snapshot(operation.dst, operation.dir, operation.sorted_sources)
+    if not snapshot then return callback(nil, rename_err) end
+    operation.dst = snapshot
+    local written, write_err = M.log.write(M.paths.join(operation.dir, 'content'), { operation.dst })
+    if not written then return callback(nil, write_err) end
+    cleanup_unreferenced(state.undo_lines, state.redo_lines)
+    notify_async_yank_sources(operation)
+    callback(true)
+  end)
+  if not started then callback(nil, start_err) end
+end
+
+-- copy_async_yank_sources(operation) -> copies sources in caller order, then
+-- reacquires the history lock to validate and switch the register pointer.
+local function copy_async_yank_sources(operation)
+  local index = 1
+  local function next_source()
+    if index > #operation.sources then
+      return switch_async_yank_register(operation, function(switched, switch_err)
+        if not switched then return settle_async_yank(operation, false, switch_err) end
+        settle_async_yank(operation, true)
+      end)
+    end
+    local src = operation.sources[index]
+    index = index + 1
+    M._yank_one_async(operation.dst, src, function(ok, skipped_or_err)
+      if not ok then return settle_async_yank(operation, false, skipped_or_err) end
+      operation.copied_sources[#operation.copied_sources + 1] = src
+      if skipped_or_err ~= nil then operation.skipped_sources[src] = skipped_or_err end
+      next_source()
+    end)
+  end
+  next_source()
+end
+
+-- yank_async(sources[, callback]) -> true | nil, err. Explicit yanks keep a
+-- copy because their source stays in place and may change. The history lock is
+-- held only for preflight and the final register-pointer switch; the private
+-- snapshot copy runs in the background under the pending guard.
+function M.yank_async(sources, callback)
+  if M.pending.refuse('yank') then return nil, 'another direct operation is pending' end
+  if type(sources) ~= 'table' then return nil, 'register.yank_async: a list of sources is required' end
+  local valid, validation_err = validate_async_yank_sources(sources)
+  if not valid then return nil, validation_err end
 
   local began, begin_err = M.pending.begin('yank')
   if not began then
     M.ui.notify('direct: cannot yank: ' .. tostring(begin_err), vim.log.levels.WARN)
     return nil, begin_err
   end
-  local lock_held, finished, dst = false, false, nil
-  local previous_content, previous_identity
-  local copied_sources, skipped_sources = {}, {}
 
-  local function acquire_lock(on_acquired)
-    if lock_held then
-      on_acquired(true)
-      return true
-    end
-    return M.history.lock.acquire_async(function(acquired, err)
-      if acquired then lock_held = true end
-      on_acquired(acquired, err)
-    end)
-  end
-
-  local function release_lock()
-    if not lock_held then return true end
-    lock_held = false
-    local released, err = M.history.lock.release()
-    if not released then
-      M.ui.notify('direct: could not release the history lock: ' .. tostring(err), vim.log.levels.ERROR)
-    end
-    return released, err
-  end
-
-  local function settle(ok, err)
-    if finished then return end
-    finished = true
-    release_lock()
-    if not ok then
-      local removed, remove_err = store.discard_async_snapshot(dst)
-      if not removed then
-        M.ui.notify(
-          'direct: incomplete register copy preserved at ' .. tostring(dst) .. ': ' .. tostring(remove_err),
-          vim.log.levels.WARN
-        )
-      end
-    end
-    M.pending.finish()
-    if not ok and err ~= nil then M.ui.notify('direct: cannot yank: ' .. tostring(err), vim.log.levels.ERROR) end
-    if type(callback) == 'function' then
-      local called, callback_err = pcall(callback, ok, err)
-      if not called then M.ui.report_error('refresh after yanking', callback_err) end
-    end
-  end
-
-  local function fail_start(err)
-    settle(false, err)
-    return nil, err
-  end
-
-  local started, start_err = acquire_lock(function(acquired, acquire_err)
-    if not acquired then return fail_start(acquire_err) end
-    local initial_state, initial_preflight_err = M.history.preflight(sources)
-    if not initial_state then return fail_start(initial_preflight_err) end
-    previous_content = M.content()
-    previous_identity = content_identity()
-
-    local dir, dir_err = M.paths.ensure_data_dir('register')
-    if not dir then return fail_start(dir_err) end
-    local sorted = vim.deepcopy(sources)
-    table.sort(sorted)
-    dst, dir_err = store.allocate_async_snapshot_dir(dir)
-    if not dst then return fail_start(dir_err) end
-    local released, release_err = release_lock()
-    if not released then return fail_start(release_err) end
-
-    local function switch_register(callback_after_switch)
-      local switch_started, switch_start_err = acquire_lock(function(locked, lock_err)
-        if not locked then return callback_after_switch(nil, lock_err) end
-        local state, preflight_err = M.history.preflight(sources)
-        if not state then return callback_after_switch(nil, preflight_err) end
-        local current_content = M.content()
-        local current_identity = content_identity()
-        if current_content ~= previous_content or not vim.deep_equal(current_identity, previous_identity) then
-          return callback_after_switch(nil, 'register changed while yank was copying; the newer register was kept')
-        end
-        local snapshot, rename_err = store.commit_async_snapshot(dst, dir, sorted)
-        if not snapshot then return callback_after_switch(nil, rename_err) end
-        dst = snapshot
-        local written, write_err = M.log.write(M.paths.join(dir, 'content'), { dst })
-        if not written then return callback_after_switch(nil, write_err) end
-        cleanup_unreferenced(state.undo_lines, state.redo_lines)
-        for _, src in ipairs(copied_sources) do
-          M.ui.notify('Yanked ' .. src, vim.log.levels.INFO)
-          local skipped = skipped_sources[src]
-          local n = skipped ~= nil and #skipped or 0
-          if n > 0 then
-            M.ui.notify(
-              'Skipped ' .. n .. ' ' .. (n == 1 and 'entry' or 'entries') .. ' that cannot be copied: ' .. src,
-              vim.log.levels.WARN
-            )
-          end
-        end
-        callback_after_switch(true)
-      end)
-      if not switch_started then callback_after_switch(nil, switch_start_err) end
-    end
-
-    local index = 1
-    local function next_source()
-      if index > #sources then
-        return switch_register(function(switched, switch_err)
-          if not switched then return settle(false, switch_err) end
-          settle(true)
-        end)
-      end
-      local src = sources[index]
-      index = index + 1
-      M._yank_one_async(dst, src, function(ok, skipped_or_err)
-        if not ok then return settle(false, skipped_or_err) end
-        copied_sources[#copied_sources + 1] = src
-        if skipped_or_err ~= nil then skipped_sources[src] = skipped_or_err end
-        next_source()
-      end)
-    end
-    next_source()
+  local operation = new_async_yank_operation(sources, callback)
+  local started, start_err = acquire_async_yank_lock(operation, function(acquired, acquire_err)
+    if not acquired then return fail_async_yank(operation, acquire_err) end
+    local ready, prepare_err = prepare_async_yank(operation)
+    if not ready then return fail_async_yank(operation, prepare_err) end
+    local released, release_err = release_async_yank_lock(operation)
+    if not released then return fail_async_yank(operation, release_err) end
+    copy_async_yank_sources(operation)
   end)
-  if not started then return fail_start(start_err) end
+  if not started then return fail_async_yank(operation, start_err) end
   return true
 end
 

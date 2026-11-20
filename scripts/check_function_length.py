@@ -23,7 +23,6 @@ ALLOWLIST = {
     "lua/direct/buffer/undo_state.lua:local reconcile_undone_materialization@323": 190,
     "lua/direct/buffer/sync_plan.lua:local build_actions@376": 179,
     "lua/direct/buffer/undo_state.lua:local restore_undone_collapse@151": 161,
-    "lua/direct/register.lua:M.yank_async@152": 151,
     "lua/direct/buffer/row_state.lua:M.expand@255": 144,
     "lua/direct/buffer/buffer.lua:local set_options@224": 137,
     "lua/direct/history/history.lua:M.apply_async@1080": 132,

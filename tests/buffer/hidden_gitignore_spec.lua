@@ -576,16 +576,27 @@ H.describe('hidden and Git-ignore filtering', function()
     H.capture_messages()
     local listing = require('direct').list(root)
     local warning_count = count_message(H.messages(), 'Git-ignore filtering timed out')
+    local calls_after_first_list = timed_out_queries
     listing:list({ discard = true })
+    local calls_after_second_list = timed_out_queries
     local marked_after_second_list = vim.b.direct_gitignore_timed_out
     local namespace = vim.api.nvim_get_namespaces()['direct.git-ignore-timeout']
 
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new.txt' })
     local ok, err = listing:sync()
+    local calls_after_save_retry = timed_out_queries
     vim.system = original_system
     H.assert_true(
-      timed_out_queries >= 9,
-      'initial lists and save retry reach the fake Git timeout; calls=' .. timed_out_queries
+      calls_after_first_list > 0,
+      'the initial listing reaches the fake Git timeout; calls=' .. calls_after_first_list
+    )
+    H.assert_true(
+      calls_after_second_list > calls_after_first_list,
+      'the second listing retries the fake Git timeout; calls=' .. calls_after_second_list
+    )
+    H.assert_true(
+      calls_after_save_retry > calls_after_second_list,
+      'the save retries the fake Git timeout; calls=' .. calls_after_save_retry
     )
     H.assert_true(marked_after_second_list, 'a second timed-out listing stays marked')
     H.assert_true(

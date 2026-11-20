@@ -30,6 +30,11 @@ end
 
 H.describe('documentation synchronization', function()
   H.it('keeps the README defaults equal to config.defaults and linked from help', function()
+    -- config_spec changes the platform default while checking overrides; start
+    -- from fresh defaults so this comparison remains platform-specific.
+    package.loaded['direct.config'] = nil
+    package.loaded['direct.config.options'] = nil
+    package.loaded['direct.config.mappings'] = nil
     local defaults = require('direct.config').defaults
     local documented = readme_defaults(read_file('README.md'))
     local help = read_file('doc/direct.txt')

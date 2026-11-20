@@ -654,6 +654,159 @@ local function capture_unpaste_item(item)
   return nil, 'could not allocate a unique Unpaste quarantine'
 end
 
+local function preflight_unpaste(self)
+  -- A re-yank changes the register pointer. The old content path is not enough
+  -- to authorize deletion if the live register no longer refers to it.
+  local current_register, register_err = require('direct.register').content()
+  if current_register == nil or current_register ~= self.dst then
+    return nil, register_err or 'register is missing or was re-yanked'
+  end
+
+  -- Validate the complete operation without mutation. Files compare bytes;
+  -- directories compare exact descendants; symlinks compare readlink targets
+  -- without following them.
+  local items = {}
+  for _, pair in ipairs(self.renames) do
+    local path = M.fs.join(self.src, pair.src)
+    local reference = require('direct.register').resolve(self.dst, pair.dst) or M.fs.join(self.dst, pair.dst)
+    local identity, stat = M.fs.entry_identity(path)
+    if identity == nil or identity.inode == nil then return nil, 'cannot inspect pasted entry: ' .. path end
+    if not stat or (stat.type ~= 'file' and stat.type ~= 'directory' and stat.type ~= 'link') then
+      return nil, 'unsupported pasted entry type: ' .. path
+    end
+    local matches, compare_err = compare_unpaste_contents(path, reference)
+    if matches ~= true then
+      return nil,
+        'pasted entry does not match register content: '
+          .. path
+          .. (compare_err and (' (' .. tostring(compare_err) .. ')') or '')
+    end
+    local item = {
+      path = path,
+      reference = reference,
+      identity = identity,
+      kind = stat.type,
+      pair = pair,
+    }
+    local planned = self._journal_items and self._journal_items[#items + 1]
+    if planned then
+      if planned.src ~= pair.src or planned.dst ~= pair.dst or planned.identity.inode ~= identity.inode then
+        return nil, 'journaled Unpaste plan no longer matches: ' .. path
+      end
+      item.quarantine = planned.quarantine
+    end
+    items[#items + 1] = item
+  end
+  return items
+end
+
+local function begin_unpaste_recovery(self, items)
+  if type(self._on_unpaste_begin) == 'function' then
+    local ready, ready_err = self._on_unpaste_begin(items)
+    if not ready then return nil, 'could not prepare Unpaste recovery: ' .. tostring(ready_err) end
+    self._journal_active = true
+  end
+  return true
+end
+
+local function capture_unpaste_items(self, items)
+  local captured = {}
+  for _, item in ipairs(items) do
+    captured[#captured + 1] = item
+    local ok, err = capture_unpaste_item(item)
+    if not ok then
+      local reason = 'could not capture pasted entry: ' .. item.path .. ' (' .. tostring(err) .. ')'
+      if not self._journal_active then
+        restore_unpaste_captures(captured)
+      else
+        for _, captured_item in ipairs(captured) do
+          if M.fs.taken(captured_item.quarantine) then
+            M.ui.notify('direct: Unpaste quarantine preserved at ' .. captured_item.quarantine, vim.log.levels.ERROR)
+          end
+        end
+      end
+      return nil, reason
+    end
+    if type(self._after_unpaste_capture) == 'function' then
+      local recorded, record_err = self._after_unpaste_capture(#captured, item)
+      if not recorded then return nil, 'could not record captured Unpaste entry: ' .. tostring(record_err) end
+    end
+    local matches, compare_err = compare_unpaste_contents(item.quarantine, item.reference)
+    if matches ~= true then
+      local reason = 'captured entry no longer matches register content: '
+        .. item.path
+        .. (compare_err and (' (' .. tostring(compare_err) .. ')') or '')
+      if not self._journal_active then
+        restore_unpaste_captures(captured)
+      else
+        M.ui.notify('direct: Unpaste quarantine preserved at ' .. item.quarantine, vim.log.levels.ERROR)
+      end
+      return nil, reason
+    end
+  end
+  return captured
+end
+
+local function prepare_unpaste_deletion(self, captured)
+  if type(self._before_unpaste_delete) == 'function' then
+    local ready, ready_err = self._before_unpaste_delete(captured)
+    if not ready then return nil, 'could not prepare Unpaste deletion: ' .. tostring(ready_err) end
+  end
+  return true
+end
+
+local function delete_unpaste_items(self, captured)
+  for i, item in ipairs(captured) do
+    local current = M.fs.entry_identity(item.quarantine)
+    if current == nil or current.inode == nil or current.inode ~= item.identity.inode then
+      M.ui.notify('direct: Unpaste quarantine changed; preserved at ' .. item.quarantine, vim.log.levels.ERROR)
+      for j = i + 1, #captured do
+        if M.fs.taken(captured[j].quarantine) then
+          M.ui.notify('direct: Unpaste entry preserved at ' .. captured[j].quarantine, vim.log.levels.ERROR)
+        end
+      end
+      return nil, 'captured entry changed before deletion: ' .. item.quarantine
+    end
+    local matches, compare_err = compare_unpaste_contents(item.quarantine, item.reference)
+    if matches ~= true then
+      M.ui.notify('direct: Unpaste entry preserved at ' .. item.quarantine, vim.log.levels.ERROR)
+      for j = i + 1, #captured do
+        if M.fs.taken(captured[j].quarantine) then
+          M.ui.notify('direct: Unpaste entry preserved at ' .. captured[j].quarantine, vim.log.levels.ERROR)
+        end
+      end
+      return nil, 'captured entry changed before deletion: ' .. tostring(compare_err or item.quarantine)
+    end
+    local deleted, delete_err
+    local called
+    if item.kind == 'directory' then
+      called, deleted, delete_err = pcall(M.fs.rm_tree, item.quarantine)
+    else
+      called, deleted, delete_err = pcall(M.fs.rm_file, item.quarantine)
+    end
+    if not called then
+      delete_err, deleted = tostring(deleted), nil
+    end
+    if not deleted or M.fs.taken(item.quarantine) then
+      for j = i, #captured do
+        if M.fs.taken(captured[j].quarantine) then
+          M.ui.notify('direct: Unpaste entry preserved at ' .. captured[j].quarantine, vim.log.levels.ERROR)
+        end
+      end
+      return nil, 'could not delete captured entry ' .. item.quarantine .. ': ' .. tostring(delete_err)
+    end
+    self._completed_renames[#self._completed_renames + 1] = {
+      src = item.pair.src,
+      dst = item.pair.dst,
+    }
+    if type(self._after_unpaste_delete) == 'function' then
+      local recorded, record_err = self._after_unpaste_delete(i, item)
+      if not recorded then return nil, 'could not record deleted Unpaste entry: ' .. tostring(record_err) end
+    end
+  end
+  return true
+end
+
 -- Unpaste verifies every pasted target against the current register copy, then
 -- captures all targets under same-directory quarantine names before deleting
 -- any of them. This is the inverse of Paste; it never deletes by the original P
@@ -669,157 +822,22 @@ function M.Unpaste(src, dst, src_names, dst_names)
   }
   self._execute = function()
     self._completed_renames = {}
-    -- A re-yank changes the register pointer. The old content path is not enough
-    -- to authorize deletion if the live register no longer refers to it.
-    local current_register, register_err = require('direct.register').content()
-    if current_register == nil or current_register ~= self.dst then
-      return unpaste_refusal(register_err or 'register is missing or was re-yanked')
-    end
+    local items, preflight_err = preflight_unpaste(self)
+    if not items then return unpaste_refusal(preflight_err) end
 
-    -- Phase A: validate the complete operation without mutation. Files compare
-    -- bytes; directories compare exact descendants; symlinks compare readlink
-    -- targets without following them. Any unsupported/missing/unreadable object
-    -- refuses the whole batch before capture begins.
-    local items = {}
-    for _, pair in ipairs(self.renames) do
-      local path = M.fs.join(self.src, pair.src)
-      local reference = require('direct.register').resolve(self.dst, pair.dst) or M.fs.join(self.dst, pair.dst)
-      local identity, stat = M.fs.entry_identity(path)
-      if identity == nil or identity.inode == nil then
-        return unpaste_refusal('cannot inspect pasted entry: ' .. path)
-      end
-      if not stat or (stat.type ~= 'file' and stat.type ~= 'directory' and stat.type ~= 'link') then
-        return unpaste_refusal('unsupported pasted entry type: ' .. path)
-      end
-      local matches, compare_err = compare_unpaste_contents(path, reference)
-      if matches ~= true then
-        return unpaste_refusal(
-          'pasted entry does not match register content: '
-            .. path
-            .. (compare_err and (' (' .. tostring(compare_err) .. ')') or '')
-        )
-      end
-      local item = {
-        path = path,
-        reference = reference,
-        identity = identity,
-        kind = stat.type,
-        pair = pair,
-      }
-      local planned = self._journal_items and self._journal_items[#items + 1]
-      if planned then
-        if planned.src ~= pair.src or planned.dst ~= pair.dst or planned.identity.inode ~= identity.inode then
-          return unpaste_refusal('journaled Unpaste plan no longer matches: ' .. path)
-        end
-        item.quarantine = planned.quarantine
-      end
-      items[#items + 1] = item
-    end
+    local started, start_err = begin_unpaste_recovery(self, items)
+    if not started then return unpaste_refusal(start_err) end
 
-    if type(self._on_unpaste_begin) == 'function' then
-      local ready, ready_err = self._on_unpaste_begin(items)
-      if not ready then return unpaste_refusal('could not prepare Unpaste recovery: ' .. tostring(ready_err)) end
-      self._journal_active = true
-    end
+    -- Phase B: atomically capture and re-verify every target before deletion.
+    local captured, capture_err = capture_unpaste_items(self, items)
+    if not captured then return unpaste_refusal(capture_err) end
 
-    -- Phase B: atomically capture and re-verify every target. If any capture or
-    -- verification fails, restore prior captures only with no-replace; if a path
-    -- is blocked, preserve and report its quarantine path. No deletion yet.
-    local captured = {}
-    for _, item in ipairs(items) do
-      captured[#captured + 1] = item
-      local ok, err = capture_unpaste_item(item)
-      if not ok then
-        local reason = 'could not capture pasted entry: ' .. item.path .. ' (' .. tostring(err) .. ')'
-        if not self._journal_active then
-          restore_unpaste_captures(captured)
-        else
-          for _, captured_item in ipairs(captured) do
-            if M.fs.taken(captured_item.quarantine) then
-              M.ui.notify('direct: Unpaste quarantine preserved at ' .. captured_item.quarantine, vim.log.levels.ERROR)
-            end
-          end
-        end
-        return unpaste_refusal(reason)
-      end
-      if type(self._after_unpaste_capture) == 'function' then
-        local recorded, record_err = self._after_unpaste_capture(#captured, item)
-        if not recorded then
-          return unpaste_refusal('could not record captured Unpaste entry: ' .. tostring(record_err))
-        end
-      end
-      local matches, compare_err = compare_unpaste_contents(item.quarantine, item.reference)
-      if matches ~= true then
-        local reason = 'captured entry no longer matches register content: '
-          .. item.path
-          .. (compare_err and (' (' .. tostring(compare_err) .. ')') or '')
-        if not self._journal_active then
-          restore_unpaste_captures(captured)
-        else
-          M.ui.notify('direct: Unpaste quarantine preserved at ' .. item.quarantine, vim.log.levels.ERROR)
-        end
-        return unpaste_refusal(reason)
-      end
-    end
+    local ready, ready_err = prepare_unpaste_deletion(self, captured)
+    if not ready then return unpaste_refusal(ready_err) end
 
-    if type(self._before_unpaste_delete) == 'function' then
-      local ready, ready_err = self._before_unpaste_delete(captured)
-      if not ready then return unpaste_refusal('could not prepare Unpaste deletion: ' .. tostring(ready_err)) end
-    end
-
-    -- Phase C: delete only the captured Q paths, never the original P paths.
-    -- A failure can leave earlier deletions committed; all remaining Q paths
-    -- are preserved and reported rather than force-cleaned.
-    for i, item in ipairs(captured) do
-      local current = M.fs.entry_identity(item.quarantine)
-      if current == nil or current.inode == nil or current.inode ~= item.identity.inode then
-        M.ui.notify('direct: Unpaste quarantine changed; preserved at ' .. item.quarantine, vim.log.levels.ERROR)
-        for j = i + 1, #captured do
-          if M.fs.taken(captured[j].quarantine) then
-            M.ui.notify('direct: Unpaste entry preserved at ' .. captured[j].quarantine, vim.log.levels.ERROR)
-          end
-        end
-        return unpaste_refusal('captured entry changed before deletion: ' .. item.quarantine)
-      end
-      local matches, compare_err = compare_unpaste_contents(item.quarantine, item.reference)
-      if matches ~= true then
-        M.ui.notify('direct: Unpaste entry preserved at ' .. item.quarantine, vim.log.levels.ERROR)
-        for j = i + 1, #captured do
-          if M.fs.taken(captured[j].quarantine) then
-            M.ui.notify('direct: Unpaste entry preserved at ' .. captured[j].quarantine, vim.log.levels.ERROR)
-          end
-        end
-        return unpaste_refusal('captured entry changed before deletion: ' .. tostring(compare_err or item.quarantine))
-      end
-      local deleted, delete_err
-      local called
-      if item.kind == 'directory' then
-        called, deleted, delete_err = pcall(M.fs.rm_tree, item.quarantine)
-      else
-        called, deleted, delete_err = pcall(M.fs.rm_file, item.quarantine)
-      end
-      if not called then
-        delete_err, deleted = tostring(deleted), nil
-      end
-      if not deleted or M.fs.taken(item.quarantine) then
-        for j = i, #captured do
-          if M.fs.taken(captured[j].quarantine) then
-            M.ui.notify('direct: Unpaste entry preserved at ' .. captured[j].quarantine, vim.log.levels.ERROR)
-          end
-        end
-        return unpaste_refusal('could not delete captured entry ' .. item.quarantine .. ': ' .. tostring(delete_err))
-      end
-      self._completed_renames[#self._completed_renames + 1] = {
-        src = item.pair.src,
-        dst = item.pair.dst,
-      }
-      if type(self._after_unpaste_delete) == 'function' then
-        local recorded, record_err = self._after_unpaste_delete(i, item)
-        if not recorded then
-          return unpaste_refusal('could not record deleted Unpaste entry: ' .. tostring(record_err))
-        end
-      end
-    end
+    -- Phase C removes only captured Q paths; failures preserve remaining Qs.
+    local deleted, delete_err = delete_unpaste_items(self, captured)
+    if not deleted then return unpaste_refusal(delete_err) end
     return true
   end
   self['do'] = function() return M.execute(self) end

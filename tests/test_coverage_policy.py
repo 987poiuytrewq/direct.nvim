@@ -1,5 +1,7 @@
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,6 +12,7 @@ from scripts.check_coverage import (
     evaluate,
     markdown_table,
     parse_summary,
+    tracked_source_files,
 )
 
 
@@ -57,6 +60,32 @@ class CoveragePolicyTests(unittest.TestCase):
         self.assertEqual(rows[0][0], "lua/direct/new-module.lua")
         self.assertEqual(rows[0][1]["coverage"], 0.0)
         self.assertTrue(any("lua/direct/new-module.lua: 0.00%" in error for error in errors))
+
+    def test_source_inventory_includes_only_tracked_lua_under_configured_roots(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "lua/direct").mkdir(parents=True)
+            (root / "plugin").mkdir()
+            (root / "ftplugin").mkdir()
+            (root / "tests/plugin").mkdir(parents=True)
+            tracked = [
+                "lua/direct/covered.lua",
+                "plugin/direct.lua",
+                "ftplugin/direct.lua",
+                "tests/plugin/not-source.lua",
+            ]
+            for relative in tracked:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("-- fixture\n", encoding="utf-8")
+            (root / "lua/direct/untracked.lua").write_text("-- untracked\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "--", *tracked], cwd=root, check=True)
+
+            self.assertEqual(
+                tracked_source_files(root, ["lua/direct", "plugin", "ftplugin"]),
+                ["ftplugin/direct.lua", "lua/direct/covered.lua", "plugin/direct.lua"],
+            )
 
     def test_improved_allowlisted_file_requires_baseline_update(self):
         text = summary(("lua/direct/history/reverse.lua", 65, 35, 65.0))

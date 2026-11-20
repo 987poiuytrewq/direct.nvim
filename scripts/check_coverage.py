@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -66,6 +67,26 @@ def add_unreported_sources(
         normalized = path.replace("\\", "/")
         result.setdefault(normalized, {"hits": 0, "missed": 0, "coverage": 0.0})
     return result
+
+
+def tracked_source_files(repo_root: Path, source_roots: list[str]) -> list[str]:
+    """Inventory tracked Lua sources in the same roots selected by LuaCov."""
+    for source_root in source_roots:
+        if not (repo_root / source_root).is_dir():
+            raise ValueError(f"coverage source root does not exist: {source_root}")
+
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--", *source_roots],
+        cwd=repo_root,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return sorted(
+        path.replace("\\", "/")
+        for path in os.fsdecode(result.stdout).split("\0")
+        if path.endswith(".lua")
+    )
 
 
 def check_baseline_transition(
@@ -271,16 +292,7 @@ def main(argv: list[str] | None = None) -> int:
 
         summary_text = args.summary.read_text(encoding="utf-8")
         root = Path(__file__).resolve().parents[1]
-        source_files = []
-        for source_root in policy.get("source_roots", []):
-            source_path = root / source_root
-            if not source_path.is_dir():
-                raise ValueError(f"coverage source root does not exist: {source_root}")
-            source_files.extend(
-                path.relative_to(root).as_posix()
-                for path in source_path.rglob("*.lua")
-                if path.is_file()
-            )
+        source_files = tracked_source_files(root, policy.get("source_roots", []))
         rows, errors, total = evaluate(
             summary_text,
             policy,

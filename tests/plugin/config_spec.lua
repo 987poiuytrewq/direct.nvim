@@ -21,9 +21,7 @@ end
 local function global_dash_count()
   local n = 0
   for _, map in ipairs(vim.api.nvim_get_keymap('n')) do
-    if map.lhs == '-' then
-      n = n + 1
-    end
+    if map.lhs == '-' then n = n + 1 end
   end
   return n
 end
@@ -32,15 +30,27 @@ H.describe('config', function()
   H.it('configures buffer reuse and target placement independently', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_eq(config.defaults.buffers, { reuse = true, open_in = 'current' },
-      'buffer defaults preserve current reuse and open behavior')
-    H.assert_eq(config.setup({ buffers = { reuse = false } }).buffers,
-      { reuse = false, open_in = 'current' }, 'reuse can be disabled independently')
-    H.assert_eq(config.setup({ buffers = { open_in = 'new' } }).buffers,
-      { reuse = true, open_in = 'new' }, 'new-buffer opening can be enabled independently')
+    H.assert_eq(
+      config.defaults.buffers,
+      { reuse = true, open_in = 'current' },
+      'buffer defaults preserve current reuse and open behavior'
+    )
+    H.assert_eq(
+      config.setup({ buffers = { reuse = false } }).buffers,
+      { reuse = false, open_in = 'current' },
+      'reuse can be disabled independently'
+    )
+    H.assert_eq(
+      config.setup({ buffers = { open_in = 'new' } }).buffers,
+      { reuse = true, open_in = 'new' },
+      'new-buffer opening can be enabled independently'
+    )
     H.capture_messages()
-    H.assert_eq(config.setup({ buffers = { reuse = 'yes', open_in = 'split' } }).buffers,
-      config.defaults.buffers, 'invalid values leave their defaults in place')
+    H.assert_eq(
+      config.setup({ buffers = { reuse = 'yes', open_in = 'split' } }).buffers,
+      config.defaults.buffers,
+      'invalid values leave their defaults in place'
+    )
     H.assert_notified('buffers.reuse: expected a boolean', vim.log.levels.ERROR)
     H.assert_notified("buffers.open_in: expected 'current' or 'new'", vim.log.levels.ERROR)
     config.clear_mappings()
@@ -49,33 +59,48 @@ H.describe('config', function()
   H.it('defaults single-entry directory collapsing on and validates the option', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_true(config.defaults.collapse_single_entry_directories,
-      'single-entry directory chains collapse by default')
-    H.assert_false(config.setup({
-      collapse_single_entry_directories = false,
-    }).collapse_single_entry_directories, 'the option can be disabled')
+    H.assert_true(
+      config.defaults.collapse_single_entry_directories,
+      'single-entry directory chains collapse by default'
+    )
+    H.assert_false(
+      config.setup({
+        collapse_single_entry_directories = false,
+      }).collapse_single_entry_directories,
+      'the option can be disabled'
+    )
     H.capture_messages()
-    H.assert_true(config.setup({
-      collapse_single_entry_directories = 'true',
-    }).collapse_single_entry_directories, 'invalid values keep the default')
-    H.assert_notified('collapse_single_entry_directories must be a boolean',
-      vim.log.levels.ERROR)
+    H.assert_true(
+      config.setup({
+        collapse_single_entry_directories = 'true',
+      }).collapse_single_entry_directories,
+      'invalid values keep the default'
+    )
+    H.assert_notified('collapse_single_entry_directories must be a boolean', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
 
   H.it('defaults the directory row marker to the filesystem separator and validates overrides', function()
     local config = fresh_config(true)
     config.clear_mappings()
-    H.assert_eq(config.defaults.directory_separator, package.config:sub(1, 1),
-      'native path separator is the default display marker')
-    H.assert_eq(config.setup({ directory_separator = '\\' }).directory_separator, '\\',
-      'backslash override is accepted')
-    H.assert_eq(config.setup({ directory_separator = '/' }).directory_separator, '/',
-      'slash override is accepted')
+    H.assert_eq(
+      config.defaults.directory_separator,
+      package.config:sub(1, 1),
+      'native path separator is the default display marker'
+    )
+    H.assert_eq(
+      config.setup({ directory_separator = '\\' }).directory_separator,
+      '\\',
+      'backslash override is accepted'
+    )
+    H.assert_eq(config.setup({ directory_separator = '/' }).directory_separator, '/', 'slash override is accepted')
     H.capture_messages()
     local options = config.setup({ directory_separator = '|' })
-    H.assert_eq(options.directory_separator, config.defaults.directory_separator,
-      'invalid marker leaves the platform default')
+    H.assert_eq(
+      options.directory_separator,
+      config.defaults.directory_separator,
+      'invalid marker leaves the platform default'
+    )
     H.assert_notified('directory_separator', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
@@ -83,17 +108,20 @@ H.describe('config', function()
   H.it('validates undo confirmation modes and defaults to confirming other directories', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_eq(config.defaults.undo_confirm, 'elsewhere',
-      'cross-directory undo confirmation is the default')
-    H.assert_eq(config.setup({ undo_confirm = true }).undo_confirm, true,
-      'always-confirm mode is accepted')
-    H.assert_eq(config.setup({ undo_confirm = false }).undo_confirm, false,
-      'never-confirm mode is accepted')
-    H.assert_eq(config.setup({ undo_confirm = 'elsewhere' }).undo_confirm, 'elsewhere',
-      'outside-only confirmation mode is accepted')
+    H.assert_eq(config.defaults.undo_confirm, 'elsewhere', 'cross-directory undo confirmation is the default')
+    H.assert_eq(config.setup({ undo_confirm = true }).undo_confirm, true, 'always-confirm mode is accepted')
+    H.assert_eq(config.setup({ undo_confirm = false }).undo_confirm, false, 'never-confirm mode is accepted')
+    H.assert_eq(
+      config.setup({ undo_confirm = 'elsewhere' }).undo_confirm,
+      'elsewhere',
+      'outside-only confirmation mode is accepted'
+    )
     H.capture_messages()
-    H.assert_eq(config.setup({ undo_confirm = 'sometimes' }).undo_confirm, 'elsewhere',
-      'an invalid mode retains the default')
+    H.assert_eq(
+      config.setup({ undo_confirm = 'sometimes' }).undo_confirm,
+      'elsewhere',
+      'an invalid mode retains the default'
+    )
     H.assert_notified('undo_confirm must be true, false, or', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
@@ -101,13 +129,10 @@ H.describe('config', function()
   H.it('defaults history_limit to 1000 and validates positive integers', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_eq(config.defaults.history_limit, 1000,
-      'history is bounded to 1000 steps per stack by default')
-    H.assert_eq(config.setup({ history_limit = 3 }).history_limit, 3,
-      'a smaller positive integer limit is accepted')
+    H.assert_eq(config.defaults.history_limit, 1000, 'history is bounded to 1000 steps per stack by default')
+    H.assert_eq(config.setup({ history_limit = 3 }).history_limit, 3, 'a smaller positive integer limit is accepted')
     H.capture_messages()
-    H.assert_eq(config.setup({ history_limit = 0 }).history_limit, 1000,
-      'an invalid limit retains the default')
+    H.assert_eq(config.setup({ history_limit = 0 }).history_limit, 1000, 'an invalid limit retains the default')
     H.assert_notified('history_limit must be a positive integer', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
@@ -115,19 +140,26 @@ H.describe('config', function()
   H.it('validates optional trash retention limits', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_eq(config.defaults.trash_retention, { max_age_days = 90 },
-      'age-based retention is enabled by default')
-    H.assert_eq(config.setup({ trash_retention = {
-      max_age_days = 30, max_size_bytes = 1024,
-    } }).trash_retention, { max_age_days = 30, max_size_bytes = 1024 },
-    'age and size limits are accepted together')
-    H.assert_eq(config.setup({ trash_retention = { max_size_bytes = 4096 } }).trash_retention,
-      { max_size_bytes = 4096 }, 'either limit can be used on its own')
+    H.assert_eq(config.defaults.trash_retention, { max_age_days = 90 }, 'age-based retention is enabled by default')
+    H.assert_eq(
+      config.setup({ trash_retention = {
+        max_age_days = 30,
+        max_size_bytes = 1024,
+      } }).trash_retention,
+      { max_age_days = 30, max_size_bytes = 1024 },
+      'age and size limits are accepted together'
+    )
+    H.assert_eq(
+      config.setup({ trash_retention = { max_size_bytes = 4096 } }).trash_retention,
+      { max_size_bytes = 4096 },
+      'either limit can be used on its own'
+    )
     H.capture_messages()
-    H.assert_false(config.setup({ trash_retention = { max_age_days = 0 } }).trash_retention,
-      'invalid limits leave retention off')
-    H.assert_notified('trash_retention limits must be positive integers',
-      vim.log.levels.ERROR)
+    H.assert_false(
+      config.setup({ trash_retention = { max_age_days = 0 } }).trash_retention,
+      'invalid limits leave retention off'
+    )
+    H.assert_notified('trash_retention limits must be positive integers', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
 
@@ -135,11 +167,17 @@ H.describe('config', function()
     local config = fresh_config()
     config.clear_mappings()
     H.assert_eq(config.defaults.git.timeout_ms, 1000, 'status timeout defaults to one second')
-    H.assert_eq(config.setup({ git = { timeout_ms = 250 } }).git.timeout_ms, 250,
-      'a positive integer timeout is accepted')
+    H.assert_eq(
+      config.setup({ git = { timeout_ms = 250 } }).git.timeout_ms,
+      250,
+      'a positive integer timeout is accepted'
+    )
     H.capture_messages()
-    H.assert_eq(config.setup({ git = { timeout_ms = 0 } }).git.timeout_ms, 1000,
-      'an invalid timeout leaves the default in place')
+    H.assert_eq(
+      config.setup({ git = { timeout_ms = 0 } }).git.timeout_ms,
+      1000,
+      'an invalid timeout leaves the default in place'
+    )
     H.assert_notified('git.timeout_ms: expected a positive integer', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
@@ -147,17 +185,20 @@ H.describe('config', function()
   H.it('configures a positive Git-ignore timeout independently of status', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_eq(config.defaults.git.ignore_timeout_ms, 200,
-      'ignore checks default to 200ms')
-    H.assert_eq(config.setup({ git = { ignore_timeout_ms = 350 } }).git.ignore_timeout_ms,
-      350, 'a positive integer ignore timeout is accepted')
-    H.assert_eq(config.options.git.timeout_ms, 1000,
-      'changing the ignore deadline does not change the status deadline')
+    H.assert_eq(config.defaults.git.ignore_timeout_ms, 200, 'ignore checks default to 200ms')
+    H.assert_eq(
+      config.setup({ git = { ignore_timeout_ms = 350 } }).git.ignore_timeout_ms,
+      350,
+      'a positive integer ignore timeout is accepted'
+    )
+    H.assert_eq(config.options.git.timeout_ms, 1000, 'changing the ignore deadline does not change the status deadline')
     H.capture_messages()
-    H.assert_eq(config.setup({ git = { ignore_timeout_ms = 0 } }).git.ignore_timeout_ms,
-      200, 'an invalid ignore timeout leaves the default in place')
-    H.assert_notified('git.ignore_timeout_ms: expected a positive integer',
-      vim.log.levels.ERROR)
+    H.assert_eq(
+      config.setup({ git = { ignore_timeout_ms = 0 } }).git.ignore_timeout_ms,
+      200,
+      'an invalid ignore timeout leaves the default in place'
+    )
+    H.assert_notified('git.ignore_timeout_ms: expected a positive integer', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
 
@@ -176,12 +217,9 @@ H.describe('config', function()
   H.it('file and folder icons default on and reject typos', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_true(config.defaults.show_folder_icons,
-      'folder icons are on by default')
-    H.assert_true(config.defaults.show_file_icons,
-      'file icons are on by default')
-    H.assert_true(config.defaults.show_filetype_icons,
-      'filetype icons are on by default')
+    H.assert_true(config.defaults.show_folder_icons, 'folder icons are on by default')
+    H.assert_true(config.defaults.show_file_icons, 'file icons are on by default')
+    H.assert_true(config.defaults.show_filetype_icons, 'filetype icons are on by default')
     local options = config.setup({
       show_folder_icons = true,
       show_file_icons = true,
@@ -217,33 +255,39 @@ H.describe('config', function()
     H.assert_eq(config.defaults.icons.folder_open, '\u{f07c}', 'default open-folder glyph')
     H.assert_eq(config.defaults.icons.deleted_file, '\u{f016}', 'deleted-file outline glyph')
     H.assert_eq(config.defaults.icons.deleted_folder, '\u{f114}', 'deleted-folder outline glyph')
-    H.assert_eq(config.defaults.icons.deleted_folder_open, '\u{f115}',
-      'expanded deleted-folder outline glyph')
+    H.assert_eq(config.defaults.icons.deleted_folder_open, '\u{f115}', 'expanded deleted-folder outline glyph')
 
     local options = config.setup({
       icons = { file = 'F', folder = 'D', deleted_file = 'd' },
     })
     H.assert_eq(options.icons.file, 'F', 'file glyph override is applied')
     H.assert_eq(options.icons.folder, 'D', 'folder glyph override is applied')
-    H.assert_eq(options.icons.folder_open, config.defaults.icons.folder_open,
-      'omitted variant retains its default')
+    H.assert_eq(options.icons.folder_open, config.defaults.icons.folder_open, 'omitted variant retains its default')
     H.assert_eq(options.icons.deleted_file, 'd', 'deleted-file glyph is configurable')
 
-    options = config.setup({ icons = {
-      file = 'f', folder = 'd', folder_open = 'D', deleted_file = 'o',
-      deleted_folder = 'O', deleted_folder_open = 'P',
-    } })
+    options = config.setup({
+      icons = {
+        file = 'f',
+        folder = 'd',
+        folder_open = 'D',
+        deleted_file = 'o',
+        deleted_folder = 'O',
+        deleted_folder_open = 'P',
+      },
+    })
     H.assert_eq(options.icons, {
-      file = 'f', folder = 'd', folder_open = 'D', deleted_file = 'o',
-      deleted_folder = 'O', deleted_folder_open = 'P',
+      file = 'f',
+      folder = 'd',
+      folder_open = 'D',
+      deleted_file = 'o',
+      deleted_folder = 'O',
+      deleted_folder_open = 'P',
     }, 'every file and folder glyph can be customized')
 
     H.capture_messages()
     options = config.setup({ icons = { file = false, folder_closed = 'x' } })
-    H.assert_eq(options.icons.file, config.defaults.icons.file,
-      'invalid glyph retains its default')
-    H.assert_eq(options.icons.folder, config.defaults.icons.folder,
-      'unknown variant is ignored')
+    H.assert_eq(options.icons.file, config.defaults.icons.file, 'invalid glyph retains its default')
+    H.assert_eq(options.icons.folder, config.defaults.icons.folder, 'unknown variant is ignored')
     H.assert_notified('icons.file', vim.log.levels.ERROR)
     H.assert_notified('icons.folder_closed', vim.log.levels.ERROR)
     config.clear_mappings()
@@ -254,8 +298,12 @@ H.describe('config', function()
     config.clear_mappings()
     H.assert_true(config.defaults.git.enabled, 'Git status is enabled by default')
     H.assert_eq(config.defaults.git.symbols, {
-      added = '\u{f067}', deleted = '\u{f068}', modified = '\u{f01f}',
-      renamed = '\u{f061}', ignored = '\u{f070}', staged = '\u{f00c}',
+      added = '\u{f067}',
+      deleted = '\u{f068}',
+      modified = '\u{f01f}',
+      renamed = '\u{f061}',
+      ignored = '\u{f070}',
+      staged = '\u{f00c}',
       conflict = '\u{f00d}',
     }, 'Font Awesome symbols are the defaults')
 
@@ -266,19 +314,32 @@ H.describe('config', function()
     H.assert_eq(options.git.symbols.staged, 'S', 'stage symbols can be customized')
     H.assert_eq(options.git.symbols.added, '\u{f067}', 'omitted symbols retain defaults')
 
-    options = config.setup({ git = { symbols = {
-      added = 'A', deleted = 'D', modified = 'M', renamed = 'R',
-      ignored = 'I', staged = 'S', conflict = 'C',
-    } } })
+    options = config.setup({
+      git = {
+        symbols = {
+          added = 'A',
+          deleted = 'D',
+          modified = 'M',
+          renamed = 'R',
+          ignored = 'I',
+          staged = 'S',
+          conflict = 'C',
+        },
+      },
+    })
     H.assert_eq(options.git.symbols, {
-      added = 'A', deleted = 'D', modified = 'M', renamed = 'R',
-      ignored = 'I', staged = 'S', conflict = 'C',
+      added = 'A',
+      deleted = 'D',
+      modified = 'M',
+      renamed = 'R',
+      ignored = 'I',
+      staged = 'S',
+      conflict = 'C',
     }, 'every Git status glyph can be customized')
 
     H.capture_messages()
     options = config.setup({ git = { symbols = { modified = false } } })
-    H.assert_eq(options.git.symbols.modified, '\u{f01f}',
-      'invalid symbols retain their defaults')
+    H.assert_eq(options.git.symbols.modified, '\u{f01f}', 'invalid symbols retain their defaults')
     H.assert_notified('git.symbols.modified', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
@@ -286,8 +347,7 @@ H.describe('config', function()
   H.it('git.show_deleted defaults on and validates a boolean override', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_true(config.defaults.git.show_deleted,
-      'deleted tracked rows are shown by default')
+    H.assert_true(config.defaults.git.show_deleted, 'deleted tracked rows are shown by default')
     local options = config.setup({ git = { show_deleted = false } })
     H.assert_false(options.git.show_deleted, 'deleted rows can be hidden')
 
@@ -301,8 +361,7 @@ H.describe('config', function()
   H.it('git.show_symbols defaults on and validates a boolean override', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_true(config.defaults.git.show_symbols,
-      'Git status symbols are shown by default')
+    H.assert_true(config.defaults.git.show_symbols, 'Git status symbols are shown by default')
     local options = config.setup({ git = { show_symbols = false } })
     H.assert_false(options.git.show_symbols, 'Git status symbols can be hidden')
 
@@ -335,17 +394,14 @@ H.describe('config', function()
   H.it('recursive expansion depth defaults to unlimited and accepts only positive integers', function()
     local config = fresh_config()
     config.clear_mappings()
-    H.assert_false(config.defaults.max_recursive_expand_depth,
-      'recursive expansion is unlimited by default')
+    H.assert_false(config.defaults.max_recursive_expand_depth, 'recursive expansion is unlimited by default')
 
     local options = config.setup({ max_recursive_expand_depth = 3 })
-    H.assert_eq(options.max_recursive_expand_depth, 3,
-      'a positive integer depth limit is accepted')
+    H.assert_eq(options.max_recursive_expand_depth, 3, 'a positive integer depth limit is accepted')
 
     H.capture_messages()
     options = config.setup({ max_recursive_expand_depth = 0 })
-    H.assert_false(options.max_recursive_expand_depth,
-      'invalid depth limits leave the unlimited default in place')
+    H.assert_false(options.max_recursive_expand_depth, 'invalid depth limits leave the unlimited default in place')
     H.assert_notified('max_recursive_expand_depth', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
@@ -354,15 +410,13 @@ H.describe('config', function()
     local config = fresh_config()
     config.clear_mappings()
     H.assert_eq(config.defaults.indent_size, 2, 'two spaces per level is the default')
-    H.assert_eq(config.setup({ indent_size = 4 }).indent_size, 4,
-      'a larger indentation width is accepted')
+    H.assert_eq(config.setup({ indent_size = 4 }).indent_size, 4, 'a larger indentation width is accepted')
 
     for _, invalid in ipairs({ 1, 0, 2.5, '4', false }) do
       H.capture_messages()
       local options = config.setup({ indent_size = invalid })
       H.assert_eq(options.indent_size, 2, 'invalid values leave the default in place')
-      H.assert_notified('indent_size must be an integer greater than 1',
-        vim.log.levels.ERROR)
+      H.assert_notified('indent_size must be an integer greater than 1', vim.log.levels.ERROR)
     end
     config.clear_mappings()
   end)
@@ -397,23 +451,34 @@ H.describe('config', function()
     H.mkfile(ws, 'file.txt', { 'file' })
     buffer.list(ws)
     local bufnr = vim.api.nvim_get_current_buf()
-    H.assert_eq(vim.fn.maparg('gd', 'n'), '<Cmd>lua require("direct").git_diff()<CR>',
-      'the default buffer-local gd invokes the branch diff filter')
-    H.assert_eq(vim.fn.maparg('<Plug>(direct-git-diff)', 'n'), '<Cmd>lua require("direct").git_diff()<CR>',
-      'the Git diff action has a Plug entry point')
+    H.assert_eq(
+      vim.fn.maparg('gd', 'n'),
+      '<Cmd>lua require("direct").git_diff()<CR>',
+      'the default buffer-local gd invokes the branch diff filter'
+    )
+    H.assert_eq(
+      vim.fn.maparg('<Plug>(direct-git-diff)', 'n'),
+      '<Cmd>lua require("direct").git_diff()<CR>',
+      'the Git diff action has a Plug entry point'
+    )
 
     config.setup({ map_default_keys = false })
     H.assert_eq(vim.fn.maparg('gd', 'n'), '', 'disabling defaults removes buffer-local gd')
-    H.assert_eq(vim.fn.maparg('<Plug>(direct-git-diff)', 'n'), '<Cmd>lua require("direct").git_diff()<CR>',
-      'the Plug entry point remains available')
+    H.assert_eq(
+      vim.fn.maparg('<Plug>(direct-git-diff)', 'n'),
+      '<Cmd>lua require("direct").git_diff()<CR>',
+      'the Plug entry point remains available'
+    )
 
     config.setup({ map_default_keys = false, mappings = { git_diff = '<leader>gd' } })
-    H.assert_eq(vim.fn.maparg('<leader>gd', 'n'), '<Cmd>lua require("direct").git_diff()<CR>',
-      'the buffer-local action can be remapped explicitly')
+    H.assert_eq(
+      vim.fn.maparg('<leader>gd', 'n'),
+      '<Cmd>lua require("direct").git_diff()<CR>',
+      'the buffer-local action can be remapped explicitly'
+    )
     config.clear_mappings()
     H.assert_eq(vim.fn.maparg('<leader>gd', 'n'), '', 'clear_mappings removes the override')
-    H.assert_eq(vim.fn.maparg('<Plug>(direct-git-diff)', 'n'), '',
-      'clear_mappings removes the Plug entry point')
+    H.assert_eq(vim.fn.maparg('<Plug>(direct-git-diff)', 'n'), '', 'clear_mappings removes the Plug entry point')
     pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
   end)
 
@@ -447,8 +512,7 @@ H.describe('config', function()
     config = require('direct.config')
     H.assert_false(config._installed, 'premise: the plugin owns nothing here')
     config.setup({ map_default_keys = false })
-    H.assert_eq(vim.fn.maparg('-', 'n'), ':echo "user"<CR>',
-      'the user mapping survives setup(map_default_keys=false)')
+    H.assert_eq(vim.fn.maparg('-', 'n'), ':echo "user"<CR>', 'the user mapping survives setup(map_default_keys=false)')
     vim.keymap.del('n', '-')
   end)
 
@@ -485,13 +549,9 @@ H.describe('config', function()
     return bufnr
   end
 
-  local function buf_map_rhs(lhs, mode)
-    return vim.fn.maparg(lhs, mode, false, true).rhs
-  end
+  local function buf_map_rhs(lhs, mode) return vim.fn.maparg(lhs, mode, false, true).rhs end
 
-  local function buf_map_desc(lhs, mode)
-    return vim.fn.maparg(lhs, mode, false, true).desc
-  end
+  local function buf_map_desc(lhs, mode) return vim.fn.maparg(lhs, mode, false, true).desc end
 
   H.it('installs the default Git actions through DirectGit', function()
     local config = fresh_config()
@@ -502,24 +562,32 @@ H.describe('config', function()
     local unstage = leader .. 'gu'
     local restore = leader .. 'gr'
 
-    H.assert_eq(buf_map_rhs('ga', 'n'), '<Cmd>DirectGit git add -- {}<CR>',
-      'ga stages the current entry through DirectGit')
-    H.assert_eq(buf_map_rhs('gC', 'n'), '<Cmd>DirectToggleDirectoryCollapse<CR>',
-      'gC toggles collapsed directory chains')
-    H.assert_eq(buf_map_rhs(unstage, 'n'), '<Cmd>DirectGit git reset -- {}<CR>',
-      'leader-gu unstages through DirectGit without prefixing LSP gr mappings')
-    H.assert_eq(buf_map_rhs(restore, 'n'), '<Cmd>DirectGitRestore<CR>',
-      'leader-gr invokes the guarded worktree restore')
+    H.assert_eq(
+      buf_map_rhs('ga', 'n'),
+      '<Cmd>DirectGit git add -- {}<CR>',
+      'ga stages the current entry through DirectGit'
+    )
+    H.assert_eq(
+      buf_map_rhs('gC', 'n'),
+      '<Cmd>DirectToggleDirectoryCollapse<CR>',
+      'gC toggles collapsed directory chains'
+    )
+    H.assert_eq(
+      buf_map_rhs(unstage, 'n'),
+      '<Cmd>DirectGit git reset -- {}<CR>',
+      'leader-gu unstages through DirectGit without prefixing LSP gr mappings'
+    )
+    H.assert_eq(
+      buf_map_rhs(restore, 'n'),
+      '<Cmd>DirectGitRestore<CR>',
+      'leader-gr invokes the guarded worktree restore'
+    )
     H.assert_nil(buf_map_rhs('gr', 'n'), 'gr remains available as an LSP key prefix')
     H.assert_nil(buf_map_rhs('gc', 'n'), 'gc remains available for comment mappings')
-    H.assert_eq(buf_map_rhs(']c', 'n'), '<Cmd>DirectNextChange<CR>',
-      ']c navigates to the next changed entry')
-    H.assert_eq(buf_map_rhs('[c', 'n'), '<Cmd>DirectPreviousChange<CR>',
-      '[c navigates to the previous changed entry')
-    H.assert_eq(buf_map_rhs(']f', 'n'), '<Cmd>DirectNextFile<CR>',
-      ']f navigates to the next file')
-    H.assert_eq(buf_map_rhs('[f', 'n'), '<Cmd>DirectPreviousFile<CR>',
-      '[f navigates to the previous file')
+    H.assert_eq(buf_map_rhs(']c', 'n'), '<Cmd>DirectNextChange<CR>', ']c navigates to the next changed entry')
+    H.assert_eq(buf_map_rhs('[c', 'n'), '<Cmd>DirectPreviousChange<CR>', '[c navigates to the previous changed entry')
+    H.assert_eq(buf_map_rhs(']f', 'n'), '<Cmd>DirectNextFile<CR>', ']f navigates to the next file')
+    H.assert_eq(buf_map_rhs('[f', 'n'), '<Cmd>DirectPreviousFile<CR>', '[f navigates to the previous file')
 
     config.setup({ map_default_keys = false })
     H.assert_nil(buf_map_rhs('ga', 'n'), 'ga is removed when default mappings are disabled')
@@ -558,51 +626,66 @@ H.describe('config', function()
     for _, mapping in ipairs(config.BUFFER_MAPS) do
       if mapping.action == 'list_buffer' then list_buffer_rhs = mapping.rhs end
     end
-    H.assert_eq(buf_map_rhs('<leader>d', 'n'), list_buffer_rhs,
-      'an explicit mapping is installed even when defaults are disabled')
-    H.assert_eq(buf_map_rhs('<leader>u', 'n'), '<Cmd>DirectUndo<CR>',
-      'the undo action can be remapped independently')
-    H.assert_eq(buf_map_rhs('<F7>', 'n'),
+    H.assert_eq(
+      buf_map_rhs('<leader>d', 'n'),
+      list_buffer_rhs,
+      'an explicit mapping is installed even when defaults are disabled'
+    )
+    H.assert_eq(buf_map_rhs('<leader>u', 'n'), '<Cmd>DirectUndo<CR>', 'the undo action can be remapped independently')
+    H.assert_eq(
+      buf_map_rhs('<F7>', 'n'),
       '<Cmd>lua require("direct").open({ split = "vertical" })<CR>',
-      'split-open actions can be remapped independently')
-    H.assert_nil(buf_map_rhs('<C-V>', 'n'),
-      'an explicit split mapping does not also install the default key')
-    H.assert_true(vim.fn.maparg('e', 'n', false, true).callback ~= nil,
-      'folder actions can be remapped independently')
+      'split-open actions can be remapped independently'
+    )
+    H.assert_nil(buf_map_rhs('<C-V>', 'n'), 'an explicit split mapping does not also install the default key')
+    H.assert_true(vim.fn.maparg('e', 'n', false, true).callback ~= nil, 'folder actions can be remapped independently')
     H.assert_nil(buf_map_rhs('u', 'n'), 'the default undo key is not installed')
     H.assert_nil(buf_map_rhs('zo', 'n'), 'the default expand key is not installed')
     H.assert_nil(buf_map_rhs('gh', 'n'), 'false disables the hidden-toggle key')
-    H.assert_eq(buf_map_rhs('C', 'n'), '<Cmd>DirectToggleDirectoryCollapse<CR>',
-      'the directory-collapse toggle can be remapped')
+    H.assert_eq(
+      buf_map_rhs('C', 'n'),
+      '<Cmd>DirectToggleDirectoryCollapse<CR>',
+      'the directory-collapse toggle can be remapped'
+    )
 
-    H.assert_eq(vim.fn.maparg('<Plug>(direct-undo)', 'n', false, true).rhs,
-      '<Cmd>DirectUndo<CR>', 'the Plug mapping is globally available')
-    H.assert_eq(vim.fn.maparg('<Plug>(direct-open-vertical)', 'n', false, true).rhs,
+    H.assert_eq(
+      vim.fn.maparg('<Plug>(direct-undo)', 'n', false, true).rhs,
+      '<Cmd>DirectUndo<CR>',
+      'the Plug mapping is globally available'
+    )
+    H.assert_eq(
+      vim.fn.maparg('<Plug>(direct-open-vertical)', 'n', false, true).rhs,
       '<Cmd>lua require("direct").open({ split = "vertical" })<CR>',
-      'split-open actions also have a Plug mapping')
-    H.assert_true(vim.fn.maparg('<Plug>(direct-expand)', 'n', false, true).callback ~= nil,
-      'folder actions have Plug mappings')
-    H.assert_eq(vim.fn.maparg('<Plug>(direct-toggle-hidden)', 'n', false, true).rhs,
-      '<Cmd>DirectToggleHidden<CR>', 'Plug entry points remain available when a default is disabled')
-    H.assert_eq(vim.fn.maparg('<Plug>(direct-toggle-directory-collapse)',
-      'n', false, true).rhs, '<Cmd>DirectToggleDirectoryCollapse<CR>',
-    'the directory-collapse toggle has a Plug entry point')
+      'split-open actions also have a Plug mapping'
+    )
+    H.assert_true(
+      vim.fn.maparg('<Plug>(direct-expand)', 'n', false, true).callback ~= nil,
+      'folder actions have Plug mappings'
+    )
+    H.assert_eq(
+      vim.fn.maparg('<Plug>(direct-toggle-hidden)', 'n', false, true).rhs,
+      '<Cmd>DirectToggleHidden<CR>',
+      'Plug entry points remain available when a default is disabled'
+    )
+    H.assert_eq(
+      vim.fn.maparg('<Plug>(direct-toggle-directory-collapse)', 'n', false, true).rhs,
+      '<Cmd>DirectToggleDirectoryCollapse<CR>',
+      'the directory-collapse toggle has a Plug entry point'
+    )
 
     vim.api.nvim_feedkeys('e', 'mx', false)
-    H.assert_buf_eq({ 'sub/', '  inside.txt' }, bufnr,
-      'the per-action physical key invokes the selected action')
+    H.assert_buf_eq({ 'sub/', '  inside.txt' }, bufnr, 'the per-action physical key invokes the selected action')
     require('direct.buffer.buffer').collapse()
     vim.keymap.set('n', '<F6>', '<Plug>(direct-expand)', {
-      buffer = bufnr, remap = true, silent = true,
+      buffer = bufnr,
+      remap = true,
+      silent = true,
     })
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<F6>', true, false, true),
-      'mx', false)
-    H.assert_buf_eq({ 'sub/', '  inside.txt' }, bufnr,
-      'the Plug mapping can be composed into a user key')
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<F6>', true, false, true), 'mx', false)
+    H.assert_buf_eq({ 'sub/', '  inside.txt' }, bufnr, 'the Plug mapping can be composed into a user key')
 
     config.clear_mappings()
-    H.assert_eq(vim.fn.maparg('<Plug>(direct-undo)', 'n'), '',
-      'clear_mappings removes Direct Plug mappings')
+    H.assert_eq(vim.fn.maparg('<Plug>(direct-undo)', 'n'), '', 'clear_mappings removes Direct Plug mappings')
     H.assert_nil(buf_map_rhs('<leader>u', 'n'), 'clear_mappings removes custom buffer mappings')
     pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
   end)
@@ -617,14 +700,14 @@ H.describe('config', function()
     local restore = leader .. 'gr'
     H.assert_true(buf_map_rhs('u', 'n') ~= nil, 'premise: buffer-local u installed')
     H.assert_true(buf_map_rhs('p', 'n') ~= nil, 'premise: buffer-local p installed')
-    H.assert_eq(buf_map_rhs('ga', 'n'), '<Cmd>DirectGit git add -- {}<CR>',
-      'ga stages the current entry')
-    H.assert_eq(buf_map_rhs(unstage, 'n'), '<Cmd>DirectGit git reset -- {}<CR>',
-      'leader-gu resets the current entry')
-    H.assert_eq(buf_map_rhs(restore, 'n'), '<Cmd>DirectGitRestore<CR>',
-      'leader-gr restores the current entry after confirmation')
-    H.assert_eq(buf_map_desc('zR', 'n'), 'direct: Expand all direct directories',
-      'premise: fold mapping zR installed')
+    H.assert_eq(buf_map_rhs('ga', 'n'), '<Cmd>DirectGit git add -- {}<CR>', 'ga stages the current entry')
+    H.assert_eq(buf_map_rhs(unstage, 'n'), '<Cmd>DirectGit git reset -- {}<CR>', 'leader-gu resets the current entry')
+    H.assert_eq(
+      buf_map_rhs(restore, 'n'),
+      '<Cmd>DirectGitRestore<CR>',
+      'leader-gr restores the current entry after confirmation'
+    )
+    H.assert_eq(buf_map_desc('zR', 'n'), 'direct: Expand all direct directories', 'premise: fold mapping zR installed')
 
     config.setup({ map_default_keys = false })
 
@@ -646,8 +729,7 @@ H.describe('config', function()
     -- A non-direct buffer with its OWN buffer-local u mapping.
     local other = vim.api.nvim_create_buf(true, false)
     vim.api.nvim_set_current_buf(other)
-    vim.keymap.set('n', 'u', ':echo "other user map"<CR>',
-      { buffer = true, silent = true, noremap = true })
+    vim.keymap.set('n', 'u', ':echo "other user map"<CR>', { buffer = true, silent = true, noremap = true })
 
     config.setup({ map_default_keys = false })
 
@@ -655,10 +737,8 @@ H.describe('config', function()
     vim.api.nvim_set_current_buf(direct_buf)
     H.assert_nil(buf_map_rhs('u', 'n'), 'the direct buffer was cleared')
     vim.api.nvim_set_current_buf(other)
-    H.assert_eq(buf_map_rhs('u', 'n'), ':echo "other user map"<CR>',
-      'the other buffer-local mapping is untouched')
-    H.assert_eq(vim.fn.maparg('-', 'n'), '',
-      'the plugin global mapping was removed, no user global dash was created')
+    H.assert_eq(buf_map_rhs('u', 'n'), ':echo "other user map"<CR>', 'the other buffer-local mapping is untouched')
+    H.assert_eq(vim.fn.maparg('-', 'n'), '', 'the plugin global mapping was removed, no user global dash was created')
     pcall(vim.api.nvim_buf_delete, direct_buf, { force = true })
     pcall(vim.api.nvim_buf_delete, other, { force = true })
   end)
@@ -673,13 +753,10 @@ H.describe('config', function()
     H.assert_nil(buf_map_rhs('u', 'n'), 'cleared first')
 
     config.setup({ map_default_keys = true })
-    H.assert_true(buf_map_rhs('u', 'n') ~= nil,
-      'the buffer-local u mapping is restored in the open direct buffer')
+    H.assert_true(buf_map_rhs('u', 'n') ~= nil, 'the buffer-local u mapping is restored in the open direct buffer')
     H.assert_true(buf_map_rhs('p', 'n') ~= nil, 'the buffer-local p mapping is restored')
-    H.assert_eq(buf_map_rhs('ga', 'n'), '<Cmd>DirectGit git add -- {}<CR>',
-      'Git entry mappings are restored too')
-    H.assert_eq(buf_map_desc('zR', 'n'), 'direct: Expand all direct directories',
-      'fold mappings are restored too')
+    H.assert_eq(buf_map_rhs('ga', 'n'), '<Cmd>DirectGit git add -- {}<CR>', 'Git entry mappings are restored too')
+    H.assert_eq(buf_map_desc('zR', 'n'), 'direct: Expand all direct directories', 'fold mappings are restored too')
     pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
   end)
 
@@ -723,9 +800,7 @@ H.describe('config', function()
 
     local real_del = vim.keymap.del
     local restore = H.stub(vim.keymap, 'del', function(mode, lhs, o)
-      if lhs == 'u' then
-        error('forced: cannot delete ' .. lhs, 0)
-      end
+      if lhs == 'u' then error('forced: cannot delete ' .. lhs, 0) end
       return real_del(mode, lhs, o)
     end)
     H.capture_messages()
@@ -747,8 +822,7 @@ H.describe('config', function()
     config.setup({ map_default_keys = true })
     local bufnr = open_direct_buffer()
 
-    vim.keymap.set('n', 'u', ':echo "mine"<CR>',
-      { buffer = true, silent = true, noremap = true })
+    vim.keymap.set('n', 'u', ':echo "mine"<CR>', { buffer = true, silent = true, noremap = true })
     H.assert_eq(vim.fn.maparg('u', 'n', false, true).buffer, 1, 'premise: a local override now')
 
     config.setup({ map_default_keys = false })
@@ -768,21 +842,18 @@ H.describe('config', function()
     -- another hook to exercise composition when this ftplugin is sourced again.
     vim.b[bufnr].undo_ftplugin = 'let b:previous_ftplugin_undo_ran = 1'
     vim.cmd('runtime ftplugin/direct.lua')
-    H.assert_true(buf_map_rhs('<CR>', 'n') ~= nil,
-      'the direct ftplugin installed its buffer mappings')
-    H.assert_true(type(vim.b[bufnr].undo_ftplugin) == 'string'
-      and vim.b[bufnr].undo_ftplugin:find('previous_ftplugin_undo_ran', 1, true) ~= nil,
-      'the previous undo hook was retained')
+    H.assert_true(buf_map_rhs('<CR>', 'n') ~= nil, 'the direct ftplugin installed its buffer mappings')
+    H.assert_true(
+      type(vim.b[bufnr].undo_ftplugin) == 'string'
+        and vim.b[bufnr].undo_ftplugin:find('previous_ftplugin_undo_ran', 1, true) ~= nil,
+      'the previous undo hook was retained'
+    )
 
     vim.keymap.set('n', '<CR>', ':echo "user map"<CR>', { buffer = bufnr })
-    vim.api.nvim_buf_call(bufnr, function()
-      vim.cmd('execute b:undo_ftplugin')
-    end)
+    vim.api.nvim_buf_call(bufnr, function() vim.cmd('execute b:undo_ftplugin') end)
 
-    H.assert_eq(vim.b[bufnr].previous_ftplugin_undo_ran, 1,
-      'the previous undo hook ran')
-    H.assert_eq(buf_map_rhs('<CR>', 'n'), ':echo "user map"<CR>',
-      'the same-lhs user mapping survives')
+    H.assert_eq(vim.b[bufnr].previous_ftplugin_undo_ran, 1, 'the previous undo hook ran')
+    H.assert_eq(buf_map_rhs('<CR>', 'n'), ':echo "user map"<CR>', 'the same-lhs user mapping survives')
     H.assert_nil(buf_map_rhs('p', 'n'), 'the plugin mapping was removed')
     pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
   end)

@@ -10,13 +10,9 @@ function M.new()
   local register = require('direct.register')
   local fixtures = require('tests.support.history_fixtures')
 
-  local function decode_record(lines, index)
-    return vim.json.decode(lines[index])
-  end
+  local function decode_record(lines, index) return vim.json.decode(lines[index]) end
 
-  local function clean_buffers()
-    pcall(vim.cmd, '%bwipeout!')
-  end
+  local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
   -- The command facade should share the test's captured buffer state module.
   local function route_write_to_test_buffer()
@@ -24,10 +20,11 @@ function M.new()
     package.loaded['direct.pending'] = buffer._pending_for_test
     package.loaded['direct'] = nil
     require('direct')
-    assert(require('direct.buffer.buffer') == buffer,
-      'DirectSync facade must share the test buffer state registry')
-    assert(require('direct.pending') == buffer._pending_for_test,
-      'DirectSync facade must share the test buffer pending-operation state')
+    assert(require('direct.buffer.buffer') == buffer, 'DirectSync facade must share the test buffer state registry')
+    assert(
+      require('direct.pending') == buffer._pending_for_test,
+      'DirectSync facade must share the test buffer pending-operation state'
+    )
   end
 
   local function history_lines(name)

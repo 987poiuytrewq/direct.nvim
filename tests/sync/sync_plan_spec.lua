@@ -17,9 +17,10 @@ local history_lines = sync.history_lines
 local list_edit_and_sync = sync.list_edit_and_sync
 
 H.describe('sync: identity planning', function()
-  H.it('does not expose the obsolete positional root classifier', function()
-    H.assert_nil(buffer.classify, 'sync plans are derived from row identities')
-  end)
+  H.it(
+    'does not expose the obsolete positional root classifier',
+    function() H.assert_nil(buffer.classify, 'sync plans are derived from row identities') end
+  )
 
   H.it('delete a first root row and add at the end without pairing by position', function()
     clean_buffers()
@@ -36,12 +37,21 @@ H.describe('sync: identity planning', function()
 
     H.assert_true(synced, 'the mixed delete/create save succeeds: ' .. tostring(sync_err))
     H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'a.txt')), 'a.txt is deleted')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'b.txt')), { 'content b' },
-      'b.txt keeps its original contents instead of taking a.txt by position')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'c.txt')), { 'content c' },
-      'c.txt keeps its original contents instead of taking b.txt by position')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'new.txt')), {},
-      'new.txt is created empty instead of taking c.txt by position')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'b.txt')),
+      { 'content b' },
+      'b.txt keeps its original contents instead of taking a.txt by position'
+    )
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'c.txt')),
+      { 'content c' },
+      'c.txt keeps its original contents instead of taking b.txt by position'
+    )
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'new.txt')),
+      {},
+      'new.txt is created empty instead of taking c.txt by position'
+    )
     H.assert_true(register.content() ~= nil, 'the deleted entry was yanked')
 
     local undo = history_lines('undo.log')
@@ -50,23 +60,35 @@ H.describe('sync: identity planning', function()
     H.assert_eq(batch_record.op, 'batch', 'the mixed save is persisted as one batch record')
     H.assert_eq(#batch_record.actions, 2, 'the batch contains both filesystem actions')
     H.assert_true(require('direct').undo() ~= nil, 'one undo starts for the whole save')
-    H.assert_true(vim.wait(5000, function()
-      return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'c.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) == nil
-    end), 'one undo restores all three original files')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function()
+          return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'c.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) == nil
+        end
+      ),
+      'one undo restores all three original files'
+    )
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'a.txt')), { 'content a' })
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'b.txt')), { 'content b' })
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'c.txt')), { 'content c' })
     H.assert_eq(#history_lines('redo.log'), 2, 'the one undo creates one redo entry')
     H.assert_true(require('direct').redo() ~= nil, 'one redo starts for the whole save')
-    H.assert_true(vim.wait(5000, function()
-      return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a.txt')) == nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'c.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) ~= nil
-    end), 'one redo reapplies the entire mixed save')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function()
+          return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a.txt')) == nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'c.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) ~= nil
+        end
+      ),
+      'one redo reapplies the entire mixed save'
+    )
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'b.txt')), { 'content b' })
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'c.txt')), { 'content c' })
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'new.txt')), {})
@@ -85,22 +107,33 @@ H.describe('sync: mixed root edits', function()
 
     H.assert_true(ok, tostring(err))
     H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'old.txt')), 'the old path is renamed away')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'new.txt')), { 'original contents' },
-      'the replacement keeps the original file contents')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'new.txt')),
+      { 'original contents' },
+      'the replacement keeps the original file contents'
+    )
     H.assert_nil(register.content(), 'a rename does not auto-yank the source')
     H.assert_eq(#history_lines('undo.log'), 2, 'the rename is one history entry')
-    H.assert_true(vim.wait(5000, function()
-      return not require('direct.pending').is_pending()
-    end), 'the rename releases the pending-operation guard')
+    H.assert_true(
+      vim.wait(5000, function() return not require('direct.pending').is_pending() end),
+      'the rename releases the pending-operation guard'
+    )
 
     require('direct').undo()
-    H.assert_true(vim.wait(5000, function()
-      return vim.uv.fs_stat(vim.fs.joinpath(ws, 'old.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) == nil
-    end), 'one undo restores the original row')
-    H.assert_true(vim.wait(5000, function()
-      return not require('direct.pending').is_pending()
-    end), 'undo completes before this test cleans up')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function()
+          return vim.uv.fs_stat(vim.fs.joinpath(ws, 'old.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) == nil
+        end
+      ),
+      'one undo restores the original row'
+    )
+    H.assert_true(
+      vim.wait(5000, function() return not require('direct.pending').is_pending() end),
+      'undo completes before this test cleans up'
+    )
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'old.txt')), { 'original contents' })
   end)
 
@@ -134,13 +167,19 @@ H.describe('sync: mixed root edits', function()
       local ok, reason = listing:sync()
 
       H.assert_true(ok, edit.name .. ': ' .. tostring(reason))
-      H.assert_true(vim.wait(5000, function()
-        return #history_lines('undo.log') == 2 and not require('direct.pending').is_pending()
-      end),
-        edit.name .. ' completes its history commit')
+      H.assert_true(
+        vim.wait(
+          5000,
+          function() return #history_lines('undo.log') == 2 and not require('direct.pending').is_pending() end
+        ),
+        edit.name .. ' completes its history commit'
+      )
       H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, source)), edit.name .. ' removes old path')
-      H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, destination)), { 'contents survive' },
-        edit.name .. ' preserves the file contents')
+      H.assert_eq(
+        vim.fn.readfile(vim.fs.joinpath(ws, destination)),
+        { 'contents survive' },
+        edit.name .. ' preserves the file contents'
+      )
     end
   end)
 
@@ -157,13 +196,19 @@ H.describe('sync: mixed root edits', function()
     local ok, reason = listing:sync()
 
     H.assert_true(ok, tostring(reason))
-    H.assert_true(vim.wait(5000, function()
-      return #history_lines('undo.log') == 2 and not require('direct.pending').is_pending()
-    end),
-      'S completes its history commit')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function() return #history_lines('undo.log') == 2 and not require('direct.pending').is_pending() end
+      ),
+      'S completes its history commit'
+    )
     H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'old')), 'the old directory path is renamed away')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'new', 'nested.txt')),
-      { 'directory contents survive' }, 'the directory and its contents are preserved')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'new', 'nested.txt')),
+      { 'directory contents survive' },
+      'the directory and its contents are preserved'
+    )
   end)
 
   H.it('keeps delete plus create when top-level replacement counts differ', function()
@@ -179,12 +224,18 @@ H.describe('sync: mixed root edits', function()
     local ok, reason = listing:sync()
 
     H.assert_true(ok, tostring(reason))
-    H.assert_true(vim.wait(5000, function()
-      return #history_lines('undo.log') == 2 and not require('direct.pending').is_pending()
-    end),
-      'the delete/create batch completes its history commit')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'x.txt')), {},
-      'ambiguous replacement does not adopt a source by position')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function() return #history_lines('undo.log') == 2 and not require('direct.pending').is_pending() end
+      ),
+      'the delete/create batch completes its history commit'
+    )
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'x.txt')),
+      {},
+      'ambiguous replacement does not adopt a source by position'
+    )
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'y.txt')), {})
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'z.txt')), {})
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'z-anchor.txt')), { 'anchor' })
@@ -201,10 +252,13 @@ H.describe('sync: mixed root edits', function()
     local ok, reason = listing:sync()
 
     H.assert_true(ok, tostring(reason))
-    H.assert_true(vim.wait(5000, function()
-      return #history_lines('undo.log') == 2 and not require('direct.pending').is_pending()
-    end),
-      'the type-mismatched delete/create batch completes its history commit')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function() return #history_lines('undo.log') == 2 and not require('direct.pending').is_pending() end
+      ),
+      'the type-mismatched delete/create batch completes its history commit'
+    )
     H.assert_eq(vim.uv.fs_stat(vim.fs.joinpath(ws, 'new')).type, 'directory')
     local scan = vim.uv.fs_scandir(vim.fs.joinpath(ws, 'new'))
     H.assert_nil(vim.uv.fs_scandir_next(scan), 'a different-type row is a new empty directory')
@@ -222,18 +276,26 @@ H.describe('sync: mixed root edits', function()
     local listing = buffer.list(ws)
     H.mkfile(ws, 'external.txt', { 'external' })
     vim.fn.delete(vim.fs.joinpath(ws, 'untouched.txt'))
-    vim.api.nvim_buf_set_text(0, 0, 0, 0, #('old.txt'), { 'renamed.txt' })
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, #'old.txt', { 'renamed.txt' })
 
     local ok, err = listing:sync()
 
     H.assert_true(ok, 'unrelated external entries do not block a safe rename: ' .. tostring(err))
     H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'old.txt')), 'the source is renamed')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'renamed.txt')), { 'original' },
-      'the original file contents follow the requested rename')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'external.txt')), { 'external' },
-      'the unrelated external creation remains untouched')
-    H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'untouched.txt')),
-      'the unrelated external deletion is reconciled by the final re-list')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'renamed.txt')),
+      { 'original' },
+      'the original file contents follow the requested rename'
+    )
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'external.txt')),
+      { 'external' },
+      'the unrelated external creation remains untouched'
+    )
+    H.assert_nil(
+      vim.uv.fs_stat(vim.fs.joinpath(ws, 'untouched.txt')),
+      'the unrelated external deletion is reconciled by the final re-list'
+    )
     H.assert_false(vim.bo.modified, 'the listing refreshes after the save')
   end)
 
@@ -243,7 +305,7 @@ H.describe('sync: mixed root edits', function()
     local ws = H.mkdir(sb.root, 'ws')
     H.mkfile(ws, 'old.txt', { 'original' })
     local listing = buffer.list(ws)
-    vim.api.nvim_buf_set_text(0, 0, 0, 0, #('old.txt'), { 'renamed.txt' })
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, #'old.txt', { 'renamed.txt' })
     vim.fn.delete(vim.fs.joinpath(ws, 'old.txt'))
     H.mkdir(ws, 'old.txt')
     H.mkfile(vim.fs.joinpath(ws, 'old.txt'), 'external replacement.txt', { 'replacement' })
@@ -252,14 +314,18 @@ H.describe('sync: mixed root edits', function()
 
     H.assert_nil(ok, 'a changed edited source remains a conflict')
     H.assert_true(tostring(reason):find('old.txt', 1, true) ~= nil, tostring(reason))
-    H.assert_true(tostring(reason):find(':DirectList!', 1, true) ~= nil,
-      'the refusal explains how to recover')
-    H.assert_eq(vim.uv.fs_stat(vim.fs.joinpath(ws, 'old.txt')).type, 'directory',
-      'the external replacement remains untouched')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'old.txt', 'external replacement.txt')),
-      { 'replacement' }, 'the replacement directory contents remain untouched')
-    H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'renamed.txt')),
-      'the requested rename does not run')
+    H.assert_true(tostring(reason):find(':DirectList!', 1, true) ~= nil, 'the refusal explains how to recover')
+    H.assert_eq(
+      vim.uv.fs_stat(vim.fs.joinpath(ws, 'old.txt')).type,
+      'directory',
+      'the external replacement remains untouched'
+    )
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'old.txt', 'external replacement.txt')),
+      { 'replacement' },
+      'the replacement directory contents remain untouched'
+    )
+    H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'renamed.txt')), 'the requested rename does not run')
     H.assert_true(vim.bo.modified, 'the requested edit remains available')
   end)
 
@@ -269,20 +335,23 @@ H.describe('sync: mixed root edits', function()
     local ws = H.mkdir(sb.root, 'ws')
     H.mkfile(ws, 'old.txt', { 'original' })
     local listing = buffer.list(ws)
-    vim.api.nvim_buf_set_text(0, 0, 0, 0, #('old.txt'), { 'renamed.txt' })
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, #'old.txt', { 'renamed.txt' })
     H.mkfile(ws, 'renamed.txt', { 'external destination' })
 
     local ok, reason = listing:sync()
 
     H.assert_nil(ok, 'a newly occupied rename destination is refused')
-    H.assert_true(tostring(reason):find('destination already exists', 1, true) ~= nil,
-      tostring(reason))
-    H.assert_true(tostring(reason):find('choose another name', 1, true) ~= nil,
-      'the refusal offers a safe next step: ' .. tostring(reason))
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'old.txt')), { 'original' },
-      'the rename source remains untouched')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'renamed.txt')), { 'external destination' },
-      'the external target remains untouched')
+    H.assert_true(tostring(reason):find('destination already exists', 1, true) ~= nil, tostring(reason))
+    H.assert_true(
+      tostring(reason):find('choose another name', 1, true) ~= nil,
+      'the refusal offers a safe next step: ' .. tostring(reason)
+    )
+    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'old.txt')), { 'original' }, 'the rename source remains untouched')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'renamed.txt')),
+      { 'external destination' },
+      'the external target remains untouched'
+    )
     H.assert_true(vim.bo.modified, 'the requested edit remains available')
   end)
 
@@ -298,8 +367,8 @@ H.describe('sync: mixed root edits', function()
     local listing = buffer.list(ws)
     listing:expand(1)
 
-    vim.api.nvim_buf_set_text(0, 2, 2, 2, #('a-root.txt'), { 'renamed.txt' })
-    vim.api.nvim_buf_set_text(0, 1, 2, 1, #('  inside.txt'), { 'child-renamed.txt' })
+    vim.api.nvim_buf_set_text(0, 2, 2, 2, #'a-root.txt', { 'renamed.txt' })
+    vim.api.nvim_buf_set_text(0, 1, 2, 1, #'  inside.txt', { 'child-renamed.txt' })
     vim.api.nvim_buf_set_lines(0, 3, 4, false, {})
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new.txt' })
 
@@ -307,23 +376,32 @@ H.describe('sync: mixed root edits', function()
 
     H.assert_true(ok, tostring(err))
     H.assert_fs_eq(ws, {
-      'a-renamed.txt', 'c-root.txt', 'new.txt', 'sub/', 'sub/child-renamed.txt',
+      'a-renamed.txt',
+      'c-root.txt',
+      'new.txt',
+      'sub/',
+      'sub/child-renamed.txt',
     }, 'root and expanded-child actions are applied together')
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'a-renamed.txt')), { 'root A' })
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'sub/child-renamed.txt')), { 'child' })
     local content = register.content()
     H.assert_not_nil(content, 'the root deletion is auto-yanked')
     H.assert_eq(vim.fn.readfile(register.resolve(content, 'b-root.txt')), { 'root B' })
-    H.assert_eq(#history_lines('undo.log'), 2,
-      'the combined root and child save is one undo entry')
+    H.assert_eq(#history_lines('undo.log'), 2, 'the combined root and child save is one undo entry')
 
     H.assert_true(require('direct').undo() ~= nil, 'one undo reverses the whole save')
-    H.assert_true(vim.wait(5000, function()
-      return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a-root.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b-root.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) == nil
-        and vim.uv.fs_stat(vim.fs.joinpath(sub, 'inside.txt')) ~= nil
-    end), 'the undo restores root and child paths')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function()
+          return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a-root.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b-root.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) == nil
+            and vim.uv.fs_stat(vim.fs.joinpath(sub, 'inside.txt')) ~= nil
+        end
+      ),
+      'the undo restores root and child paths'
+    )
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'a-root.txt')), { 'root A' })
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sub, 'inside.txt')), { 'child' })
   end)
@@ -342,15 +420,18 @@ H.describe('sync: mixed root edits', function()
     -- Remove a, preserve b's row mark while renaming it into a, and also edit
     -- an expanded child. The new root entry has no mark and is a create.
     vim.api.nvim_buf_set_lines(0, 2, 3, false, {})
-    vim.api.nvim_buf_set_text(0, 2, 0, 2, #('b.txt'), { 'a.txt' })
-    vim.api.nvim_buf_set_text(0, 1, 2, 1, #('  inside.txt'), { 'child-renamed.txt' })
+    vim.api.nvim_buf_set_text(0, 2, 0, 2, #'b.txt', { 'a.txt' })
+    vim.api.nvim_buf_set_text(0, 1, 2, 1, #'  inside.txt', { 'child-renamed.txt' })
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new.txt' })
 
     local ok, err = listing:sync()
 
     H.assert_true(ok, tostring(err))
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'a.txt')), { 'original b' },
-      'the renamed entry replaces only the explicitly deleted destination')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'a.txt')),
+      { 'original b' },
+      'the renamed entry replaces only the explicitly deleted destination'
+    )
     H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')))
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'new.txt')), {})
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sub, 'child-renamed.txt')), { 'child' })
@@ -360,12 +441,18 @@ H.describe('sync: mixed root edits', function()
     H.assert_eq(#history_lines('undo.log'), 2, 'the whole edit is one batch history entry')
 
     require('direct').undo()
-    H.assert_true(vim.wait(5000, function()
-      return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) == nil
-        and vim.uv.fs_stat(vim.fs.joinpath(sub, 'inside.txt')) ~= nil
-    end), 'one undo restores the original root and child entries')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function()
+          return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) == nil
+            and vim.uv.fs_stat(vim.fs.joinpath(sub, 'inside.txt')) ~= nil
+        end
+      ),
+      'one undo restores the original root and child entries'
+    )
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'a.txt')), { 'original a' })
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'b.txt')), { 'original b' })
   end)
@@ -379,21 +466,30 @@ H.describe('sync: mixed root edits', function()
     local buf = buffer.list(ws)
 
     vim.api.nvim_buf_set_lines(0, 0, 1, false, {})
-    vim.api.nvim_buf_set_text(0, 0, 0, 0, #('b.txt'), { 'a.txt' })
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, #'b.txt', { 'a.txt' })
     local ok, err = buf:sync()
 
     H.assert_true(ok, tostring(err))
     H.assert_fs_eq(ws, { 'a.txt' }, 'only the renamed row remains')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'a.txt')), { 'content b' },
-      'the destination receives b.txt, not the deleted a.txt')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'a.txt')),
+      { 'content b' },
+      'the destination receives b.txt, not the deleted a.txt'
+    )
     H.assert_true(register.content() ~= nil, 'the removed destination is yanked')
     H.assert_eq(#history_lines('undo.log'), 2, 'delete and rename share one history entry')
 
     require('direct').undo()
-    H.assert_true(vim.wait(5000, function()
-      return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
-    end), 'one undo restores both original names')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function()
+          return vim.uv.fs_stat(vim.fs.joinpath(ws, 'a.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
+        end
+      ),
+      'one undo restores both original names'
+    )
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'a.txt')), { 'content a' })
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'b.txt')), { 'content b' })
   end)
@@ -406,24 +502,31 @@ H.describe('sync: mixed root edits', function()
     H.mkfile(ws, 'b.txt', { 'content b' })
 
     local buf = buffer.list(ws)
-    vim.api.nvim_buf_set_text(0, 1, 0, 1, #('b.txt'), { 'x.txt' })
+    vim.api.nvim_buf_set_text(0, 1, 0, 1, #'b.txt', { 'x.txt' })
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'y.txt' })
     local ok, reason = buf:sync()
 
     H.assert_true(ok, tostring(reason))
-    H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')),
-      'the marked source is renamed')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'x.txt')), { 'content b' },
-      'the rename preserves the marked file contents')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'y.txt')), {},
-      'the unmarked row is created')
+    H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')), 'the marked source is renamed')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(ws, 'x.txt')),
+      { 'content b' },
+      'the rename preserves the marked file contents'
+    )
+    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'y.txt')), {}, 'the unmarked row is created')
     H.assert_eq(#history_lines('undo.log'), 2, 'both actions share one undo record')
     H.assert_true(require('direct').undo() ~= nil, 'one undo reverses both actions')
-    H.assert_true(vim.wait(5000, function()
-      return vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'x.txt')) == nil
-        and vim.uv.fs_stat(vim.fs.joinpath(ws, 'y.txt')) == nil
-    end), 'one undo restores the rename source and removes the create')
+    H.assert_true(
+      vim.wait(
+        5000,
+        function()
+          return vim.uv.fs_stat(vim.fs.joinpath(ws, 'b.txt')) ~= nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'x.txt')) == nil
+            and vim.uv.fs_stat(vim.fs.joinpath(ws, 'y.txt')) == nil
+        end
+      ),
+      'one undo restores the rename source and removes the create'
+    )
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'b.txt')), { 'content b' })
   end)
 

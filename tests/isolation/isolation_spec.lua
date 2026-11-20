@@ -17,9 +17,7 @@ local CROSS_AUGROUP = 'direct_probe_cross'
 local function count_probe_autocmds(marker)
   local found = 0
   for _, au in ipairs(vim.api.nvim_get_autocmds({})) do
-    if (au.command or ''):find(marker, 1, true) then
-      found = found + 1
-    end
+    if (au.command or ''):find(marker, 1, true) then found = found + 1 end
   end
   return found
 end
@@ -32,34 +30,33 @@ H.describe('isolation: autocmd within a file', function()
       pattern = '*',
       command = 'let g:direct_probe_within = 1',
     })
-    H.assert_eq(vim.fn.exists('#' .. WITHIN_AUGROUP), 1,
-      'foreign augroup is visible in its own spec')
-    H.assert_eq(count_probe_autocmds('direct_probe_within'), 1,
-      'foreign autocmd is registered')
+    H.assert_eq(vim.fn.exists('#' .. WITHIN_AUGROUP), 1, 'foreign augroup is visible in its own spec')
+    H.assert_eq(count_probe_autocmds('direct_probe_within'), 1, 'foreign autocmd is registered')
   end)
 
   H.it('the next spec sees no foreign autocmd', function()
-    H.assert_eq(vim.fn.exists('#' .. WITHIN_AUGROUP), 0,
-      'foreign augroup cleared before the next spec')
-    H.assert_eq(count_probe_autocmds('direct_probe_within'), 0,
-      'foreign autocmd cleared before the next spec')
+    H.assert_eq(vim.fn.exists('#' .. WITHIN_AUGROUP), 0, 'foreign augroup cleared before the next spec')
+    H.assert_eq(count_probe_autocmds('direct_probe_within'), 0, 'foreign autocmd cleared before the next spec')
   end)
 end)
 
 H.describe('isolation: option within a file', function()
   H.it('mutates ignorecase with with_option and raw', function()
     H.assert_false(vim.o.ignorecase, 'ignorecase starts at the -l default (false)')
-    H.with_option('ignorecase', true, function()
-      H.assert_true(vim.o.ignorecase, 'with_option applies the value inside fn')
-    end)
+    H.with_option(
+      'ignorecase',
+      true,
+      function() H.assert_true(vim.o.ignorecase, 'with_option applies the value inside fn') end
+    )
     H.assert_false(vim.o.ignorecase, 'with_option restores the value after fn')
     vim.o.ignorecase = true
     H.assert_true(vim.o.ignorecase, 'raw mutation applied')
   end)
 
-  H.it('the next spec sees ignorecase restored', function()
-    H.assert_false(vim.o.ignorecase, 'ignorecase restored before the next spec')
-  end)
+  H.it(
+    'the next spec sees ignorecase restored',
+    function() H.assert_false(vim.o.ignorecase, 'ignorecase restored before the next spec') end
+  )
 end)
 
 -- Registered last: the state left here must be cleaned at the *file* boundary
@@ -87,8 +84,7 @@ H.describe('isolation: default-group FileType probe', function()
       pattern = '*',
       command = 'let g:direct_probe_default_ft = 1',
     })
-    H.assert_eq(count_probe_autocmds('direct_probe_default_ft'), 1,
-      'default-group FileType autocmd registered')
+    H.assert_eq(count_probe_autocmds('direct_probe_default_ft'), 1, 'default-group FileType autocmd registered')
   end)
 end)
 
@@ -110,7 +106,7 @@ H.describe('isolation: filetype machinery probe', function()
     H.assert_not_nil(dir, 'created a temp rtp dir under the run root')
     vim.fn.mkdir(vim.fs.joinpath(dir, 'ftplugin'), 'p')
     vim.fn.writefile({
-      "vim.g.direct_probe_ft_count = (vim.g.direct_probe_ft_count or 0) + 1",
+      'vim.g.direct_probe_ft_count = (vim.g.direct_probe_ft_count or 0) + 1',
     }, vim.fs.joinpath(dir, 'ftplugin', 'directprobe.lua'))
     vim.g.direct_probe_ft_rtp = dir
 
@@ -119,8 +115,7 @@ H.describe('isolation: filetype machinery probe', function()
     vim.cmd('enew')
     vim.bo.filetype = 'directprobe'
 
-    H.assert_eq(vim.g.direct_probe_ft_count, 1,
-      'ftplugin from the temp rtp dir loaded when filetype was set')
+    H.assert_eq(vim.g.direct_probe_ft_count, 1, 'ftplugin from the temp rtp dir loaded when filetype was set')
   end)
 end)
 
@@ -134,9 +129,10 @@ H.describe('isolation: with_env restores unset variables', function()
   H.it('unsets a previously-unset variable after a normal return', function()
     vim.env[UNSET_ON_RETURN] = nil
     H.assert_nil(vim.env[UNSET_ON_RETURN], 'precondition: variable starts unset')
-    H.with_env({ [UNSET_ON_RETURN] = 'leaked-value' }, function()
-      H.assert_eq(vim.env[UNSET_ON_RETURN], 'leaked-value', 'value visible inside fn')
-    end)
+    H.with_env(
+      { [UNSET_ON_RETURN] = 'leaked-value' },
+      function() H.assert_eq(vim.env[UNSET_ON_RETURN], 'leaked-value', 'value visible inside fn') end
+    )
     H.assert_nil(vim.env[UNSET_ON_RETURN], 'previously-unset variable is unset again')
   end)
 
@@ -144,9 +140,7 @@ H.describe('isolation: with_env restores unset variables', function()
     vim.env[UNSET_ON_RAISE] = nil
     H.assert_nil(vim.env[UNSET_ON_RAISE], 'precondition: variable starts unset')
     H.assert_error(function()
-      H.with_env({ [UNSET_ON_RAISE] = 'leaked-value' }, function()
-        error('boom')
-      end)
+      H.with_env({ [UNSET_ON_RAISE] = 'leaked-value' }, function() error('boom') end)
     end, 'boom')
     H.assert_nil(vim.env[UNSET_ON_RAISE], 'previously-unset variable is unset after a raise')
   end)

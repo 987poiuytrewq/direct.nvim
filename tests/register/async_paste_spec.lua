@@ -17,9 +17,11 @@ end
 
 local function input_spy()
   local calls = {}
-  local restore = H.stub(vim.ui, 'input', function(opts, callback)
-    calls[#calls + 1] = { opts = vim.deepcopy(opts), callback = callback }
-  end)
+  local restore = H.stub(
+    vim.ui,
+    'input',
+    function(opts, callback) calls[#calls + 1] = { opts = vim.deepcopy(opts), callback = callback } end
+  )
   return calls, restore
 end
 
@@ -57,8 +59,7 @@ H.describe('async paste prompts', function()
     H.assert_eq(vim.fn.readfile(dst .. '/file.txt'), { 'KEEP' }, 'cancel preserves target')
     H.assert_eq(vim.fn.readfile(undo_path), { history.HEADER }, 'cancel writes no record')
     H.assert_notified('Skipped file.txt')
-    H.assert_false(H.messages():find('Pasted into', 1, true) ~= nil,
-      'cancel emits no success notice')
+    H.assert_false(H.messages():find('Pasted into', 1, true) ~= nil, 'cancel emits no success notice')
   end)
 
   H.it('releases the history lock during a prompt and rechecks the answered destination', function()
@@ -84,13 +85,19 @@ H.describe('async paste prompts', function()
 
     H.assert_true(pending.is_pending(), 'the paste awaits its conflict answer')
     local output
-    H.with_env({ XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() }, function()
-      output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script })
-    end)
-    H.assert_true(output:find('ACQUIRED', 1, true) ~= nil,
-      'another Neovim process can take the history lock while input is open: ' .. output)
-    H.assert_eq(vim.fn.readfile(raced_destination), { 'EXTERNAL' },
-      'the other process creates the chosen path without the paste lock')
+    H.with_env(
+      { XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() },
+      function() output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script }) end
+    )
+    H.assert_true(
+      output:find('ACQUIRED', 1, true) ~= nil,
+      'another Neovim process can take the history lock while input is open: ' .. output
+    )
+    H.assert_eq(
+      vim.fn.readfile(raced_destination),
+      { 'EXTERNAL' },
+      'the other process creates the chosen path without the paste lock'
+    )
 
     answer_next(calls, 'from-other.txt')
     H.assert_eq(#calls, 1, 'the paste re-prompts when the answered destination was taken')
@@ -133,8 +140,7 @@ H.describe('async paste prompts', function()
     H.assert_eq(#lines, 2, 'partial success has one history action')
     local record = assert(action.deserialize(lines[2]))
     H.assert_eq(record.name, 'p')
-    H.assert_eq(record.renames, { { src = 'a.txt', dst = 'a-copy.txt' } },
-      'history contains only the copied pair')
+    H.assert_eq(record.renames, { { src = 'a.txt', dst = 'a-copy.txt' } }, 'history contains only the copied pair')
     H.assert_true(history.undo() ~= nil, 'partial paste is undoable')
     H.assert_eq(vim.fn.readfile(dst .. '/a.txt'), { 'KEEP-A' }, 'undo preserves the old occupant')
     H.assert_false(fs.exists(dst .. '/a-copy.txt'), 'undo removes only the copied entry')
@@ -149,9 +155,7 @@ H.describe('async paste prompts', function()
     local dst = H.mkdir(sb.root, 'dest')
     local original_copy = fs.copy_file_exclusive
     local restore = H.stub(fs, 'copy_file_exclusive', function(from, to)
-      if from == vim.fs.joinpath(register_copy, 'b.txt') then
-        return nil, 'injected second-copy failure'
-      end
+      if from == vim.fs.joinpath(register_copy, 'b.txt') then return nil, 'injected second-copy failure' end
       return original_copy(from, to)
     end)
     H.capture_messages()
@@ -167,8 +171,7 @@ H.describe('async paste prompts', function()
     local lines = vim.fn.readfile(stack_paths(sb))
     H.assert_eq(#lines, 2, 'partial action is recorded')
     local record = assert(action.deserialize(lines[2]))
-    H.assert_eq(record.renames, { { src = 'a.txt', dst = 'a.txt' } },
-      'history describes only the copied entry')
+    H.assert_eq(record.renames, { { src = 'a.txt', dst = 'a.txt' } }, 'history describes only the copied entry')
     H.assert_notified('completed entries were kept')
   end)
 
@@ -190,11 +193,9 @@ H.describe('async paste prompts', function()
     H.assert_eq(#calls, 0, 'attempt cap does not enqueue another prompt')
     H.assert_false(pending.is_pending(), 'cap exhaustion clears pending guard')
     H.assert_eq(vim.fn.readfile(dst .. '/f.txt'), { 'KEEP' }, 'existing entry survives')
-    H.assert_eq(vim.fn.readfile(stack_paths(sb)), { history.HEADER },
-      'all-skipped paste writes no action record')
+    H.assert_eq(vim.fn.readfile(stack_paths(sb)), { history.HEADER }, 'all-skipped paste writes no action record')
     H.assert_notified('Skipped f.txt')
-    H.assert_false(H.messages():find('Pasted into', 1, true) ~= nil,
-      'all-skipped paste emits no success notice')
+    H.assert_false(H.messages():find('Pasted into', 1, true) ~= nil, 'all-skipped paste emits no success notice')
   end)
 
   H.it('a synchronous vim.ui.input exception clears pending and preserves history', function()
@@ -203,9 +204,7 @@ H.describe('async paste prompts', function()
     H.assert_true(register.yank({ src }) == true, 'yank source')
     local dst = H.mkdir(sb.root, 'dest')
     H.mkfile(dst, 'f.txt', { 'KEEP' })
-    local restore = H.stub(vim.ui, 'input', function()
-      error('input backend failed')
-    end)
+    local restore = H.stub(vim.ui, 'input', function() error('input backend failed') end)
     H.capture_messages()
 
     register.paste(dst)
@@ -239,8 +238,7 @@ H.describe('async paste prompts', function()
     H.assert_false(pending.is_pending(), 'input callback failure clears pending')
     H.assert_eq(vim.fn.readfile(dst .. '/f.txt'), { 'KEEP' }, 'original clash remains')
     H.assert_nil(vim.uv.fs_lstat(dst .. '/fresh.txt'), 'copy was not attempted')
-    H.assert_eq(vim.fn.readfile(stack_paths(sb)), { history.HEADER },
-      'callback failure adds no action record')
+    H.assert_eq(vim.fn.readfile(stack_paths(sb)), { history.HEADER }, 'callback failure adds no action record')
     H.assert_notified('callback filesystem failure')
   end)
 
@@ -266,13 +264,15 @@ H.describe('async paste prompts', function()
     H.assert_eq(vim.bo.filetype, 'direct', 'listing attached to direct buffer')
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
     local selected_destination, selection_err = listing:paste_destination()
-    H.assert_eq(selected_destination, dst, 'selected row resolves to its directory: '
-      .. tostring(selection_err))
+    H.assert_eq(selected_destination, dst, 'selected row resolves to its directory: ' .. tostring(selection_err))
     H.assert_nil(live_direct.sync(), 'DirectSync is refused while input is pending')
     H.mkfile(dst, 'late.txt', { 'LATE' })
     pcall(vim.cmd, 'write') -- The clean-listing refresh branch is guarded too.
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), { 'f.txt' },
-      'clean :write cannot refresh the listing before callback completion')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      { 'f.txt' },
+      'clean :write cannot refresh the listing before callback completion'
+    )
     vim.bo.modified = true
     pcall(vim.cmd, 'write') -- BufWriteCmd must reach the same pending guard.
     H.assert_true(vim.bo.modified, 'write does not sync or clear the modified listing')
@@ -298,28 +298,35 @@ H.describe('async paste prompts', function()
     local calls, restore = input_spy()
     live_direct.list(dst)
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), { 'f.txt' },
-      'initial paste listing')
+    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), { 'f.txt' }, 'initial paste listing')
     vim.cmd('DirectPaste')
     H.assert_true(live_pending.is_pending(), ':DirectPaste is pending')
     H.assert_eq(vim.fn.readfile(dst .. '/f.txt'), { 'KEEP' }, 'no synchronous prompt mutation')
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), { 'f.txt' },
-      'listing is not refreshed before the callback')
-    H.assert_eq(vim.fn.readfile(undo_path), { history.HEADER },
-      'history is not appended before the callback')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      { 'f.txt' },
+      'listing is not refreshed before the callback'
+    )
+    H.assert_eq(vim.fn.readfile(undo_path), { history.HEADER }, 'history is not appended before the callback')
     vim.cmd('DirectPaste ' .. vim.fn.fnameescape(dst))
     vim.cmd('DirectPasteAs blocked.txt')
     vim.cmd('DirectUndo')
     vim.cmd('DirectRedo')
     vim.cmd('DirectSync')
     H.assert_eq(#calls, 1, 'all user commands are refused while input is pending')
-    H.assert_eq(vim.fn.readfile(dst .. '/f.txt'), { 'KEEP' },
-      'pending-guarded commands leave the clashing path unchanged')
+    H.assert_eq(
+      vim.fn.readfile(dst .. '/f.txt'),
+      { 'KEEP' },
+      'pending-guarded commands leave the clashing path unchanged'
+    )
     answer_next(calls, 'copy.txt')
     H.assert_false(live_pending.is_pending(), ':DirectPaste completion settles')
     H.assert_eq(vim.fn.readfile(dst .. '/copy.txt'), { 'REGISTER' }, 'DirectPaste copy lands')
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), { 'copy.txt', 'f.txt' },
-      'listing refresh follows completion')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      { 'copy.txt', 'f.txt' },
+      'listing refresh follows completion'
+    )
     H.assert_eq(#vim.fn.readfile(undo_path), 2, 'history is appended after callback completion')
 
     H.mkfile(dst, 'named.txt', { 'KEEP-NAMED' })
@@ -333,9 +340,11 @@ H.describe('async paste prompts', function()
     H.assert_false(live_pending.is_pending(), ':DirectPasteAs completion settles')
     H.assert_eq(vim.fn.readfile(dst .. '/named.txt'), { 'KEEP-NAMED' }, 'named clash survives')
     H.assert_eq(vim.fn.readfile(dst .. '/named-copy.txt'), { 'REGISTER' }, 'renamed copy lands')
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false),
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
       { 'copy.txt', 'f.txt', 'named-copy.txt', 'named.txt' },
-      'DirectPasteAs relists after its callback')
+      'DirectPasteAs relists after its callback'
+    )
   end)
 
   H.it('mapped paste and DirectPasteAs refuse modified listings without discarding edits', function()
@@ -365,8 +374,11 @@ H.describe('async paste prompts', function()
     pcall(vim.cmd, 'DirectPasteAs renamed.txt')
 
     H.assert_true(vim.bo.modified, 'refused pastes keep the listing modified')
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), edited_lines,
-      'refused pastes preserve the deleted row edit')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      edited_lines,
+      'refused pastes preserve the deleted row edit'
+    )
     H.assert_nil(vim.uv.fs_lstat(dst .. '/source.txt'), 'p does not paste to disk')
     H.assert_nil(vim.uv.fs_lstat(dst .. '/renamed.txt'), 'DirectPasteAs does not paste to disk')
     H.assert_eq(vim.fn.readfile(dst .. '/keep.txt'), { 'KEEP' }, 'existing entries stay unchanged')
@@ -377,8 +389,11 @@ H.describe('async paste prompts', function()
     vim.cmd('DirectPaste ' .. vim.fn.fnameescape(explicit_dst))
     H.assert_eq(paste_calls, 1, 'an explicit destination remains available')
     H.assert_true(vim.bo.modified, 'explicit-directory paste does not refresh the current listing')
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), edited_lines,
-      'explicit-directory paste preserves current listing edits')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      edited_lines,
+      'explicit-directory paste preserves current listing edits'
+    )
     restore_paste()
   end)
 
@@ -393,8 +408,7 @@ H.describe('async paste prompts', function()
     H.assert_true(live_register.yank({ src }) == true, 'yank source')
     local dst = H.mkdir(sb.root, 'dest')
     live_register.paste(dst)
-    H.assert_true(live_history.undo_async(function() end) ~= nil,
-      'undo paste succeeds synchronously')
+    H.assert_true(live_history.undo_async(function() end) ~= nil, 'undo paste succeeds synchronously')
     H.assert_nil(vim.uv.fs_lstat(dst .. '/f.txt'), 'undo removed prior pasted target')
     H.mkfile(dst, 'f.txt', { 'FOREIGN' })
     local calls, restore = input_spy()
@@ -405,8 +419,7 @@ H.describe('async paste prompts', function()
     H.assert_true(live_pending.is_pending(), 'redo waits for clash input')
     H.assert_eq(vim.fn.readfile(dst .. '/f.txt'), { 'FOREIGN' }, 'foreign occupant is untouched')
     local undo_path, redo_path = stack_paths(sb)
-    H.assert_eq(#vim.fn.readfile(redo_path), 2,
-      'redo source stays durable while the async action is pending')
+    H.assert_eq(#vim.fn.readfile(redo_path), 2, 'redo source stays durable while the async action is pending')
     answer_next(calls, 'f-redo.txt')
     restore()
 
@@ -442,8 +455,11 @@ H.describe('async paste prompts', function()
     H.assert_eq(vim.fn.readfile(dst .. '/f.txt'), { 'FOREIGN' }, 'existing occupant is untouched')
     answer_next(calls, 'f-undo.txt')
     H.assert_false(live_pending.is_pending(), 'undo callback clears pending')
-    H.assert_eq(vim.fn.readfile(dst .. '/f-undo.txt'), { 'REGISTER' },
-      'undo of Unpaste asynchronously restores the register copy')
+    H.assert_eq(
+      vim.fn.readfile(dst .. '/f-undo.txt'),
+      { 'REGISTER' },
+      'undo of Unpaste asynchronously restores the register copy'
+    )
 
     vim.cmd('DirectRedo')
     restore()
@@ -459,8 +475,9 @@ H.describe('async paste prompts', function()
     local calls, restore = input_spy()
     local completed, result = false, nil
 
-    action.execute_async(action.Group({ action.Move(a, b), action.Move(b, a) }),
-      function(ok, value) completed, result = ok, value end)
+    action.execute_async(action.Group({ action.Move(a, b), action.Move(b, a) }), function(ok, value)
+      completed, result = ok, value
+    end)
     restore()
 
     H.assert_true(completed, 'group executor does not wait for UI')

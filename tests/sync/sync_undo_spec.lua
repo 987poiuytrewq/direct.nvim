@@ -54,8 +54,11 @@ H.describe('sync with expanded children', function()
     H.assert_fs_eq(ws, { 'keep.txt' }, 'the directory tree is removed')
     local content = register.content()
     H.assert_not_nil(content, 'the removed tree is auto-yanked')
-    H.assert_eq(vim.fn.readfile(register.resolve(content, 'sub') .. '/inside.txt'), { 'inside' },
-      'the auto-yank contains the collapsed directory contents')
+    H.assert_eq(
+      vim.fn.readfile(register.resolve(content, 'sub') .. '/inside.txt'),
+      { 'inside' },
+      'the auto-yank contains the collapsed directory contents'
+    )
   end)
 
   H.it('allows deleting an empty collapsed directory', function()
@@ -93,8 +96,11 @@ H.describe('sync with expanded children', function()
     H.assert_fs_eq(ws, { 'keep.txt' }, 'deleting the visible row removes the whole empty-parent chain')
     H.assert_eq(#history_lines('undo.log'), 2, 'the whole visible chain is one undo step')
     H.assert_true(history.undo() ~= nil, 'one undo restores the collapsed chain')
-    H.assert_fs_eq(ws, { 'a/', 'a/b/', 'a/b/c/', 'a/b/c/inside.txt', 'keep.txt' },
-      'undo restores each removed directory and its contents')
+    H.assert_fs_eq(
+      ws,
+      { 'a/', 'a/b/', 'a/b/c/', 'a/b/c/inside.txt', 'keep.txt' },
+      'undo restores each removed directory and its contents'
+    )
     config.setup({})
   end)
 
@@ -114,11 +120,17 @@ H.describe('sync with expanded children', function()
     local ok, reason = listing:sync()
 
     H.assert_true(ok == true, tostring(reason))
-    H.assert_fs_eq(ws, { 'a/', 'a/.hidden', 'keep.txt' },
-      'empty chain directories are removed but the parent with hidden content is preserved')
+    H.assert_fs_eq(
+      ws,
+      { 'a/', 'a/.hidden', 'keep.txt' },
+      'empty chain directories are removed but the parent with hidden content is preserved'
+    )
     H.assert_true(history.undo() ~= nil, 'one undo restores the removed chain')
-    H.assert_fs_eq(ws, { 'a/', 'a/.hidden', 'a/b/', 'a/b/c/', 'a/b/c/inside.txt', 'keep.txt' },
-      'undo preserves the hidden sibling while restoring the chain')
+    H.assert_fs_eq(
+      ws,
+      { 'a/', 'a/.hidden', 'a/b/', 'a/b/c/', 'a/b/c/inside.txt', 'keep.txt' },
+      'undo preserves the hidden sibling while restoring the chain'
+    )
     config.setup({})
   end)
 
@@ -135,8 +147,11 @@ H.describe('sync with expanded children', function()
     H.assert_true(register.yank({ source }), 'yank the paste source')
 
     H.assert_true(register.paste(ws .. '/a/b/c/') ~= nil, 'paste onto the collapsed row')
-    H.assert_eq(vim.fn.readfile(ws .. '/a/b/c/source.txt'), { 'source' },
-      'the paste lands in the deepest displayed directory')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/a/b/c/source.txt'),
+      { 'source' },
+      'the paste lands in the deepest displayed directory'
+    )
     H.assert_true(history.undo() ~= nil, 'undo the paste')
     H.assert_false(fs.exists(ws .. '/a/b/c/source.txt'), 'undo removes only the pasted entry')
     H.assert_true(fs.exists(ws .. '/a/b/c/existing.txt'), 'the original tree remains intact')
@@ -205,10 +220,8 @@ H.describe('sync with expanded children', function()
     H.wait_for_direct()
 
     H.assert_true(called, tostring(err))
-    H.assert_eq(H.fs_snapshot(ws), { 'new.txt', 'sub/', 'sub/inside.txt' },
-      'only the new root file is created')
-    H.assert_eq(listing:get_paths(1, 2), { ws .. '/sub/', ws .. '/new.txt' },
-      'the saved listing contains roots only')
+    H.assert_eq(H.fs_snapshot(ws), { 'new.txt', 'sub/', 'sub/inside.txt' }, 'only the new root file is created')
+    H.assert_eq(listing:get_paths(1, 2), { ws .. '/sub/', ws .. '/new.txt' }, 'the saved listing contains roots only')
   end)
 
   H.it('applies root deletion after undoing an expand only after child preflight', function()
@@ -228,16 +241,17 @@ H.describe('sync with expanded children', function()
     H.wait_for_direct()
 
     H.assert_true(called, tostring(err))
-    H.assert_eq(H.fs_snapshot(ws), { 'sub/', 'sub/inside.txt' },
-      'only the deleted root file is removed')
+    H.assert_eq(H.fs_snapshot(ws), { 'sub/', 'sub/inside.txt' }, 'only the deleted root file is removed')
     local content = register.content()
     H.assert_not_nil(content, 'legacy root deletion auto-yanks after preflight')
-    H.assert_eq(vim.fn.readfile(register.resolve(content, 'root.txt')), { 'root' },
-      'the root file is the only auto-yanked entry')
+    H.assert_eq(
+      vim.fn.readfile(register.resolve(content, 'root.txt')),
+      { 'root' },
+      'the root file is the only auto-yanked entry'
+    )
     local undo = history_lines('undo.log')
     H.assert_eq(#undo, 2, 'only one root deletion is recorded in history')
-    H.assert_eq(decode_record(undo, 2).src, ws .. '/root.txt',
-      'the history record is the root deletion')
+    H.assert_eq(decode_record(undo, 2).src, ws .. '/root.txt', 'the history record is the root deletion')
   end)
 
   H.it('syncs visible subtree edits without deleting rows hidden by undo', function()
@@ -260,10 +274,14 @@ H.describe('sync with expanded children', function()
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_eq(H.fs_snapshot(ws), {
-      'a/', 'a/tampered-a.txt', 'b/', 'b/inside-b.txt', 'new.txt', 'root.txt',
+      'a/',
+      'a/tampered-a.txt',
+      'b/',
+      'b/inside-b.txt',
+      'new.txt',
+      'root.txt',
     }, 'only the visible a-subtree edit and root creation are applied')
-    H.assert_true(fs.exists(ws .. '/b/inside-b.txt'),
-      'undoing b expansion is not interpreted as deleting its child')
+    H.assert_true(fs.exists(ws .. '/b/inside-b.txt'), 'undoing b expansion is not interpreted as deleting its child')
   end)
 
   H.it('undo restores a child move together with a root filename swap', function()
@@ -281,7 +299,12 @@ H.describe('sync with expanded children', function()
     listing:expand(1)
     listing:expand(3)
     H.assert_buf_eq({
-      'left/', '  left-1.txt', 'right/', '  anchor.txt', 'root-01.txt', 'root-02.txt',
+      'left/',
+      '  left-1.txt',
+      'right/',
+      '  anchor.txt',
+      'root-01.txt',
+      'root-02.txt',
     }, 0, 'both folders and the root files are materialized')
 
     -- Move the child row under right/ while preserving its row identity.
@@ -295,14 +318,24 @@ H.describe('sync with expanded children', function()
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_fs_eq(ws, {
-      'left/', 'right/', 'right/anchor.txt', 'right/left-1.txt', 'root-01.txt', 'root-02.txt',
+      'left/',
+      'right/',
+      'right/anchor.txt',
+      'right/left-1.txt',
+      'root-01.txt',
+      'root-02.txt',
     }, 'sync applies both the root swap and child move')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-01.txt'), { 'ROOT-02-CONTENT' },
-      'the first root file receives the second file content')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-02.txt'), { 'ROOT-01-CONTENT' },
-      'the second root file receives the first file content')
-    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' },
-      'the moved child keeps its content')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-01.txt'),
+      { 'ROOT-02-CONTENT' },
+      'the first root file receives the second file content'
+    )
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-02.txt'),
+      { 'ROOT-01-CONTENT' },
+      'the second root file receives the first file content'
+    )
+    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' }, 'the moved child keeps its content')
 
     local undo_records = history_lines('undo.log')
     H.assert_eq(#undo_records, 2, 'the permutation and child move share one undo record')
@@ -312,27 +345,46 @@ H.describe('sync with expanded children', function()
 
     H.assert_true(history.undo() ~= nil, 'one undo reverses the mixed sync')
     H.assert_fs_eq(ws, {
-      'left/', 'left/left-1.txt', 'right/', 'right/anchor.txt', 'root-01.txt', 'root-02.txt',
+      'left/',
+      'left/left-1.txt',
+      'right/',
+      'right/anchor.txt',
+      'root-01.txt',
+      'root-02.txt',
     }, 'undo restores the exact original paths')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-01.txt'), { 'ROOT-01-CONTENT' },
-      'undo restores the first root file content')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-02.txt'), { 'ROOT-02-CONTENT' },
-      'undo restores the second root file content')
-    H.assert_eq(vim.fn.readfile(left .. '/left-1.txt'), { 'LEFT-CONTENT' },
-      'undo returns the child to left/')
-    H.assert_false(fs.exists(right .. '/left-1.txt'),
-      'undo removes the moved child from right/')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-01.txt'),
+      { 'ROOT-01-CONTENT' },
+      'undo restores the first root file content'
+    )
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-02.txt'),
+      { 'ROOT-02-CONTENT' },
+      'undo restores the second root file content'
+    )
+    H.assert_eq(vim.fn.readfile(left .. '/left-1.txt'), { 'LEFT-CONTENT' }, 'undo returns the child to left/')
+    H.assert_false(fs.exists(right .. '/left-1.txt'), 'undo removes the moved child from right/')
 
     H.assert_true(history.redo() ~= nil, 'redo reapplies the mixed sync')
     H.assert_fs_eq(ws, {
-      'left/', 'right/', 'right/anchor.txt', 'right/left-1.txt', 'root-01.txt', 'root-02.txt',
+      'left/',
+      'right/',
+      'right/anchor.txt',
+      'right/left-1.txt',
+      'root-01.txt',
+      'root-02.txt',
     }, 'redo reapplies both the swap and child move')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-01.txt'), { 'ROOT-02-CONTENT' },
-      'redo restores the swapped first root content')
-    H.assert_eq(vim.fn.readfile(ws .. '/root-02.txt'), { 'ROOT-01-CONTENT' },
-      'redo restores the swapped second root content')
-    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' },
-      'redo preserves the child content')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-01.txt'),
+      { 'ROOT-02-CONTENT' },
+      'redo restores the swapped first root content'
+    )
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/root-02.txt'),
+      { 'ROOT-01-CONTENT' },
+      'redo restores the swapped second root content'
+    )
+    H.assert_eq(vim.fn.readfile(right .. '/left-1.txt'), { 'LEFT-CONTENT' }, 'redo preserves the child content')
   end)
 
   H.it('refuses a lost surviving child identity on an undo branch before side effects', function()
@@ -353,24 +405,31 @@ H.describe('sync with expanded children', function()
     local state = buffer._state_for_test(bufnr)
     local child_id = state.expanded[state.root_ids[1]].children[1].id
     local namespace = vim.api.nvim_get_namespaces()['direct-listing-rows']
-    H.assert_true(vim.api.nvim_buf_del_extmark(bufnr, namespace, child_id),
-      'the surviving child identity is removed')
+    H.assert_true(vim.api.nvim_buf_del_extmark(bufnr, namespace, child_id), 'the surviving child identity is removed')
     local before_fs = H.fs_snapshot(ws)
     local before_register = register.content()
     local before_undo = history_lines('undo.log')
     local before_redo = history_lines('redo.log')
     local yanked = 0
     local yank, yank_deleted = register.yank, register.yank_deleted
-    register.yank = function(...) yanked = yanked + 1; return yank(...) end
-    register.yank_deleted = function(...) yanked = yanked + 1; return yank_deleted(...) end
+    register.yank = function(...)
+      yanked = yanked + 1
+      return yank(...)
+    end
+    register.yank_deleted = function(...)
+      yanked = yanked + 1
+      return yank_deleted(...)
+    end
 
     local ok, reason = listing:sync()
 
     register.yank = yank
     register.yank_deleted = yank_deleted
     H.assert_nil(ok, 'missing surviving child identity is refused')
-    H.assert_true(tostring(reason):find('child', 1, true) ~= nil
-      or tostring(reason):find('identity', 1, true) ~= nil, tostring(reason))
+    H.assert_true(
+      tostring(reason):find('child', 1, true) ~= nil or tostring(reason):find('identity', 1, true) ~= nil,
+      tostring(reason)
+    )
     H.assert_eq(yanked, 0, 'lost child identity stops before auto-yank')
     H.assert_eq(H.fs_snapshot(ws), before_fs, 'the filesystem is unchanged')
     H.assert_eq(register.content(), before_register, 'the register is unchanged')
@@ -393,8 +452,7 @@ H.describe('sync with expanded children', function()
     local ok, reason = listing:sync()
 
     H.assert_nil(ok, 'an indented unmarked row is not accepted as a root')
-    H.assert_true(tostring(reason):find('child', 1, true) ~= nil,
-      'refusal reports child contamination')
+    H.assert_true(tostring(reason):find('child', 1, true) ~= nil, 'refusal reports child contamination')
     H.assert_eq(H.fs_snapshot(ws), before_fs, 'the filesystem is unchanged')
   end)
 
@@ -409,8 +467,7 @@ H.describe('sync with expanded children', function()
     local listing = buffer.list(ws)
     listing:expand(1)
     vim.cmd('undo')
-    H.assert_buf_eq({ 'sub/', 'root.txt' }, 0,
-      'undo removes the materialized child while retaining root rows')
+    H.assert_buf_eq({ 'sub/', 'root.txt' }, 0, 'undo removes the materialized child while retaining root rows')
     vim.api.nvim_win_set_cursor(0, { 2, 0 })
     vim.api.nvim_feedkeys('ccrenamed.txt\27', 'xt', false)
 
@@ -418,13 +475,18 @@ H.describe('sync with expanded children', function()
     H.wait_for_direct()
 
     H.assert_true(called, tostring(err))
-    H.assert_buf_eq({ 'sub/', 'renamed.txt' }, 0,
-      'successful write keeps only the root rows')
+    H.assert_buf_eq({ 'sub/', 'renamed.txt' }, 0, 'successful write keeps only the root rows')
     H.assert_false(vim.bo.modified, 'successful write clears modified state')
-    H.assert_eq(H.fs_snapshot(ws), { 'renamed.txt', 'sub/', 'sub/inside.txt' },
-      'write applies the root rename and no child filesystem action')
-    H.assert_eq(listing:get_paths(1, 2), { ws .. '/sub/', ws .. '/renamed.txt' },
-      'the saved rows resolve as roots, not stale child rows')
+    H.assert_eq(
+      H.fs_snapshot(ws),
+      { 'renamed.txt', 'sub/', 'sub/inside.txt' },
+      'write applies the root rename and no child filesystem action'
+    )
+    H.assert_eq(
+      listing:get_paths(1, 2),
+      { ws .. '/sub/', ws .. '/renamed.txt' },
+      'the saved rows resolve as roots, not stale child rows'
+    )
   end)
 
   H.it('restores child identities after undo reconciliation and redo', function()
@@ -456,17 +518,23 @@ H.describe('sync with expanded children', function()
     vim.cmd('redo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
 
-    H.assert_buf_eq({ 'a/', '  nested/', '    deep.txt', 'root.txt' }, 0,
-      'redo restores the exact nested child snapshot')
+    H.assert_buf_eq(
+      { 'a/', '  nested/', '    deep.txt', 'root.txt' },
+      0,
+      'redo restores the exact nested child snapshot'
+    )
     local marks = vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, {})
     H.assert_eq(marks[2][1], child_id, 'redo restores the original child extmark identity')
     H.assert_eq(marks[3][1], deep_id, 'redo restores the nested child extmark identity')
-    H.assert_eq(state.expanded[nested_id].children[1].id, deep_id,
-      'the nested expansion state is restored with the original child record')
-    H.assert_eq(state.rows[deep_id].parent, nested_id,
-      'the restored child retains its original parent relationship')
+    H.assert_eq(
+      state.expanded[nested_id].children[1].id,
+      deep_id,
+      'the nested expansion state is restored with the original child record'
+    )
+    H.assert_eq(state.rows[deep_id].parent, nested_id, 'the restored child retains its original parent relationship')
     H.assert_eq(listing:get_paths(2, 3), {
-      ws .. '/a/nested/', ws .. '/a/nested/deep.txt',
+      ws .. '/a/nested/',
+      ws .. '/a/nested/deep.txt',
     }, 'restored rows resolve to their original nested filesystem paths')
 
     -- Exercise both repeated replay of the nested insertion and a full
@@ -475,32 +543,40 @@ H.describe('sync with expanded children', function()
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
     vim.cmd('redo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
-    H.assert_eq(listing:get_paths(3, 3), { ws .. '/a/nested/deep.txt' },
-      'a second nested redo cycle restores the same path identity')
+    H.assert_eq(
+      listing:get_paths(3, 3),
+      { ws .. '/a/nested/deep.txt' },
+      'a second nested redo cycle restores the same path identity'
+    )
 
     vim.cmd('undo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
     vim.cmd('undo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
-    H.assert_buf_eq({ 'a/', 'root.txt' }, 0,
-      'undoing both materializations removes only their view rows')
+    H.assert_buf_eq({ 'a/', 'root.txt' }, 0, 'undoing both materializations removes only their view rows')
     vim.cmd('redo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
-    H.assert_buf_eq({ 'a/', '  nested/', 'root.txt' }, 0,
-      'the first redo restores the parent materialization only')
+    H.assert_buf_eq({ 'a/', '  nested/', 'root.txt' }, 0, 'the first redo restores the parent materialization only')
     vim.cmd('redo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
-    H.assert_buf_eq({ 'a/', '  nested/', '    deep.txt', 'root.txt' }, 0,
-      'the next redo restores the nested materialization')
+    H.assert_buf_eq(
+      { 'a/', '  nested/', '    deep.txt', 'root.txt' },
+      0,
+      'the next redo restores the nested materialization'
+    )
     H.assert_eq(listing:get_paths(2, 3), {
-      ws .. '/a/nested/', ws .. '/a/nested/deep.txt',
+      ws .. '/a/nested/',
+      ws .. '/a/nested/deep.txt',
     }, 'multi-materialization replay preserves both original paths')
 
     local no_op_ok, no_op_err = pcall(vim.cmd, 'write')
     H.assert_true(no_op_ok, tostring(no_op_err))
     H.wait_for_direct()
     H.assert_eq(H.fs_snapshot(ws), {
-      'a/', 'a/nested/', 'a/nested/deep.txt', 'root.txt',
+      'a/',
+      'a/nested/',
+      'a/nested/deep.txt',
+      'root.txt',
     }, 'a no-op write accepts redone children without filesystem changes')
 
     vim.api.nvim_buf_set_text(bufnr, 3, 0, 3, #'root.txt', { 'renamed.txt' })
@@ -508,7 +584,10 @@ H.describe('sync with expanded children', function()
     H.assert_true(write_ok, tostring(write_err))
     H.wait_for_direct()
     H.assert_eq(H.fs_snapshot(ws), {
-      'a/', 'a/nested/', 'a/nested/deep.txt', 'renamed.txt',
+      'a/',
+      'a/nested/',
+      'a/nested/deep.txt',
+      'renamed.txt',
     }, 'a root-only edit never treats redone children as root actions')
 
     local register = require('direct.register')
@@ -521,12 +600,17 @@ H.describe('sync with expanded children', function()
     local yank_ok, yank_err = pcall(require('direct').yank, 3, 3)
     register.yank_async = original_yank_async
     H.assert_true(yank_ok, tostring(yank_err))
-    H.assert_eq(yanked, { ws .. '/a/nested/deep.txt' },
-      'yank on the restored deep child uses its exact filesystem path')
+    H.assert_eq(
+      yanked,
+      { ws .. '/a/nested/deep.txt' },
+      'yank on the restored deep child uses its exact filesystem path'
+    )
 
     listing:open('    deep.txt')
-    H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/a/nested/deep.txt'),
-      'open on the restored deep child resolves the exact filesystem path')
+    H.assert_true(
+      fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/a/nested/deep.txt'),
+      'open on the restored deep child resolves the exact filesystem path'
+    )
   end)
 
   H.it('expand and undo-redo preserve child paths for open', function()
@@ -546,11 +630,9 @@ H.describe('sync with expanded children', function()
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
 
     local child_path = ws .. '/child/inside.txt'
-    H.assert_eq(listing:get_paths(2, 2), { child_path },
-      'redo restores the child path identity')
+    H.assert_eq(listing:get_paths(2, 2), { child_path }, 'redo restores the child path identity')
     H.assert_true(listing:open('  inside.txt') == true, 'open accepts the intact redone row')
-    H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), child_path),
-      'open consumes the restored child path')
+    H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), child_path), 'open consumes the restored child path')
   end)
 
   H.it('restores an expansion with its captured empty wildignore after the option changes', function()
@@ -580,14 +662,15 @@ H.describe('sync with expanded children', function()
       vim.cmd('redo')
       vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
 
-      H.assert_buf_eq({ 'child/', '  inside.txt' }, 0,
-        'redo uses the captured empty filter rather than the current filter')
+      H.assert_buf_eq(
+        { 'child/', '  inside.txt' },
+        0,
+        'redo uses the captured empty filter rather than the current filter'
+      )
       local namespace = vim.api.nvim_get_namespaces()['direct-listing-rows']
       local marks = vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, {})
-      H.assert_true(marks[2] and marks[2][1] == child_id,
-        'redo restores the original child identity')
-      H.assert_eq(listing:get_paths(2, 2), { child .. '/inside.txt' },
-        'the restored child keeps its original path')
+      H.assert_true(marks[2] and marks[2][1] == child_id, 'redo restores the original child identity')
+      H.assert_eq(listing:get_paths(2, 2), { child .. '/inside.txt' }, 'the restored child keeps its original path')
 
       local write_ok, write_err = pcall(vim.cmd, 'write')
       H.assert_true(write_ok, tostring(write_err))
@@ -604,14 +687,14 @@ H.describe('sync with expanded children', function()
       local yank_ok, yank_err = pcall(require('direct').yank, 2, 2)
       register.yank_async = original_yank_async
       H.assert_true(yank_ok, tostring(yank_err))
-      H.assert_eq(yanked, { child .. '/inside.txt' },
-        'yank accepts the restored child and uses its original path')
+      H.assert_eq(yanked, { child .. '/inside.txt' }, 'yank accepts the restored child and uses its original path')
       H.assert_eq(register.content(), register_before, 'the path spy causes no register mutation')
 
-      H.assert_true(listing:open('  inside.txt') == true,
-        'open accepts the restored child under the changed filter')
-      H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), child .. '/inside.txt'),
-        'open uses the restored child path')
+      H.assert_true(listing:open('  inside.txt') == true, 'open accepts the restored child under the changed filter')
+      H.assert_true(
+        fs.same_path(vim.api.nvim_buf_get_name(0), child .. '/inside.txt'),
+        'open uses the restored child path'
+      )
     end)
 
     H.assert_eq(H.fs_snapshot(ws), fs_before, 'redo/open/yank/write do not alter the directory')
@@ -633,8 +716,7 @@ H.describe('sync with expanded children', function()
     local bufnr = vim.api.nvim_get_current_buf()
     local state = buffer._state_for_test(bufnr)
     local child_id = state.expanded[state.root_ids[1]].children[1].id
-    H.assert_eq(state.rows[child_id].name, 'visible.txt',
-      'the original non-empty filter hides inside.log')
+    H.assert_eq(state.rows[child_id].name, 'visible.txt', 'the original non-empty filter hides inside.log')
 
     vim.cmd('undo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
@@ -644,13 +726,15 @@ H.describe('sync with expanded children', function()
       vim.cmd('redo')
       vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
 
-      H.assert_buf_eq({ 'child/', '  visible.txt' }, 0,
-        'redo uses the captured non-empty filter after current filtering is disabled')
+      H.assert_buf_eq(
+        { 'child/', '  visible.txt' },
+        0,
+        'redo uses the captured non-empty filter after current filtering is disabled'
+      )
       local namespace = vim.api.nvim_get_namespaces()['direct-listing-rows']
       local marks = vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, {})
       H.assert_eq(marks[2][1], child_id, 'redo restores the original child identity')
-      H.assert_eq(listing:get_paths(2, 2), { child .. '/visible.txt' },
-        'the restored child keeps its original path')
+      H.assert_eq(listing:get_paths(2, 2), { child .. '/visible.txt' }, 'the restored child keeps its original path')
     end)
   end)
 
@@ -667,8 +751,7 @@ H.describe('sync with expanded children', function()
     vim.cmd('undo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
     local state = buffer._state_for_test(bufnr)
-    H.assert_true(state.materialization_recoveries[1] ~= nil,
-      'undo retains the redo recovery record')
+    H.assert_true(state.materialization_recoveries[1] ~= nil, 'undo retains the redo recovery record')
     state.materialization_recoveries[1].wildignore = nil
 
     vim.cmd('redo')
@@ -676,8 +759,7 @@ H.describe('sync with expanded children', function()
 
     local paths, reason = listing:get_paths(2, 2)
     H.assert_nil(paths, 'a missing filter snapshot does not restore child identity')
-    H.assert_true(type(reason) == 'string' and #reason > 0,
-      'the unsafe redone row is refused with a reason')
+    H.assert_true(type(reason) == 'string' and #reason > 0, 'the unsafe redone row is refused with a reason')
   end)
 
   H.it('yank after undo-redo consumes the restored child path', function()
@@ -704,8 +786,7 @@ H.describe('sync with expanded children', function()
     end
     require('direct').yank(2, 2)
     register.yank_async = original_yank_async
-    H.assert_eq(yanked, { ws .. '/child/inside.txt' },
-      'yank consumes the restored child path')
+    H.assert_eq(yanked, { ws .. '/child/inside.txt' }, 'yank consumes the restored child path')
   end)
 
   H.it('tampered redone child rows refuse open before switching buffers', function()
@@ -731,8 +812,11 @@ H.describe('sync with expanded children', function()
     H.assert_nil(opened, 'open refuses the stale child path')
     H.assert_true(type(open_err) == 'string' and open_err ~= '', 'open explains the refusal')
     H.assert_eq(vim.api.nvim_get_current_buf(), bufnr, 'refused open does not switch buffers')
-    H.assert_eq(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), lines_before,
-      'refused operations do not rewrite the listing')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(bufnr, 0, -1, false),
+      lines_before,
+      'refused operations do not rewrite the listing'
+    )
     H.assert_eq(H.fs_snapshot(ws), fs_before, 'refused operations do not change the filesystem')
     H.assert_true(fs.stat(child_path) ~= nil, 'the original child remains available')
   end)
@@ -778,8 +862,7 @@ H.describe('sync with expanded children', function()
     H.assert_eq(yank_calls, 0, 'refused child rows never reach register.yank')
     H.assert_eq(vim.api.nvim_get_current_buf(), bufnr, 'refused yank keeps the direct buffer')
     H.assert_eq(H.fs_snapshot(ws), fs_before, 'refused yank does not change the filesystem')
-    H.assert_eq(register.content(), register_before,
-      'refused operations do not change register state')
+    H.assert_eq(register.content(), register_before, 'refused operations do not change register state')
   end)
 
   H.it('fails closed when redone child text is tampered before any sync effects', function()
@@ -801,8 +884,14 @@ H.describe('sync with expanded children', function()
 
     local register = require('direct.register')
     local original_yank, original_yank_async, yank_calls = register.yank, register.yank_async, 0
-    register.yank = function(...) yank_calls = yank_calls + 1; return original_yank(...) end
-    register.yank_async = function(...) yank_calls = yank_calls + 1; return original_yank_async(...) end
+    register.yank = function(...)
+      yank_calls = yank_calls + 1
+      return original_yank(...)
+    end
+    register.yank_async = function(...)
+      yank_calls = yank_calls + 1
+      return original_yank_async(...)
+    end
     local yank_call_ok, yank_result = pcall(require('direct').yank, 2, 2)
     local open_result = listing:open('  tampered.txt')
     register.yank = original_yank
@@ -817,16 +906,21 @@ H.describe('sync with expanded children', function()
     local before_undo, before_redo = history_lines('undo.log'), history_lines('redo.log')
     local yanked = 0
     local yank, yank_deleted = register.yank, register.yank_deleted
-    register.yank = function(...) yanked = yanked + 1; return yank(...) end
-    register.yank_deleted = function(...) yanked = yanked + 1; return yank_deleted(...) end
+    register.yank = function(...)
+      yanked = yanked + 1
+      return yank(...)
+    end
+    register.yank_deleted = function(...)
+      yanked = yanked + 1
+      return yank_deleted(...)
+    end
 
     local ok, reason = listing:sync()
 
     register.yank = yank
     register.yank_deleted = yank_deleted
     H.assert_nil(ok, 'tampered redone child text is refused')
-    H.assert_true(type(reason) == 'string' and reason ~= '',
-      'refusal explains why the redone row is unsafe')
+    H.assert_true(type(reason) == 'string' and reason ~= '', 'refusal explains why the redone row is unsafe')
     H.assert_eq(yanked, 0, 'tampering stops before register effects')
     H.assert_eq(H.fs_snapshot(ws), before_fs, 'tampering has no filesystem effects')
     H.assert_eq(register.content(), before_register, 'tampering leaves register state unchanged')
@@ -856,8 +950,14 @@ H.describe('sync with expanded children', function()
     local before_undo, before_redo = history_lines('undo.log'), history_lines('redo.log')
     local yanked = 0
     local yank, yank_async = register.yank, register.yank_async
-    register.yank = function(...) yanked = yanked + 1; return yank(...) end
-    register.yank_async = function(...) yanked = yanked + 1; return yank_async(...) end
+    register.yank = function(...)
+      yanked = yanked + 1
+      return yank(...)
+    end
+    register.yank_async = function(...)
+      yanked = yanked + 1
+      return yank_async(...)
+    end
 
     local yank_call_ok, yank_result = pcall(require('direct').yank, 2, 2)
     local open_result = listing:open('  inside.txt')
@@ -871,8 +971,7 @@ H.describe('sync with expanded children', function()
     register.yank = yank
     register.yank_async = yank_async
     H.assert_nil(ok, 'redo with a changed directory snapshot is ambiguous and refused')
-    H.assert_true(type(reason) == 'string' and reason ~= '',
-      'the refusal explains why recovery was unsafe')
+    H.assert_true(type(reason) == 'string' and reason ~= '', 'the refusal explains why recovery was unsafe')
     H.assert_eq(yanked, 0, 'ambiguous recovery stops before register effects')
     H.assert_eq(H.fs_snapshot(ws), before_fs, 'ambiguous recovery has no filesystem effects')
     H.assert_eq(register.content(), before_register, 'ambiguous recovery leaves register state unchanged')
@@ -898,8 +997,7 @@ H.describe('sync with expanded children', function()
     local a_id = state.expanded[state.root_ids[1]].children[1].id
     listing:expand(3)
     vim.cmd('undo')
-    H.assert_buf_eq({ 'a/', '  inside-a.txt', 'b/', 'root.txt' }, 0,
-      'undo removes only the latest b materialization')
+    H.assert_buf_eq({ 'a/', '  inside-a.txt', 'b/', 'root.txt' }, 0, 'undo removes only the latest b materialization')
 
     vim.api.nvim_win_set_cursor(0, { 4, 0 })
     vim.api.nvim_feedkeys('ccrenamed.txt\27', 'xt', false)
@@ -908,12 +1006,14 @@ H.describe('sync with expanded children', function()
 
     H.assert_true(synced == true, tostring(reason))
     H.assert_eq(H.fs_snapshot(ws), {
-      'a/', 'a/tampered.txt', 'b/', 'b/inside-b.txt', 'renamed.txt',
+      'a/',
+      'a/tampered.txt',
+      'b/',
+      'b/inside-b.txt',
+      'renamed.txt',
     }, 'the visible subtree edit and root rename both apply')
-    H.assert_true(fs.exists(ws .. '/a/tampered.txt'),
-      'the changed child is present at its new path')
-    H.assert_true(fs.exists(ws .. '/b/inside-b.txt'),
-      'the hidden b subtree remains untouched')
+    H.assert_true(fs.exists(ws .. '/a/tampered.txt'), 'the changed child is present at its new path')
+    H.assert_true(fs.exists(ws .. '/b/inside-b.txt'), 'the hidden b subtree remains untouched')
   end)
 
   H.it('writes only root changes when undo removes one of multiple materializations', function()
@@ -935,15 +1035,22 @@ H.describe('sync with expanded children', function()
     vim.cmd('undo')
     vim.api.nvim_win_set_cursor(0, { 4, 0 })
     vim.api.nvim_feedkeys('ccrenamed.txt\27', 'xt', false)
-    H.assert_eq(state.expanded[state.root_ids[1]].children[1].id, a_id,
-      'the materialization not undone retains its child identity before save')
+    H.assert_eq(
+      state.expanded[state.root_ids[1]].children[1].id,
+      a_id,
+      'the materialization not undone retains its child identity before save'
+    )
 
     local called, err = pcall(vim.cmd, 'write')
     H.wait_for_direct()
 
     H.assert_true(called, tostring(err))
     H.assert_eq(H.fs_snapshot(ws), {
-      'a/', 'a/inside-a.txt', 'b/', 'b/inside-b.txt', 'renamed.txt',
+      'a/',
+      'a/inside-a.txt',
+      'b/',
+      'b/inside-b.txt',
+      'renamed.txt',
     }, 'write applies only the root rename and no child row as a root action')
   end)
 
@@ -964,30 +1071,40 @@ H.describe('sync with expanded children', function()
     vim.api.nvim_win_set_cursor(0, { 2, 0 })
     vim.api.nvim_feedkeys('ccrenamed.txt\27', 'xt', false)
     listing:expand(1)
-    H.assert_buf_eq({ 'sub/', '  inside.txt', 'renamed.txt' }, 0,
-      'the unrelated directory is expanded after the root rename')
+    H.assert_buf_eq(
+      { 'sub/', '  inside.txt', 'renamed.txt' },
+      0,
+      'the unrelated directory is expanded after the root rename'
+    )
     H.assert_eq(H.fs_snapshot(ws), before, 'editing and expanding are view/buffer only')
 
     vim.cmd('undo')
 
-    H.assert_buf_eq({ 'sub/', 'renamed.txt' }, 0,
-      'undo removes only the materialized child rows, not the earlier rename')
+    H.assert_buf_eq(
+      { 'sub/', 'renamed.txt' },
+      0,
+      'undo removes only the materialized child rows, not the earlier rename'
+    )
     H.assert_eq(H.fs_snapshot(ws), before, 'undo has no filesystem effects')
     local called, err = pcall(vim.cmd, 'write')
     H.wait_for_direct()
 
     H.assert_true(called, tostring(err))
-    H.assert_buf_eq({ 'sub/', 'renamed.txt' }, 0,
-      'write keeps the coherent root-only view after materialization undo')
+    H.assert_buf_eq({ 'sub/', 'renamed.txt' }, 0, 'write keeps the coherent root-only view after materialization undo')
     H.assert_false(vim.bo.modified, 'successful write clears modified state')
-    H.assert_eq(H.fs_snapshot(ws), { 'renamed.txt', 'sub/', 'sub/inside.txt' },
-      "write applies only the user's root rename")
+    H.assert_eq(
+      H.fs_snapshot(ws),
+      { 'renamed.txt', 'sub/', 'sub/inside.txt' },
+      "write applies only the user's root rename"
+    )
     state = buffer._state_for_test(vim.api.nvim_get_current_buf())
-    H.assert_eq(listing:get_paths(1, 2), { ws .. '/sub/', ws .. '/renamed.txt' },
-      'the surviving rows resolve as roots, not stale children')
+    H.assert_eq(
+      listing:get_paths(1, 2),
+      { ws .. '/sub/', ws .. '/renamed.txt' },
+      'the surviving rows resolve as roots, not stale children'
+    )
     H.assert_nil(state.expanded[root_id], 'undone materialization is removed from saved state')
-    H.assert_eq(#state.display_ids, #state.root_ids,
-      'saved display identities contain roots only after reconciliation')
+    H.assert_eq(#state.display_ids, #state.root_ids, 'saved display identities contain roots only after reconciliation')
   end)
 
   H.it('undo without expanding still reverses a root filename edit', function()
@@ -1021,19 +1138,16 @@ H.describe('sync with expanded children', function()
 
     for iteration = 1, 2 do
       listing:expand(1)
-      H.assert_buf_eq({ 'sub/', '  inside.txt' }, 0,
-        'each expand materializes exactly one child row')
+      H.assert_buf_eq({ 'sub/', '  inside.txt' }, 0, 'each expand materializes exactly one child row')
       local child_id = state.expanded[root_id].children[1].id
       if iteration == 1 then
         first_child_id = child_id
       else
-        H.assert_true(child_id ~= first_child_id,
-          'repeated expansion creates a fresh child identity after undo')
+        H.assert_true(child_id ~= first_child_id, 'repeated expansion creates a fresh child identity after undo')
       end
       vim.cmd('undo')
       H.assert_buf_eq({ 'sub/' }, 0, 'undo removes that expand independently')
-      H.assert_fs_eq(ws, { 'sub/', 'sub/inside.txt' },
-        'view undo and write do not change filesystem entries')
+      H.assert_fs_eq(ws, { 'sub/', 'sub/inside.txt' }, 'view undo and write do not change filesystem entries')
     end
 
     local ok, err = pcall(vim.cmd, 'write')
@@ -1041,12 +1155,13 @@ H.describe('sync with expanded children', function()
     H.assert_true(ok, tostring(err))
     H.assert_buf_eq({ 'sub/' }, 0, 'write keeps the root-only view coherent')
     state = buffer._state_for_test(vim.api.nvim_get_current_buf())
-    H.assert_eq(#state.display_ids, #state.root_ids,
-      'saved identities contain roots only after undo reconciliation')
-    H.assert_fs_eq(ws, { 'sub/', 'sub/inside.txt' },
-      'writing after repeated view undo does not change filesystem entries')
-    H.assert_eq(listing:get_paths(1, 1), { ws .. '/sub/' },
-      'the remaining row retains its root path identity')
+    H.assert_eq(#state.display_ids, #state.root_ids, 'saved identities contain roots only after undo reconciliation')
+    H.assert_fs_eq(
+      ws,
+      { 'sub/', 'sub/inside.txt' },
+      'writing after repeated view undo does not change filesystem entries'
+    )
+    H.assert_eq(listing:get_paths(1, 1), { ws .. '/sub/' }, 'the remaining row retains its root path identity')
     H.assert_nil(state.expanded[root_id], 'no abandoned expansion remains')
   end)
 
@@ -1063,26 +1178,32 @@ H.describe('sync with expanded children', function()
 
     listing:expand(1)
     listing:expand(3)
-    H.assert_buf_eq({ 'a/', '  inside-a.txt', 'b/', '  inside-b.txt' }, 0,
-      'each directory has an independent materialization')
+    H.assert_buf_eq(
+      { 'a/', '  inside-a.txt', 'b/', '  inside-b.txt' },
+      0,
+      'each directory has an independent materialization'
+    )
     vim.cmd('undo')
-    H.assert_buf_eq({ 'a/', '  inside-a.txt', 'b/' }, 0,
-      'the first undo removes only the most recent directory children')
+    H.assert_buf_eq(
+      { 'a/', '  inside-a.txt', 'b/' },
+      0,
+      'the first undo removes only the most recent directory children'
+    )
     vim.cmd('undo')
-    H.assert_buf_eq({ 'a/', 'b/' }, 0,
-      'the next undo removes the earlier materialization')
-    H.assert_fs_eq(ws, { 'a/', 'a/inside-a.txt', 'b/', 'b/inside-b.txt' },
-      'view undo has no filesystem effects')
+    H.assert_buf_eq({ 'a/', 'b/' }, 0, 'the next undo removes the earlier materialization')
+    H.assert_fs_eq(ws, { 'a/', 'a/inside-a.txt', 'b/', 'b/inside-b.txt' }, 'view undo has no filesystem effects')
 
     local called, err = pcall(vim.cmd, 'write')
     H.wait_for_direct()
     H.assert_true(called, tostring(err))
     H.assert_buf_eq({ 'a/', 'b/' }, 0, 'write retains the coherent root listing')
     local state = buffer._state_for_test(vim.api.nvim_get_current_buf())
-    H.assert_eq(#state.display_ids, #state.root_ids,
-      'all undone child identities are removed from saved display state')
-    H.assert_eq(H.fs_snapshot(ws), { 'a/', 'a/inside-a.txt', 'b/', 'b/inside-b.txt' },
-      'write does not interpret view rows as filesystem edits')
+    H.assert_eq(#state.display_ids, #state.root_ids, 'all undone child identities are removed from saved display state')
+    H.assert_eq(
+      H.fs_snapshot(ws),
+      { 'a/', 'a/inside-a.txt', 'b/', 'b/inside-b.txt' },
+      'write does not interpret view rows as filesystem edits'
+    )
   end)
 
   H.it('syncs a root file rename while clean child baselines are loaded', function()
@@ -1094,23 +1215,25 @@ H.describe('sync with expanded children', function()
     H.mkfile(ws, 'sub/inside.txt', { 'inside' })
     local listing = buffer.list(ws)
     listing:expand(1)
-    vim.api.nvim_buf_set_text(0, 2, 0, 2, #('root.txt'), { 'renamed.txt' })
+    vim.api.nvim_buf_set_text(0, 2, 0, 2, #'root.txt', { 'renamed.txt' })
 
     local ok, err = listing:sync()
 
     H.assert_true(ok == true, tostring(err))
     H.assert_fs_eq(ws, { 'renamed.txt', 'sub/', 'sub/inside.txt' })
     H.assert_buf_eq({ 'sub/', '  inside.txt', 'renamed.txt' }, 0)
-    H.assert_eq(listing:get_paths(2, 2), { ws .. '/sub/inside.txt' },
-      'child identity survives full refresh')
+    H.assert_eq(listing:get_paths(2, 2), { ws .. '/sub/inside.txt' }, 'child identity survives full refresh')
 
     vim.api.nvim_buf_set_lines(0, 2, 3, false, {})
     H.assert_true(listing:sync() == true, 'a root-file delete remains supported')
     H.assert_false(fs.exists(ws .. '/renamed.txt'), 'root file was deleted')
     local content = register.content()
     H.assert_not_nil(content, 'normal unblocked root deletes still auto-yank')
-    H.assert_eq(vim.fn.readfile(register.resolve(content, 'renamed.txt')), { 'root' },
-      'root file contents were auto-yanked')
+    H.assert_eq(
+      vim.fn.readfile(register.resolve(content, 'renamed.txt')),
+      { 'root' },
+      'root file contents were auto-yanked'
+    )
   end)
 
   H.it('root rename undo then :write preserves unchanged child identities', function()
@@ -1126,25 +1249,27 @@ H.describe('sync with expanded children', function()
 
     vim.api.nvim_win_set_cursor(0, { 3, 0 })
     vim.api.nvim_feedkeys('ccrenamed.txt\27', 'xt', false)
-    H.assert_buf_eq({ 'sub/', '  inside.txt', 'renamed.txt' }, 0,
-      'normal-mode editing renames the root entry')
+    H.assert_buf_eq({ 'sub/', '  inside.txt', 'renamed.txt' }, 0, 'normal-mode editing renames the root entry')
     vim.cmd('undo')
-    H.assert_buf_eq({ 'sub/', '  inside.txt', 'root.txt' }, 0,
-      'undo restores the root filename before writing')
-    H.assert_eq(vim.fn.undotree().seq_cur, materialization_seq,
-      'undo returns to the child materialization history baseline')
+    H.assert_buf_eq({ 'sub/', '  inside.txt', 'root.txt' }, 0, 'undo restores the root filename before writing')
+    H.assert_eq(
+      vim.fn.undotree().seq_cur,
+      materialization_seq,
+      'undo returns to the child materialization history baseline'
+    )
 
     local ok, err = pcall(vim.cmd, 'write')
     H.wait_for_direct()
 
     H.assert_true(ok, tostring(err))
-    H.assert_buf_eq({ 'sub/', '  inside.txt', 'root.txt' }, 0,
-      'the root-only save keeps the materialized display')
+    H.assert_buf_eq({ 'sub/', '  inside.txt', 'root.txt' }, 0, 'the root-only save keeps the materialized display')
     H.assert_false(vim.bo.modified, 'successful :write marks the listing clean')
-    H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' },
-      'undo recovery does not change filesystem entries')
-    H.assert_eq(listing:get_paths(2, 2), { ws .. '/sub/inside.txt' },
-      'recovered row identity still resolves its child path')
+    H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' }, 'undo recovery does not change filesystem entries')
+    H.assert_eq(
+      listing:get_paths(2, 2),
+      { ws .. '/sub/inside.txt' },
+      'recovered row identity still resolves its child path'
+    )
   end)
 
   H.it('root rename undo with a duplicate or mismatched child fails closed', function()
@@ -1158,22 +1283,23 @@ H.describe('sync with expanded children', function()
       local listing = buffer.list(ws)
       listing:expand(1)
       vim.cmd('let &undolevels = &undolevels')
-      vim.api.nvim_buf_set_text(0, 2, 0, 2, #('root.txt'), { 'renamed.txt' })
+      vim.api.nvim_buf_set_text(0, 2, 0, 2, #'root.txt', { 'renamed.txt' })
       vim.cmd('undo')
       if hostile == 'duplicate' then
         vim.api.nvim_buf_set_lines(0, 2, 2, false, { '  inside.txt' })
       else
-        vim.api.nvim_buf_set_text(0, 1, 2, 1, #('  inside.txt'), { '  changed.txt' })
+        vim.api.nvim_buf_set_text(0, 1, 2, 1, #'  inside.txt', { '  changed.txt' })
       end
 
       local ok, reason = listing:sync()
 
       H.assert_nil(ok, hostile .. ' child baseline is refused')
-      H.assert_true(tostring(reason):find('child', 1, true) ~= nil
-        or tostring(reason):find('identity', 1, true) ~= nil, tostring(reason))
+      H.assert_true(
+        tostring(reason):find('child', 1, true) ~= nil or tostring(reason):find('identity', 1, true) ~= nil,
+        tostring(reason)
+      )
       H.assert_true(vim.bo.modified, hostile .. ' refusal keeps the buffer modified')
-      H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' },
-        hostile .. ' damage has no filesystem effects')
+      H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' }, hostile .. ' damage has no filesystem effects')
     end
   end)
 
@@ -1190,13 +1316,16 @@ H.describe('sync with expanded children', function()
     listing:expand(1)
     listing:expand(2)
     H.assert_buf_eq({
-      'sub/', '  nested/', '    deep.txt', '  sibling.txt', 'root.txt',
+      'sub/',
+      '  nested/',
+      '    deep.txt',
+      '  sibling.txt',
+      'root.txt',
     }, 0, 'the full ordered child subtree is materialized')
 
     local bufnr = vim.api.nvim_get_current_buf()
     local namespace = vim.api.nvim_get_namespaces()['direct-listing-rows']
-    local child_mark = vim.api.nvim_buf_get_extmarks(bufnr, namespace,
-      { 1, 0 }, { 1, -1 }, {})[1]
+    local child_mark = vim.api.nvim_buf_get_extmarks(bufnr, namespace, { 1, 0 }, { 1, -1 }, {})[1]
     H.assert_not_nil(child_mark, 'the direct child has a real row identity')
     local invalid_id = child_mark[1]
     local state = buffer._state_for_test(bufnr)
@@ -1218,18 +1347,13 @@ H.describe('sync with expanded children', function()
       local marks = original_get_extmarks(mark_buf, ns, first, last, opts)
       if mark_buf == bufnr and ns == namespace then
         for _, mark in ipairs(marks) do
-          if mark[1] == invalid_id then
-            mark[4] = vim.tbl_extend('force', mark[4] or {}, { invalid = true })
-          end
+          if mark[1] == invalid_id then mark[4] = vim.tbl_extend('force', mark[4] or {}, { invalid = true }) end
         end
       end
       return marks
     end
     vim.api.nvim_buf_set_extmark = function(mark_buf, ns, row, col, opts)
-      if mark_buf == bufnr and ns == namespace and opts.id == invalid_id
-        and row == 1 then
-        restored = true
-      end
+      if mark_buf == bufnr and ns == namespace and opts.id == invalid_id and row == 1 then restored = true end
       return original_set_extmark(mark_buf, ns, row, col, opts)
     end
 
@@ -1238,9 +1362,12 @@ H.describe('sync with expanded children', function()
     -- version-specific natural invalidation behavior.
     local materialization_seq = vim.fn.undotree().seq_cur
     vim.cmd('undojoin')
-    vim.api.nvim_buf_set_text(bufnr, 4, 0, 4, #('root.txt'), { 'renamed.txt' })
-    H.assert_eq(vim.fn.undotree().seq_cur, materialization_seq,
-      'the root-only operation remains at the materialization undo baseline')
+    vim.api.nvim_buf_set_text(bufnr, 4, 0, 4, #'root.txt', { 'renamed.txt' })
+    H.assert_eq(
+      vim.fn.undotree().seq_cur,
+      materialization_seq,
+      'the root-only operation remains at the materialization undo baseline'
+    )
 
     local ok, sync_result, sync_err = pcall(function() return listing:sync() end)
     vim.api.nvim_buf_get_extmarks = original_get_extmarks
@@ -1249,13 +1376,23 @@ H.describe('sync with expanded children', function()
     H.assert_true(sync_result == true, tostring(sync_err))
 
     H.assert_true(restored, 'sync restored the actual direct-namespace child mark')
-    H.assert_fs_eq(ws, { 'renamed.txt', 'sub/', 'sub/nested/',
-      'sub/nested/deep.txt', 'sub/sibling.txt' }, 'the root rename applied')
+    H.assert_fs_eq(
+      ws,
+      { 'renamed.txt', 'sub/', 'sub/nested/', 'sub/nested/deep.txt', 'sub/sibling.txt' },
+      'the root rename applied'
+    )
     H.assert_buf_eq({
-      'sub/', '  nested/', '    deep.txt', '  sibling.txt', 'renamed.txt',
+      'sub/',
+      '  nested/',
+      '    deep.txt',
+      '  sibling.txt',
+      'renamed.txt',
     }, 0, 'unchanged child rows remain expanded and intact')
-    H.assert_eq(listing:get_paths(3, 3), { ws .. '/sub/nested/deep.txt' },
-      'nested child identity still resolves to its parent path')
+    H.assert_eq(
+      listing:get_paths(3, 3),
+      { ws .. '/sub/nested/deep.txt' },
+      'nested child identity still resolves to its parent path'
+    )
   end)
 
   H.it('duplicate reported-invalid child marks fail closed before filesystem effects', function()
@@ -1269,15 +1406,17 @@ H.describe('sync with expanded children', function()
     listing:expand(1)
     local bufnr = vim.api.nvim_get_current_buf()
     local namespace = vim.api.nvim_get_namespaces()['direct-listing-rows']
-    local child_mark = vim.api.nvim_buf_get_extmarks(bufnr, namespace,
-      { 1, 0 }, { 1, -1 }, {})[1]
+    local child_mark = vim.api.nvim_buf_get_extmarks(bufnr, namespace, { 1, 0 }, { 1, -1 }, {})[1]
     local original_get_extmarks = vim.api.nvim_buf_get_extmarks
     vim.api.nvim_buf_get_extmarks = function(mark_buf, ns, first, last, opts)
       local marks = original_get_extmarks(mark_buf, ns, first, last, opts)
       if mark_buf == bufnr and ns == namespace then
         for _ = 1, 2 do
           marks[#marks + 1] = {
-            child_mark[1], child_mark[2], child_mark[3], { invalid = true },
+            child_mark[1],
+            child_mark[2],
+            child_mark[3],
+            { invalid = true },
           }
         end
       end
@@ -1287,8 +1426,14 @@ H.describe('sync with expanded children', function()
     local original_yank, original_yank_deleted = register.yank, register.yank_deleted
     local register_before = register.content()
     local undo_before, redo_before = history_lines('undo.log'), history_lines('redo.log')
-    register.yank = function(...) yanked = yanked + 1; return original_yank(...) end
-    register.yank_deleted = function(...) yanked = yanked + 1; return original_yank_deleted(...) end
+    register.yank = function(...)
+      yanked = yanked + 1
+      return original_yank(...)
+    end
+    register.yank_deleted = function(...)
+      yanked = yanked + 1
+      return original_yank_deleted(...)
+    end
     local called, sync_result, reason = pcall(function() return listing:sync() end)
     vim.api.nvim_buf_get_extmarks = original_get_extmarks
     register.yank = original_yank
@@ -1299,8 +1444,7 @@ H.describe('sync with expanded children', function()
     H.assert_true(tostring(reason):find('identity', 1, true) ~= nil, tostring(reason))
     H.assert_eq(yanked, 0, 'malformed identity report stops before auto-yank')
     H.assert_true(vim.bo[bufnr].modified, 'refusal keeps the buffer modified')
-    H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' },
-      'malformed identity report has no filesystem effects')
+    H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' }, 'malformed identity report has no filesystem effects')
     H.assert_eq(register.content(), register_before, 'malformed identity leaves register unchanged')
     H.assert_eq(history_lines('undo.log'), undo_before, 'malformed identity writes no undo history')
     H.assert_eq(history_lines('redo.log'), redo_before, 'malformed identity leaves redo history unchanged')
@@ -1308,8 +1452,17 @@ H.describe('sync with expanded children', function()
 
   H.it('Windows path components reject device names and trailing dot/space aliases', function()
     local invalid = {
-      'CON', 'con.txt', 'PRN.log', 'AUX', 'NUL.txt', 'COM1', 'LPT9.ext',
-      'CON ', 'nul.txt ', 'CON.', 'normal.txt.',
+      'CON',
+      'con.txt',
+      'PRN.log',
+      'AUX',
+      'NUL.txt',
+      'COM1',
+      'LPT9.ext',
+      'CON ',
+      'nul.txt ',
+      'CON.',
+      'normal.txt.',
     }
     for _, name in ipairs(invalid) do
       H.assert_not_nil(buffer._component_reason(name, 'win32'), name .. ' is unsafe on Windows')
@@ -1317,14 +1470,11 @@ H.describe('sync with expanded children', function()
     for _, name in ipairs({ 'normal.txt', 'console.txt', 'COM10.txt', 'NULish' }) do
       H.assert_nil(buffer._component_reason(name, 'win32'), name .. ' is a valid non-device name')
     end
-    H.assert_nil(buffer._component_reason('literal\\name', 'posix'),
-      'POSIX backslashes remain literal')
+    H.assert_nil(buffer._component_reason('literal\\name', 'posix'), 'POSIX backslashes remain literal')
     for _, name in ipairs({ 'nested/CON.txt', 'nested/trailing.', 'nested/trailing ' }) do
-      H.assert_not_nil(buffer._nested_path_reason(name, 'win32'),
-        name .. ' has an unsafe nested Windows component')
+      H.assert_not_nil(buffer._nested_path_reason(name, 'win32'), name .. ' has an unsafe nested Windows component')
     end
-    H.assert_nil(buffer._nested_path_reason('nested/normal.txt', 'win32'),
-      'a normal nested Windows path is valid')
+    H.assert_nil(buffer._nested_path_reason('nested/normal.txt', 'win32'), 'a normal nested Windows path is valid')
   end)
 
   H.it('renames and deletes a root directory by identity while descendants are expanded', function()
@@ -1338,8 +1488,7 @@ H.describe('sync with expanded children', function()
     listing:expand(1)
     local register_calls, fs_mutations = 0, 0
     local yank_deleted = register.yank_deleted
-    local mutation_names = { 'rename', 'rename_noreplace', 'copy_file',
-      'copy_tree', 'rm_tree', 'mkdirp' }
+    local mutation_names = { 'rename', 'rename_noreplace', 'copy_file', 'copy_tree', 'rm_tree', 'mkdirp' }
     local original_fs = {}
     for _, name in ipairs(mutation_names) do
       local method_name = name
@@ -1349,27 +1498,34 @@ H.describe('sync with expanded children', function()
         return original_fs[method_name](...)
       end
     end
-    register.yank_deleted = function() register_calls = register_calls + 1; return true end
+    register.yank_deleted = function()
+      register_calls = register_calls + 1
+      return true
+    end
     local register_before = register.content()
     local undo_before, redo_before = history_lines('undo.log'), history_lines('redo.log')
     fs_mutations = 0
-    vim.api.nvim_buf_set_text(0, 0, 0, 0, #('sub/'), { 'other/' })
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, #'sub/', { 'other/' })
     local renamed, rename_err = listing:sync()
     H.assert_true(renamed == true, tostring(rename_err))
     H.assert_true(fs.exists(ws .. '/other'), 'the directory rename is applied')
-    H.assert_buf_eq({ 'other/', '  inside.txt', 'root.txt' }, 0,
-      'the renamed directory remains expanded after sync')
-    H.assert_eq(listing:get_paths(2, 2), { ws .. '/other/inside.txt' },
-      'the retained child identity resolves through the renamed directory')
+    H.assert_buf_eq({ 'other/', '  inside.txt', 'root.txt' }, 0, 'the renamed directory remains expanded after sync')
+    H.assert_eq(
+      listing:get_paths(2, 2),
+      { ws .. '/other/inside.txt' },
+      'the retained child identity resolves through the renamed directory'
+    )
 
     -- Restore the spelling, then delete the marked root row while retaining its
     -- materialized child. Its row identity still protects the subtree from root
     -- identity planning, while deleting the directory owns the entire tree.
-    vim.api.nvim_buf_set_text(0, 0, 0, 0, #('other/'), { 'sub/' })
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, #'other/', { 'sub/' })
     vim.api.nvim_buf_set_lines(0, 0, 1, false, {})
     local deleted, delete_err = listing:sync()
     register.yank_deleted = yank_deleted
-    for _, name in ipairs(mutation_names) do fs[name] = original_fs[name] end
+    for _, name in ipairs(mutation_names) do
+      fs[name] = original_fs[name]
+    end
     H.assert_false(fs.exists(ws .. '/other'), 'the selected directory was removed')
     H.assert_true(deleted == true, tostring(delete_err))
     H.assert_eq(register_calls, 1, 'the tree deletion is auto-yanked once')
@@ -1377,28 +1533,34 @@ H.describe('sync with expanded children', function()
     H.assert_eq(register.content(), register_before, 'blocked batches preserve register state')
     H.assert_fs_eq(ws, { 'root.txt' }, 'the expanded tree is deleted')
     H.assert_false(vim.bo.modified, 'successful sync clears modified state')
-    H.assert_true(#history_lines('undo.log') > #undo_before,
-      'the rename and directory removal are recorded in history')
-    H.assert_true(#history_lines('redo.log') >= #redo_before,
-      'history redo state remains well-formed')
+    H.assert_true(#history_lines('undo.log') > #undo_before, 'the rename and directory removal are recorded in history')
+    H.assert_true(#history_lines('redo.log') >= #redo_before, 'history redo state remains well-formed')
   end)
 
   H.it('malformed child structure and damaged identities refuse before filesystem effects', function()
     local cases = {
-      { name = 'duplicate child', edit = function()
-        vim.api.nvim_buf_set_lines(0, 2, 2, false, { '  inside.txt' })
-      end },
-      { name = 'odd indentation', edit = function()
-        vim.api.nvim_buf_set_lines(0, 2, 2, false, { '   malformed.txt' })
-      end },
-      { name = 'lost identity', edit = function()
-        local ns = vim.api.nvim_get_namespaces()['direct-listing-rows']
-        vim.api.nvim_buf_clear_namespace(0, ns, 0, -1)
-      end },
-      { name = 'duplicate identity position', edit = function()
-        local ns = vim.api.nvim_get_namespaces()['direct-listing-rows']
-        vim.api.nvim_buf_set_extmark(0, ns, 1, 0, { id = 1000 })
-      end },
+      {
+        name = 'duplicate child',
+        edit = function() vim.api.nvim_buf_set_lines(0, 2, 2, false, { '  inside.txt' }) end,
+      },
+      {
+        name = 'odd indentation',
+        edit = function() vim.api.nvim_buf_set_lines(0, 2, 2, false, { '   malformed.txt' }) end,
+      },
+      {
+        name = 'lost identity',
+        edit = function()
+          local ns = vim.api.nvim_get_namespaces()['direct-listing-rows']
+          vim.api.nvim_buf_clear_namespace(0, ns, 0, -1)
+        end,
+      },
+      {
+        name = 'duplicate identity position',
+        edit = function()
+          local ns = vim.api.nvim_get_namespaces()['direct-listing-rows']
+          vim.api.nvim_buf_set_extmark(0, ns, 1, 0, { id = 1000 })
+        end,
+      },
     }
     for _, case in ipairs(cases) do
       clean_buffers()
@@ -1412,19 +1574,25 @@ H.describe('sync with expanded children', function()
       case.edit()
       local yanked = 0
       local yank, yank_deleted = register.yank, register.yank_deleted
-      register.yank = function() yanked = yanked + 1; return true end
-      register.yank_deleted = function() yanked = yanked + 1; return true end
+      register.yank = function()
+        yanked = yanked + 1
+        return true
+      end
+      register.yank_deleted = function()
+        yanked = yanked + 1
+        return true
+      end
       local ok, reason = listing:sync()
       register.yank = yank
       register.yank_deleted = yank_deleted
       H.assert_nil(ok, case.name .. ' was refused')
-      H.assert_true(tostring(reason):find('child', 1, true) ~= nil
-        or tostring(reason):find('identity', 1, true) ~= nil,
-        case.name .. ': ' .. tostring(reason))
+      H.assert_true(
+        tostring(reason):find('child', 1, true) ~= nil or tostring(reason):find('identity', 1, true) ~= nil,
+        case.name .. ': ' .. tostring(reason)
+      )
       H.assert_eq(yanked, 0, case.name .. ' stops before auto-yank')
       H.assert_true(vim.bo.modified, case.name .. ' remains modified')
-      H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' },
-        case.name .. ' has no filesystem effects')
+      H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' }, case.name .. ' has no filesystem effects')
       H.assert_eq(history_lines('undo.log'), {}, case.name .. ' writes no history')
     end
   end)
@@ -1443,7 +1611,10 @@ H.describe('sync with expanded children', function()
     vim.api.nvim_buf_set_lines(0, 0, 1, false, {})
     local yanked = 0
     local yank_deleted = register.yank_deleted
-    register.yank_deleted = function() yanked = yanked + 1; return true end
+    register.yank_deleted = function()
+      yanked = yanked + 1
+      return true
+    end
     local ok = listing:sync()
     register.yank_deleted = yank_deleted
 
@@ -1486,8 +1657,7 @@ H.describe('sync with expanded children', function()
     H.assert_fs_eq(ws, { 'root.txt' }, 'one directory removal covers its children')
     local undo = history_lines('undo.log')
     H.assert_eq(#undo, 2, 'one rmdir action is recorded, not duplicate child removals')
-    H.assert_eq(decode_record(undo, 2).src, ws .. '/sub/',
-      'history contains the directory-tree removal')
+    H.assert_eq(decode_record(undo, 2).src, ws .. '/sub/', 'history contains the directory-tree removal')
   end)
 
   H.it('root deletion followed by same-text reinsertion does not revive its identity', function()
@@ -1504,8 +1674,7 @@ H.describe('sync with expanded children', function()
     local ok, err = listing:sync()
 
     H.assert_true(ok == true, tostring(err))
-    H.assert_buf_eq({ 'sub/' }, 0,
-      'reinserted text gets a fresh identity instead of inheriting stale children')
+    H.assert_buf_eq({ 'sub/' }, 0, 'reinserted text gets a fresh identity instead of inheriting stale children')
     H.assert_fs_eq(ws, { 'sub/', 'sub/inside.txt' }, 'no filesystem action was needed')
   end)
 
@@ -1525,13 +1694,15 @@ H.describe('sync with expanded children', function()
 
     H.assert_nil(ok, 'missing identity is not guessed from row position or spelling')
     H.assert_true(tostring(reason):find('identity', 1, true) ~= nil, tostring(reason))
-    H.assert_true(tostring(reason):find(':DirectList!', 1, true) ~= nil
-      and tostring(reason):find('redo the change', 1, true) ~= nil,
-      'the refusal gives a clear recovery path')
-    H.assert_false(tostring(reason):find('re-list this directory', 1, true) ~= nil,
-      'the refusal does not suggest a refresh that would discard the edits')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'a.txt')), { 'original' },
-      'the filesystem is unchanged')
+    H.assert_true(
+      tostring(reason):find(':DirectList!', 1, true) ~= nil and tostring(reason):find('redo the change', 1, true) ~= nil,
+      'the refusal gives a clear recovery path'
+    )
+    H.assert_false(
+      tostring(reason):find('re-list this directory', 1, true) ~= nil,
+      'the refusal does not suggest a refresh that would discard the edits'
+    )
+    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'a.txt')), { 'original' }, 'the filesystem is unchanged')
     H.assert_eq(history_lines('undo.log'), {}, 'no history is written')
     H.assert_true(vim.bo[bufnr].modified, 'the row remains available for review')
   end)
@@ -1545,8 +1716,7 @@ H.describe('sync with expanded children', function()
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { malicious })
       local ok, reason = listing:sync()
       H.assert_nil(ok, malicious .. ' is rejected')
-      H.assert_true(tostring(reason):find('component', 1, true) ~= nil,
-        malicious .. ': ' .. tostring(reason))
+      H.assert_true(tostring(reason):find('component', 1, true) ~= nil, malicious .. ': ' .. tostring(reason))
       H.assert_false(fs.exists(sb.root .. '/escaped'), 'parent traversal did not escape')
       H.assert_false(fs.exists(ws .. '/x'), 'nested component was not created')
       H.assert_eq(history_lines('undo.log'), {}, 'unsafe input writes no history')
@@ -1559,7 +1729,7 @@ H.describe('sync with expanded children', function()
     local ws = H.mkdir(sb.root, 'ws')
     H.mkfile(ws, 'old.txt', { 'old' })
     local listing = buffer.list(ws)
-    vim.api.nvim_buf_set_text(0, 0, 1, 0, #('old.txt'), { '/new.txt' })
+    vim.api.nvim_buf_set_text(0, 0, 1, 0, #'old.txt', { '/new.txt' })
     local ok, reason = listing:sync()
     H.assert_nil(ok, 'a rename cannot use a nested destination')
     H.assert_true(tostring(reason):find('component', 1, true) ~= nil, tostring(reason))
@@ -1591,9 +1761,7 @@ H.describe('sync with expanded children', function()
   end)
 
   H.it('accepts POSIX literal backslashes in filename components', function()
-    if H.is_windows() then
-      H.skip('a backslash is a path separator on Windows, not a literal filename byte')
-    end
+    if H.is_windows() then H.skip('a backslash is a path separator on Windows, not a literal filename byte') end
     clean_buffers()
     local sb = H.sandbox()
     local ws = H.mkdir(sb.root, 'ws')

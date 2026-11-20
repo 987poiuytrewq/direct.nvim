@@ -12,9 +12,7 @@ local H = require('tests.support.harness')
 -- the check below scans mapping values, not repository source files.
 local RETIRED = 'direct' .. '#'
 
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 -- buf_maps(bufnr, mode) -> { [lhs] = rhs } for the buffer-local mappings.
 local function buf_maps(bufnr, mode)
@@ -38,9 +36,7 @@ end
 -- can never masquerade as the global one.
 local function global_map(lhs)
   for _, m in ipairs(vim.api.nvim_get_keymap('n')) do
-    if m.lhs == lhs then
-      return m
-    end
+    if m.lhs == lhs then return m end
   end
   return nil
 end
@@ -179,8 +175,10 @@ H.describe('entry: command surface', function()
     vim.cmd('write')
     H.wait_for_direct()
 
-    H.assert_true(vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) ~= nil,
-      'the write routed to the sync and created new.txt')
+    H.assert_true(
+      vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')) ~= nil,
+      'the write routed to the sync and created new.txt'
+    )
     H.assert_false(vim.bo[buf].modified, 'the write cleared modified')
   end)
 
@@ -209,22 +207,32 @@ H.describe('entry: command surface', function()
     H.assert_true(api.open({ split = 'horizontal' }), 'horizontal split opens the directory')
     H.assert_true(vim.api.nvim_get_current_win() ~= source_win, 'a new horizontal window is current')
     H.assert_eq(vim.bo.filetype, 'direct', 'the split shows a direct listing')
-    H.assert_true(require('direct.fs').same_path(vim.api.nvim_buf_get_name(0), directory),
-      'the child directory is listed in the split')
+    H.assert_true(
+      require('direct.fs').same_path(vim.api.nvim_buf_get_name(0), directory),
+      'the child directory is listed in the split'
+    )
     H.assert_true(vim.api.nvim_buf_is_valid(source_buf), 'the original listing buffer survives')
-    H.assert_eq(vim.api.nvim_buf_get_lines(source_buf, 0, -1, false), preserved_lines,
-      'the original listing text is unchanged')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(source_buf, 0, -1, false),
+      preserved_lines,
+      'the original listing text is unchanged'
+    )
     H.assert_true(vim.bo[source_buf].modified, 'the original listing remains modified')
     vim.cmd('close')
     vim.api.nvim_set_current_win(source_win)
 
     vim.api.nvim_win_set_cursor(source_win, { row_for('file.txt'), 0 })
     H.assert_true(api.open({ split = 'vertical' }), 'vertical split opens a file')
-    H.assert_true(require('direct.fs').same_path(vim.api.nvim_buf_get_name(0), file),
-      'the requested file opens in the vertical split')
+    H.assert_true(
+      require('direct.fs').same_path(vim.api.nvim_buf_get_name(0), file),
+      'the requested file opens in the vertical split'
+    )
     H.assert_true(vim.api.nvim_buf_is_valid(source_buf), 'opening the file keeps the source buffer')
-    H.assert_eq(vim.api.nvim_buf_get_lines(source_buf, 0, -1, false), preserved_lines,
-      'the dirty source listing is untouched by the file open')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(source_buf, 0, -1, false),
+      preserved_lines,
+      'the dirty source listing is untouched by the file open'
+    )
     vim.cmd('close')
     vim.api.nvim_set_current_win(source_win)
 
@@ -236,15 +244,17 @@ H.describe('entry: command surface', function()
     H.assert_true(vim.api.nvim_buf_is_valid(source_buf), 'the original buffer survives the tab open')
     vim.cmd('tabclose')
     H.assert_eq(vim.api.nvim_get_current_buf(), source_buf, 'closing the new tab returns to the listing')
-    H.assert_eq(vim.api.nvim_buf_get_lines(source_buf, 0, -1, false), preserved_lines,
-      'the original listing still contains its unsaved edit')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(source_buf, 0, -1, false),
+      preserved_lines,
+      'the original listing still contains its unsaved edit'
+    )
     H.assert_true(vim.bo[source_buf].modified, 'the original modified flag is preserved')
 
     local before_tabs = #vim.api.nvim_list_tabpages()
     local rejected, split_err = api.open({ split = 'diagonal' })
     H.assert_nil(rejected, 'unsupported split names are refused')
-    H.assert_true(tostring(split_err):find('horizontal', 1, true) ~= nil,
-      'the returned error lists supported layouts')
+    H.assert_true(tostring(split_err):find('horizontal', 1, true) ~= nil, 'the returned error lists supported layouts')
     H.assert_eq(#vim.api.nvim_list_tabpages(), before_tabs, 'invalid options open no windows')
   end)
 
@@ -256,9 +266,7 @@ H.describe('entry: command surface', function()
 
     local registered = false
     for _, au in ipairs(vim.api.nvim_get_autocmds({ group = 'direct', event = 'BufEnter' })) do
-      if au.pattern == '*' then
-        registered = true
-      end
+      if au.pattern == '*' then registered = true end
     end
     H.assert_true(registered, 'the BufEnter intercept is registered in the direct augroup')
 
@@ -286,26 +294,57 @@ H.describe('entry: command surface', function()
     H.capture_messages()
     vim.api.nvim_exec_autocmds('BufEnter', {})
     H.assert_true(vim.bo.filetype ~= 'direct', 'a file buffer is not converted')
-    H.assert_false(H.messages():find('cannot list', 1, true) ~= nil,
-      'the intercept attempted no listing for a regular file')
+    H.assert_false(
+      H.messages():find('cannot list', 1, true) ~= nil,
+      'the intercept attempted no listing for a regular file'
+    )
   end)
 end)
 
 H.describe('entry: direct-buffer guard', function()
   H.it('the public API exposes every facade function', function()
     local api = require('direct')
-    local expected = { 'setup', 'list', 'list_buffer', 'list_cwd', 'open', 'open_parent_expanded',
-      'expand', 'collapse', 'toggle', 'expand_recursive', 'collapse_recursive',
-      'toggle_recursive', 'next_directory', 'previous_directory',
+    local expected = {
+      'setup',
+      'list',
+      'list_buffer',
+      'list_cwd',
+      'open',
+      'open_parent_expanded',
+      'expand',
+      'collapse',
+      'toggle',
+      'expand_recursive',
+      'collapse_recursive',
+      'toggle_recursive',
+      'next_directory',
+      'previous_directory',
       'toggle_hidden',
       'toggle_collapse_single_entry_directories',
       'toggle_gitignore',
       'toggle_git_status',
       'show_git_status',
       'git_diff',
-      'next_change', 'previous_change', 'next_file', 'previous_file',
-      'sync', 'fold_all', 'unfold_all', 'undo', 'redo', 'reset_history', 'yank', 'paste',
-      'paste_as', 'run', 'git', 'restore_git', 'trash_list', 'trash_restore', 'trash_empty' }
+      'next_change',
+      'previous_change',
+      'next_file',
+      'previous_file',
+      'sync',
+      'fold_all',
+      'unfold_all',
+      'undo',
+      'redo',
+      'reset_history',
+      'yank',
+      'paste',
+      'paste_as',
+      'run',
+      'git',
+      'restore_git',
+      'trash_list',
+      'trash_restore',
+      'trash_empty',
+    }
     local actual = {}
     for name, value in pairs(api) do
       actual[#actual + 1] = name
@@ -332,8 +371,7 @@ H.describe('entry: direct-buffer guard', function()
     vim.api.nvim_win_set_cursor(0, { 2, 0 })
 
     H.assert_true(api.expand(), 'expand opens one level')
-    H.assert_buf_eq({ 'other/', 'sub/', '  nested/' }, 0,
-      'expand materializes immediate children')
+    H.assert_buf_eq({ 'other/', 'sub/', '  nested/' }, 0, 'expand materializes immediate children')
     H.assert_true(api.collapse(), 'collapse removes the selected subtree')
     H.assert_buf_eq({ 'other/', 'sub/' }, 0)
     H.assert_true(api.toggle(), 'toggle expands a collapsed directory')
@@ -379,22 +417,17 @@ H.describe('entry: direct-buffer guard', function()
       { name = 'DirectUnfoldAll', call = function(api) return api.unfold_all() end },
       { name = 'DirectYank', call = function(api) return api.yank(1, 1) end },
       { name = 'DirectToggleHidden', call = function(api) return api.toggle_hidden() end },
-      { name = 'DirectToggleDirectoryCollapse',
-        call = function(api) return api.toggle_collapse_single_entry_directories() end },
-      { name = 'DirectToggleGitStatus',
-        call = function(api) return api.toggle_git_status() end },
-      { name = 'DirectToggleGitIgnore',
-        call = function(api) return api.toggle_gitignore() end },
-      { name = 'DirectGitStatus',
-        call = function(api) return api.show_git_status() end },
-      { name = 'DirectNextChange',
-        call = function(api) return api.next_change() end },
-      { name = 'DirectPreviousChange',
-        call = function(api) return api.previous_change() end },
-      { name = 'DirectNextFile',
-        call = function(api) return api.next_file() end },
-      { name = 'DirectPreviousFile',
-        call = function(api) return api.previous_file() end },
+      {
+        name = 'DirectToggleDirectoryCollapse',
+        call = function(api) return api.toggle_collapse_single_entry_directories() end,
+      },
+      { name = 'DirectToggleGitStatus', call = function(api) return api.toggle_git_status() end },
+      { name = 'DirectToggleGitIgnore', call = function(api) return api.toggle_gitignore() end },
+      { name = 'DirectGitStatus', call = function(api) return api.show_git_status() end },
+      { name = 'DirectNextChange', call = function(api) return api.next_change() end },
+      { name = 'DirectPreviousChange', call = function(api) return api.previous_change() end },
+      { name = 'DirectNextFile', call = function(api) return api.next_file() end },
+      { name = 'DirectPreviousFile', call = function(api) return api.previous_file() end },
       { name = 'DirectPaste', call = function(api) return api.paste() end },
       { name = 'DirectPasteAs', call = function(api) return api.paste_as('x.txt') end },
       { name = 'DirectRun', call = function(api) return api.run('echo {}') end },
@@ -511,8 +544,10 @@ H.describe('entry: direct-buffer guard', function()
     clean_buffers()
     local sb = H.sandbox()
     H.mkfile(sb.root, 'src.txt', { 's' })
-    H.assert_true(require('direct.register').yank({ vim.fs.joinpath(sb.root, 'src.txt') }) == true,
-      'the register holds src.txt')
+    H.assert_true(
+      require('direct.register').yank({ vim.fs.joinpath(sb.root, 'src.txt') }) == true,
+      'the register holds src.txt'
+    )
     local dst = H.mkdir(sb.root, 'dst')
     local file = H.mkfile(sb.root, 'plain.txt', { 'keep' })
     enter_buffer_named(file)
@@ -523,11 +558,12 @@ H.describe('entry: direct-buffer guard', function()
     local result = require('direct').paste(dst)
 
     H.assert_true(result ~= nil, 'the {dir} form pastes without the direct-buffer guard')
-    H.assert_true(vim.uv.fs_stat(vim.fs.joinpath(dst, 'src.txt')) ~= nil,
-      'src.txt was pasted into {dir}')
+    H.assert_true(vim.uv.fs_stat(vim.fs.joinpath(dst, 'src.txt')) ~= nil, 'src.txt was pasted into {dir}')
     H.assert_buf_eq({ 'keep' })
-    H.assert_false(H.messages():find('can only be used in a direct buffer', 1, true) ~= nil,
-      'the {dir} form never raised the guard notice')
+    H.assert_false(
+      H.messages():find('can only be used in a direct buffer', 1, true) ~= nil,
+      'the {dir} form never raised the guard notice'
+    )
   end)
 
   H.it(':DirectPaste targets the selected directory and refreshes its open folds', function()
@@ -541,8 +577,7 @@ H.describe('entry: direct-buffer guard', function()
     H.mkfile(target, 'old.txt', { 'old' })
     H.mkfile(nested, 'leaf.txt', { 'leaf' })
     local source = H.mkfile(sb.root, 'source.txt', { 'source' })
-    H.assert_true(require('direct.register').yank({ source }) == true,
-      'the register holds source.txt')
+    H.assert_true(require('direct.register').yank({ source }) == true, 'the register holds source.txt')
 
     local listing = require('direct').list(ws)
     listing:expand(1) -- parent/
@@ -552,10 +587,8 @@ H.describe('entry: direct-buffer guard', function()
 
     vim.cmd('DirectPaste')
 
-    H.assert_true(H.exists(target, 'source.txt'),
-      'paste lands in the selected nested directory')
-    H.assert_false(H.exists(ws, 'source.txt'),
-      'paste does not use the listing root')
+    H.assert_true(H.exists(target, 'source.txt'), 'paste lands in the selected nested directory')
+    H.assert_false(H.exists(ws, 'source.txt'), 'paste does not use the listing root')
     H.assert_buf_eq({
       'parent/',
       '  target/',
@@ -564,8 +597,7 @@ H.describe('entry: direct-buffer guard', function()
       '    old.txt',
       '    source.txt',
     }, 0, 'the refreshed listing retains both open directory folds')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 6, 4 },
-      'the cursor lands on the pasted entry name')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 6, 4 }, 'the cursor lands on the pasted entry name')
     require('direct.config').setup({})
   end)
 
@@ -575,18 +607,15 @@ H.describe('entry: direct-buffer guard', function()
     local ws = H.mkdir(sb.root, 'ws')
     local target = H.mkdir(ws, 'target')
     local source = H.mkfile(sb.root, 'source.txt', { 'source' })
-    H.assert_true(require('direct.register').yank({ source }) == true,
-      'the register holds source.txt')
+    H.assert_true(require('direct.register').yank({ source }) == true, 'the register holds source.txt')
 
     require('direct').list(ws)
     vim.api.nvim_win_set_cursor(0, { 1, 0 }) -- target/, still collapsed
     vim.cmd('DirectPaste')
 
     H.assert_true(H.exists(target, 'source.txt'), 'paste lands in target/')
-    H.assert_buf_eq({ 'target/', '  source.txt' },
-      0, 'the destination unfolds to show the pasted entry')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 2, 2 },
-      'the cursor lands on the first character of the pasted name')
+    H.assert_buf_eq({ 'target/', '  source.txt' }, 0, 'the destination unfolds to show the pasted entry')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 2, 2 }, 'the cursor lands on the first character of the pasted name')
   end)
 
   H.it(':DirectPaste unfolds a pasted directory and leaves the cursor on it', function()
@@ -595,27 +624,27 @@ H.describe('entry: direct-buffer guard', function()
     local ws = H.mkdir(sb.root, 'ws')
     local source = H.mkdir(sb.root, 'tree')
     H.mkfile(source, 'leaf.txt', { 'leaf' })
-    H.assert_true(require('direct.register').yank({ source }) == true,
-      'the register holds tree/')
+    H.assert_true(require('direct.register').yank({ source }) == true, 'the register holds tree/')
 
     require('direct').list(ws)
     vim.cmd('DirectPaste')
 
-    H.assert_buf_eq({ 'tree/', '  leaf.txt' },
-      0, 'the pasted directory is unfolded')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 1, 0 },
-      'the cursor stays on the first character of the pasted directory')
+    H.assert_buf_eq({ 'tree/', '  leaf.txt' }, 0, 'the pasted directory is unfolded')
+    H.assert_eq(
+      vim.api.nvim_win_get_cursor(0),
+      { 1, 0 },
+      'the cursor stays on the first character of the pasted directory'
+    )
   end)
 
-  H.it(':DirectPasteAs on a file targets that file\'s parent, including under an open fold', function()
+  H.it(":DirectPasteAs on a file targets that file's parent, including under an open fold", function()
     clean_buffers()
     local sb = H.sandbox()
     local ws = H.mkdir(sb.root, 'ws')
     local parent = H.mkdir(ws, 'parent')
     local target = H.mkfile(parent, 'target.txt', { 'target' })
     local source = H.mkfile(sb.root, 'source.txt', { 'source' })
-    H.assert_true(require('direct.register').yank({ source }) == true,
-      'the register holds source.txt')
+    H.assert_true(require('direct.register').yank({ source }) == true, 'the register holds source.txt')
 
     local listing = require('direct').list(ws)
     listing:expand(1)
@@ -623,17 +652,19 @@ H.describe('entry: direct-buffer guard', function()
 
     vim.cmd('DirectPasteAs copied.txt')
 
-    H.assert_true(H.exists(parent, 'copied.txt'),
-      'paste-as lands beside the selected file')
-    H.assert_false(H.exists(ws, 'copied.txt'),
-      'paste-as does not use the listing root')
-    H.assert_eq(vim.fn.readfile(parent .. '/copied.txt'), { 'source' },
-      'the copied content is intact')
+    H.assert_true(H.exists(parent, 'copied.txt'), 'paste-as lands beside the selected file')
+    H.assert_false(H.exists(ws, 'copied.txt'), 'paste-as does not use the listing root')
+    H.assert_eq(vim.fn.readfile(parent .. '/copied.txt'), { 'source' }, 'the copied content is intact')
     H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), {
-      'parent/', '  copied.txt', '  target.txt',
+      'parent/',
+      '  copied.txt',
+      '  target.txt',
     }, 'the open parent fold is refreshed')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 2, 2 },
-      'the cursor lands on the first character of the pasted-as entry')
+    H.assert_eq(
+      vim.api.nvim_win_get_cursor(0),
+      { 2, 2 },
+      'the cursor lands on the first character of the pasted-as entry'
+    )
     H.assert_true(H.exists(target), 'the original selected file remains untouched')
   end)
 end)
@@ -644,9 +675,7 @@ H.describe('entry: default mappings', function()
     require('direct.config').setup({ map_default_keys = true })
     local m = global_map('-')
     H.assert_true(m ~= nil, 'the global - mapping exists')
-    if m then
-      H.assert_eq(m.rhs, ':<C-U>DirectListBuffer<CR>', 'the global - lists the buffer directory')
-    end
+    if m then H.assert_eq(m.rhs, ':<C-U>DirectListBuffer<CR>', 'the global - lists the buffer directory') end
   end)
 
   H.it('all default buffer-local mappings resolve to their commands and none call the retired Vimscript', function()
@@ -684,16 +713,16 @@ H.describe('entry: default mappings', function()
     }
     for lhs, desc in pairs(fold_descriptions) do
       local record = normal_records[lhs]
-      H.assert_true(record and record.callback ~= nil,
-        'direct mapping ' .. lhs .. ' uses a Lua callback')
-      H.assert_eq(record and record.desc, desc,
-        'fold mapping description ' .. lhs)
+      H.assert_true(record and record.callback ~= nil, 'direct mapping ' .. lhs .. ' uses a Lua callback')
+      H.assert_eq(record and record.desc, desc, 'fold mapping description ' .. lhs)
     end
 
     for _, maps in ipairs({ normal, visual }) do
       for lhs, rhs in pairs(maps) do
-        H.assert_false(rhs:find(RETIRED, 1, true) ~= nil,
-          'the rhs of ' .. lhs .. ' must not call the retired Vimscript function')
+        H.assert_false(
+          rhs:find(RETIRED, 1, true) ~= nil,
+          'the rhs of ' .. lhs .. ' must not call the retired Vimscript function'
+        )
       end
     end
   end)
@@ -714,11 +743,12 @@ H.describe('entry: default mappings', function()
 
     H.assert_true(require('direct').open_parent_expanded(), 'z- navigation succeeds')
 
-    H.assert_true(require('direct.fs').same_path(vim.api.nvim_buf_get_name(0), parent),
-      'the parent directory listing is current')
+    H.assert_true(
+      require('direct.fs').same_path(vim.api.nvim_buf_get_name(0), parent),
+      'the parent directory listing is current'
+    )
     H.assert_buf_eq({ 'child/', '  inside.txt', 'sibling.txt' })
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 1,
-      'the cursor remains on the directory that was just left')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 1, 'the cursor remains on the directory that was just left')
   end)
 
   H.it('map_default_keys=false installs no global, standard, or fold mappings', function()
@@ -742,20 +772,36 @@ H.describe('entry: default mappings', function()
     for lhs in pairs(EXPECTED_N) do
       local rhs = normal[lhs]
       if rhs ~= nil then
-        H.assert_false(rhs:find('<Cmd>', 1, true) ~= nil,
-          'the opt-out must not install the Lua mapping for normal ' .. lhs)
+        H.assert_false(
+          rhs:find('<Cmd>', 1, true) ~= nil,
+          'the opt-out must not install the Lua mapping for normal ' .. lhs
+        )
       end
     end
     H.assert_nil(normal.gh, 'the opt-out does not install the hidden toggle mapping')
-    for _, lhs in ipairs({ 'zo', 'za', 'zc', 'zO', 'zA', 'zC', 'zR', 'zM', '[d', ']d',
-      '<LeftMouse>', '<2-LeftMouse>' }) do
+    for _, lhs in ipairs({
+      'zo',
+      'za',
+      'zc',
+      'zO',
+      'zA',
+      'zC',
+      'zR',
+      'zM',
+      '[d',
+      ']d',
+      '<LeftMouse>',
+      '<2-LeftMouse>',
+    }) do
       H.assert_nil(normal_records[lhs], 'the opt-out leaves fold key ' .. lhs .. ' unmapped')
     end
     for lhs in pairs(EXPECTED_V) do
       local rhs = visual[lhs]
       if rhs ~= nil then
-        H.assert_false(rhs:find('require("direct")', 1, true) ~= nil,
-          'the opt-out must not install the Lua mapping for visual ' .. lhs)
+        H.assert_false(
+          rhs:find('require("direct")', 1, true) ~= nil,
+          'the opt-out must not install the Lua mapping for visual ' .. lhs
+        )
       end
     end
   end)

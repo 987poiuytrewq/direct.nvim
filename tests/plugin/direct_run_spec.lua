@@ -2,9 +2,7 @@
 
 local H = require('tests.support.harness')
 
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 local function find_line(text)
   for row, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
@@ -14,7 +12,9 @@ end
 
 local function git(root, ...)
   local args = { 'git', '-C', root }
-  for _, arg in ipairs({ ... }) do args[#args + 1] = arg end
+  for _, arg in ipairs({ ... }) do
+    args[#args + 1] = arg
+  end
   local result = vim.system(args, { text = true }):wait()
   if result.code ~= 0 then error(result.stderr) end
   return result.stdout
@@ -25,7 +25,7 @@ H.describe('DirectRun', function()
     clean_buffers()
     local sb = H.sandbox()
     local ws = H.mkdir(sb.root, 'workspace')
-    local name = "file with spaces;$(touch nope).txt"
+    local name = 'file with spaces;$(touch nope).txt'
     local path = H.mkfile(ws, name, { 'content' })
     require('direct').list(ws)
     vim.api.nvim_win_set_cursor(0, { find_line(name), 0 })
@@ -42,22 +42,20 @@ H.describe('DirectRun', function()
 
     H.assert_eq(result, process, 'returns the asynchronous process handle')
     H.assert_eq(launched.argv[1], vim.o.shell, 'uses the configured shell')
-    local expected = ('git add {} && printf %s {}'):gsub('%{%}', function()
-      return vim.fn.shellescape(path)
-    end)
+    local expected = ('git add {} && printf %s {}'):gsub('%{%}', function() return vim.fn.shellescape(path) end)
     local actual = launched.argv[#launched.argv]
     if H.is_windows() then
       H.assert_eq(launched.argv[2], '/d', 'uses a non-interactive cmd instance')
       H.assert_eq(launched.argv[3], '/c', 'runs the batch command')
       actual = table.concat(vim.fn.readfile(actual), '\n')
     end
-    H.assert_eq(actual, expected,
-      'replaces each placeholder with one shell-escaped absolute path')
+    H.assert_eq(actual, expected, 'replaces each placeholder with one shell-escaped absolute path')
     H.assert_eq(launched.opts.cwd, ws, 'runs in the listing directory')
     H.assert_true(launched.opts.text, 'captures text output')
-    H.assert_true(vim.wait(1000, function()
-      return H.messages():find('warning', 1, true) ~= nil
-    end), 'reports captured output when the process completes')
+    H.assert_true(
+      vim.wait(1000, function() return H.messages():find('warning', 1, true) ~= nil end),
+      'reports captured output when the process completes'
+    )
     H.assert_notified('status 0')
     H.assert_notified('staged')
     H.assert_notified('warning')
@@ -74,12 +72,12 @@ H.describe('DirectRun', function()
     vim.api.nvim_win_set_cursor(0, { 2, 0 })
     H.capture_messages()
 
-    local command = H.is_windows()
-      and 'echo {} & exit /b 7' or [[printf '%s' {} ; exit 7]]
+    local command = H.is_windows() and 'echo {} & exit /b 7' or [[printf '%s' {} ; exit 7]]
     vim.cmd('DirectRun ' .. command)
-    H.assert_true(vim.wait(3000, function()
-      return H.messages():find(path, 1, true) ~= nil
-    end), 'shell receives the expanded child path as one argument')
+    H.assert_true(
+      vim.wait(3000, function() return H.messages():find(path, 1, true) ~= nil end),
+      'shell receives the expanded child path as one argument'
+    )
     H.assert_notified('status 7')
   end)
 
@@ -95,12 +93,12 @@ H.describe('DirectRun', function()
     local notifications, refreshes = {}, 0
     local ui = require('direct.ui')
     local buffer = require('direct.buffer.buffer')
-    local restore_notify = H.stub(ui, 'notify', function(message, level)
-      notifications[#notifications + 1] = { message = message, level = level }
-    end)
-    local restore_refresh = H.stub(buffer, 'refresh_git_status', function()
-      refreshes = refreshes + 1
-    end)
+    local restore_notify = H.stub(
+      ui,
+      'notify',
+      function(message, level) notifications[#notifications + 1] = { message = message, level = level } end
+    )
+    local restore_refresh = H.stub(buffer, 'refresh_git_status', function() refreshes = refreshes + 1 end)
     local exit_result = { code = 0, stdout = 'staged output\n', stderr = 'warning\n' }
     local restore_system = H.stub(vim, 'system', function(_, _, on_exit)
       on_exit(exit_result)
@@ -109,22 +107,26 @@ H.describe('DirectRun', function()
 
     local success = require('direct').git('git add -- {}')
     H.assert_not_nil(success, 'starts the Git command')
-    H.assert_true(vim.wait(1000, function() return refreshes == 1 end),
-      'refreshes Git status after a successful command')
+    H.assert_true(
+      vim.wait(1000, function() return refreshes == 1 end),
+      'refreshes Git status after a successful command'
+    )
     H.assert_eq(notifications, {}, 'does not notify successful Git output')
 
     exit_result = { code = 1, stdout = '', stderr = 'permission denied\n' }
     local failure = require('direct').git('git add -- {}')
     H.assert_not_nil(failure, 'starts the failing Git command')
-    H.assert_true(vim.wait(1000, function() return refreshes == 2 end),
-      'still refreshes after a failed command')
+    H.assert_true(vim.wait(1000, function() return refreshes == 2 end), 'still refreshes after a failed command')
     H.assert_eq(#notifications, 1, 'reports the failed Git command once')
-    H.assert_true(notifications[1].message:find('status 1', 1, true) ~= nil,
-      'failure notification includes the exit status')
-    H.assert_true(notifications[1].message:find('permission denied', 1, true) ~= nil,
-      'failure notification includes stderr')
-    H.assert_eq(notifications[1].level, vim.log.levels.ERROR,
-      'failure notification uses the error level')
+    H.assert_true(
+      notifications[1].message:find('status 1', 1, true) ~= nil,
+      'failure notification includes the exit status'
+    )
+    H.assert_true(
+      notifications[1].message:find('permission denied', 1, true) ~= nil,
+      'failure notification includes stderr'
+    )
+    H.assert_eq(notifications[1].level, vim.log.levels.ERROR, 'failure notification uses the error level')
 
     restore_system()
     restore_refresh()
@@ -190,10 +192,13 @@ H.describe('DirectRun', function()
 
     require('direct').setup({ git = { enabled = true } })
     require('direct').list(root)
-    H.assert_true(vim.wait(5000, function()
-      local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
-      return state and not state.git_status_pending
-    end), 'Git status completes before selecting deleted rows')
+    H.assert_true(
+      vim.wait(5000, function()
+        local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
+        return state and not state.git_status_pending
+      end),
+      'Git status completes before selecting deleted rows'
+    )
     local row = find_line('gone.txt')
     H.assert_not_nil(row, 'the deleted tracked row is visible')
     vim.api.nvim_win_set_cursor(0, { row, 0 })
@@ -206,8 +211,7 @@ H.describe('DirectRun', function()
       shell_command = direct.run('test ! -e {}')
     end
     H.assert_not_nil(shell_command, 'DirectRun accepts a missing tracked row')
-    H.assert_eq(shell_command:wait().code, 0,
-      'DirectRun receives the absent path for an arbitrary command')
+    H.assert_eq(shell_command:wait().code, 0, 'DirectRun receives the absent path for an arbitrary command')
 
     local add = direct.git('git add -- {}')
     H.assert_not_nil(add, 'DirectGit accepts a missing Git-deleted row')
@@ -217,16 +221,18 @@ H.describe('DirectRun', function()
       return state and state.git_status and state.git_status.paths[path] == 'D '
     end)
     local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
-    H.assert_true(staged, 'ga-style Git add updates the row status: '
-      .. vim.inspect(state and state.git_status))
+    H.assert_true(staged, 'ga-style Git add updates the row status: ' .. vim.inspect(state and state.git_status))
 
     local reset = direct.git('git reset -- {}')
     H.assert_not_nil(reset, 'reset runs for a deleted row')
     reset:wait()
-    H.assert_true(vim.wait(3000, function()
-      local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
-      return state and state.git_status and state.git_status.paths[path] == ' D'
-    end), 'Git reset updates the row status')
+    H.assert_true(
+      vim.wait(3000, function()
+        local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
+        return state and state.git_status and state.git_status.paths[path] == ' D'
+      end),
+      'Git reset updates the row status'
+    )
 
     local directory_row = find_line('gone-dir/')
     H.assert_not_nil(directory_row, 'missing tracked directories are listed')
@@ -234,45 +240,61 @@ H.describe('DirectRun', function()
     local add_directory = direct.git('git add -- {}')
     H.assert_not_nil(add_directory, 'ga accepts a missing tracked directory')
     add_directory:wait()
-    H.assert_true(vim.wait(3000, function()
-      local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
-      return state and state.git_status and state.git_status.paths[child] == 'D '
-    end), 'ga stages a deleted directory through its pathspec')
+    H.assert_true(
+      vim.wait(3000, function()
+        local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
+        return state and state.git_status and state.git_status.paths[child] == 'D '
+      end),
+      'ga stages a deleted directory through its pathspec'
+    )
 
     vim.api.nvim_win_set_cursor(0, { find_line('gone-dir/'), 0 })
     local reset_directory = direct.git('git reset -- {}')
     H.assert_not_nil(reset_directory, 'Git reset accepts a missing tracked directory')
     reset_directory:wait()
-    H.assert_true(vim.wait(3000, function()
-      local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
-      return state and state.git_status and state.git_status.paths[child] == ' D'
-    end), 'Git reset unstages a deleted directory through its pathspec')
+    H.assert_true(
+      vim.wait(3000, function()
+        local state = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
+        return state and state.git_status and state.git_status.paths[child] == ' D'
+      end),
+      'Git reset unstages a deleted directory through its pathspec'
+    )
 
     vim.api.nvim_win_set_cursor(0, { find_line('gone-dir/'), 0 })
     local restore_directory = direct.git('git checkout -- {}')
     H.assert_not_nil(restore_directory, 'explicit checkout accepts a missing tracked directory')
     restore_directory:wait()
-    H.assert_true(vim.wait(3000, function()
-      return vim.uv.fs_stat(child) ~= nil
-        and find_line('gone-dir/') ~= nil
-        and not require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf()).rows[
-          require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf()).display_ids[
-            find_line('gone-dir/')
-          ]
-        ].deleted_kind
-    end), 'explicit checkout restores the deleted directory subtree')
+    H.assert_true(
+      vim.wait(
+        3000,
+        function()
+          return vim.uv.fs_stat(child) ~= nil
+            and find_line('gone-dir/') ~= nil
+            and not require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf()).rows[require(
+              'direct.buffer.buffer'
+            )._state_for_test(vim.api.nvim_get_current_buf()).display_ids[find_line('gone-dir/')]].deleted_kind
+        end
+      ),
+      'explicit checkout restores the deleted directory subtree'
+    )
 
     vim.api.nvim_win_set_cursor(0, { find_line('gone.txt'), 0 })
     local restore = direct.git('git checkout -- {}')
     H.assert_not_nil(restore, 'checkout runs for a deleted row')
     restore:wait()
-    H.assert_true(vim.wait(3000, function()
-      return vim.uv.fs_stat(path) ~= nil and find_line('gone.txt') ~= nil
-        and not require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf()).rows[
-          require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf()).display_ids[find_line('gone.txt')]
-        ].deleted_kind
-    end), 'explicit checkout restores the file and re-lists it as an ordinary entry')
-    H.assert_eq(vim.fn.readfile(path), { 'tracked content' },
-      'checkout restores the tracked contents')
+    H.assert_true(
+      vim.wait(
+        3000,
+        function()
+          return vim.uv.fs_stat(path) ~= nil
+            and find_line('gone.txt') ~= nil
+            and not require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf()).rows[require(
+              'direct.buffer.buffer'
+            )._state_for_test(vim.api.nvim_get_current_buf()).display_ids[find_line('gone.txt')]].deleted_kind
+        end
+      ),
+      'explicit checkout restores the file and re-lists it as an ordinary entry'
+    )
+    H.assert_eq(vim.fn.readfile(path), { 'tracked content' }, 'checkout restores the tracked contents')
   end)
 end)

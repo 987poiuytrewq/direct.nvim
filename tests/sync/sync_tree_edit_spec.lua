@@ -27,8 +27,11 @@ H.describe('sync: editable expanded subtrees', function()
     H.mkfile(ws, 'root.txt', { 'root' })
     local listing = buffer.list(ws)
     listing:expand(1)
-    H.assert_buf_eq({ 'sub/', '  keep.txt', '  remove.txt', 'root.txt' }, 0,
-      'expanded directory children are materialized')
+    H.assert_buf_eq(
+      { 'sub/', '  keep.txt', '  remove.txt', 'root.txt' },
+      0,
+      'expanded directory children are materialized'
+    )
 
     vim.api.nvim_buf_set_text(0, 1, 2, 1, 2 + #'keep.txt', { 'renamed.txt' })
     vim.api.nvim_buf_set_lines(0, 2, 3, false, {})
@@ -38,12 +41,15 @@ H.describe('sync: editable expanded subtrees', function()
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_fs_eq(ws, {
-      'root.txt', 'sub/', 'sub/new.txt', 'sub/renamed.txt',
+      'root.txt',
+      'sub/',
+      'sub/new.txt',
+      'sub/renamed.txt',
     }, 'the subtree edit applies without touching root entries')
-    H.assert_eq(vim.fn.readfile(sub .. '/renamed.txt'), { 'keep' },
-      'renaming a child preserves its contents')
+    H.assert_eq(vim.fn.readfile(sub .. '/renamed.txt'), { 'keep' }, 'renaming a child preserves its contents')
     H.assert_eq(listing:get_paths(2, 3), {
-      sub .. '/new.txt', sub .. '/renamed.txt',
+      sub .. '/new.txt',
+      sub .. '/renamed.txt',
     }, 'the refreshed subtree resolves child paths')
     H.assert_false(vim.bo.modified, 'successful subtree sync clears modified state')
   end)
@@ -59,23 +65,26 @@ H.describe('sync: editable expanded subtrees', function()
     listing:expand(1)
     local rename_row
     for row, line in ipairs(H.buf_lines()) do
-      if line == '  rename.txt' then rename_row = row; break end
+      if line == '  rename.txt' then
+        rename_row = row
+        break
+      end
     end
     H.assert_not_nil(rename_row, 'rename source is visible in the expanded listing')
-    vim.api.nvim_buf_set_text(0, rename_row - 1, 2, rename_row - 1,
-      2 + #'rename.txt', { 'renamed.txt' })
+    vim.api.nvim_buf_set_text(0, rename_row - 1, 2, rename_row - 1, 2 + #'rename.txt', { 'renamed.txt' })
     H.mkfile(sub, 'external.txt', { 'external create' })
     vim.fn.delete(vim.fs.joinpath(sub, 'remove.txt'))
 
     local ok, err = listing:sync()
 
     H.assert_true(ok, 'unrelated expanded-folder changes do not block sync: ' .. tostring(err))
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sub, 'renamed.txt')), { 'keep' },
-      'the requested rename is saved')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sub, 'external.txt')), { 'external create' },
-      'the external addition is preserved')
-    H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(sub, 'remove.txt')),
-      'the unrelated external deletion is reconciled')
+    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sub, 'renamed.txt')), { 'keep' }, 'the requested rename is saved')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sub, 'external.txt')),
+      { 'external create' },
+      'the external addition is preserved'
+    )
+    H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(sub, 'remove.txt')), 'the unrelated external deletion is reconciled')
     H.assert_false(vim.bo.modified, 'the listing refreshes after sync')
   end)
 
@@ -91,19 +100,24 @@ H.describe('sync: editable expanded subtrees', function()
     listing:expand(1)
     vim.api.nvim_buf_set_text(0, 1, 2, 1, 2 + #'rename.txt', { 'renamed.txt' })
     vim.fn.delete(vim.fs.joinpath(sub, 'rename.txt'))
-    H.assert_true(vim.uv.fs_rename(replacement, vim.fs.joinpath(sub, 'rename.txt')),
-      'move a separately allocated directory into the old path')
+    H.assert_true(
+      vim.uv.fs_rename(replacement, vim.fs.joinpath(sub, 'rename.txt')),
+      'move a separately allocated directory into the old path'
+    )
 
     local ok, err = listing:sync()
 
     H.assert_nil(ok, 'a replaced expanded source remains a conflict')
     H.assert_true(tostring(err):find('rename.txt', 1, true) ~= nil, tostring(err))
-    H.assert_true(tostring(err):find(':DirectList!', 1, true) ~= nil,
-      'the refusal explains that the edit must be discarded before a fresh listing')
-    H.assert_true(H.exists(vim.fs.joinpath(sub, 'rename.txt', 'replacement.txt')),
-      'the external replacement is untouched')
-    H.assert_false(H.exists(vim.fs.joinpath(sub, 'renamed.txt')),
-      'the requested rename is not applied')
+    H.assert_true(
+      tostring(err):find(':DirectList!', 1, true) ~= nil,
+      'the refusal explains that the edit must be discarded before a fresh listing'
+    )
+    H.assert_true(
+      H.exists(vim.fs.joinpath(sub, 'rename.txt', 'replacement.txt')),
+      'the external replacement is untouched'
+    )
+    H.assert_false(H.exists(vim.fs.joinpath(sub, 'renamed.txt')), 'the requested rename is not applied')
     H.assert_true(vim.bo.modified, 'the requested edit remains in the listing')
   end)
 
@@ -118,8 +132,11 @@ H.describe('sync: editable expanded subtrees', function()
     H.mkfile(ws, 'from-root.txt', { 'preserve me' })
     local listing = buffer.list(ws)
     listing:expand(1)
-    H.assert_buf_eq({ 'sub/', '    inside.txt', 'from-root.txt' }, 0,
-      'expanded child rows use the configured indentation width')
+    H.assert_buf_eq(
+      { 'sub/', '    inside.txt', 'from-root.txt' },
+      0,
+      'expanded child rows use the configured indentation width'
+    )
 
     vim.api.nvim_buf_set_text(0, 2, 0, 2, 0, { '    ' })
 
@@ -127,10 +144,11 @@ H.describe('sync: editable expanded subtrees', function()
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_fs_eq(ws, {
-      'sub/', 'sub/from-root.txt', 'sub/inside.txt',
+      'sub/',
+      'sub/from-root.txt',
+      'sub/inside.txt',
     }, 'sync parses the configured width and moves the root file into the subtree')
-    H.assert_eq(vim.fn.readfile(sub .. '/from-root.txt'), { 'preserve me' },
-      'the moved file contents are preserved')
+    H.assert_eq(vim.fn.readfile(sub .. '/from-root.txt'), { 'preserve me' }, 'the moved file contents are preserved')
     config.setup({ collapse_single_entry_directories = false })
   end)
 
@@ -148,7 +166,11 @@ H.describe('sync: editable expanded subtrees', function()
     listing:expand(2)
     listing:expand(4)
     H.assert_buf_eq({
-      'top/', '  a/', '    from.txt', '  b/', '    stay.txt',
+      'top/',
+      '  a/',
+      '    from.txt',
+      '  b/',
+      '    stay.txt',
     }, 0, 'both sibling directories are expanded')
 
     -- Move the existing line, rather than replacing it, so its extmark identity
@@ -156,20 +178,28 @@ H.describe('sync: editable expanded subtrees', function()
     -- delete/create pair.
     vim.cmd('3move 5')
     H.assert_buf_eq({
-      'top/', '  a/', '  b/', '    stay.txt', '    from.txt',
+      'top/',
+      '  a/',
+      '  b/',
+      '    stay.txt',
+      '    from.txt',
     }, 0, 'the row now belongs to b/')
 
     local ok, reason = listing:sync()
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_fs_eq(ws, {
-      'top/', 'top/a/', 'top/b/', 'top/b/from.txt', 'top/b/stay.txt',
+      'top/',
+      'top/a/',
+      'top/b/',
+      'top/b/from.txt',
+      'top/b/stay.txt',
     }, 'the filesystem move is applied across the two subtree scopes')
-    H.assert_eq(vim.fn.readfile(b .. '/from.txt'), { 'preserve me' },
-      'the moved file keeps its contents')
+    H.assert_eq(vim.fn.readfile(b .. '/from.txt'), { 'preserve me' }, 'the moved file keeps its contents')
     H.assert_false(fs.exists(a .. '/from.txt'), 'the source is no longer present')
     H.assert_eq(listing:get_paths(4, 5), {
-      b .. '/from.txt', b .. '/stay.txt',
+      b .. '/from.txt',
+      b .. '/stay.txt',
     }, 'the refreshed destination subtree resolves its files')
 
     require('direct').undo()
@@ -196,7 +226,11 @@ H.describe('sync: editable expanded subtrees', function()
     listing:expand(3)
     listing:expand(5)
     H.assert_buf_eq({
-      'top/', '  a/', '    branch/', '      deep.txt', '  b/',
+      'top/',
+      '  a/',
+      '    branch/',
+      '      deep.txt',
+      '  b/',
     }, 0, 'the source tree and destination are expanded')
 
     vim.cmd('3,4move 5')
@@ -205,10 +239,17 @@ H.describe('sync: editable expanded subtrees', function()
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_fs_eq(ws, {
-      'top/', 'top/a/', 'top/b/', 'top/b/branch/', 'top/b/branch/deep.txt',
+      'top/',
+      'top/a/',
+      'top/b/',
+      'top/b/branch/',
+      'top/b/branch/deep.txt',
     }, 'the directory move carries its full tree')
-    H.assert_eq(listing:get_paths(5, 5), { b .. '/branch/deep.txt' },
-      'the moved expansion is restored at its new parent')
+    H.assert_eq(
+      listing:get_paths(5, 5),
+      { b .. '/branch/deep.txt' },
+      'the moved expansion is restored at its new parent'
+    )
   end)
 
   H.it('moves a root file into an expanded subtree without a create/delete pair', function()
@@ -222,8 +263,7 @@ H.describe('sync: editable expanded subtrees', function()
     local listing = buffer.list(ws)
     listing:expand(1)
     listing:expand(2)
-    H.assert_buf_eq({ 'top/', '  sub/', '    stay.txt', 'from-root.txt' }, 0,
-      'nested destination is materialized')
+    H.assert_buf_eq({ 'top/', '  sub/', '    stay.txt', 'from-root.txt' }, 0, 'nested destination is materialized')
 
     vim.api.nvim_buf_set_text(0, 3, 0, 3, 0, { '    ' })
 
@@ -231,12 +271,15 @@ H.describe('sync: editable expanded subtrees', function()
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_fs_eq(ws, {
-      'top/', 'top/sub/', 'top/sub/from-root.txt', 'top/sub/stay.txt',
+      'top/',
+      'top/sub/',
+      'top/sub/from-root.txt',
+      'top/sub/stay.txt',
     }, 'the existing root file is moved into the subtree')
-    H.assert_eq(vim.fn.readfile(sub .. '/from-root.txt'), { 'preserve me' },
-      'the root file contents are preserved')
+    H.assert_eq(vim.fn.readfile(sub .. '/from-root.txt'), { 'preserve me' }, 'the root file contents are preserved')
     H.assert_eq(listing:get_paths(3, 4), {
-      sub .. '/from-root.txt', sub .. '/stay.txt',
+      sub .. '/from-root.txt',
+      sub .. '/stay.txt',
     }, 'the refreshed expanded directory shows the moved file')
   end)
 
@@ -249,18 +292,15 @@ H.describe('sync: editable expanded subtrees', function()
     H.mkfile(ws, 'stay.txt', { 'stay' })
     local listing = buffer.list(ws)
     listing:expand(1)
-    H.assert_buf_eq({ 'sub/', '  from-child.txt', 'stay.txt' }, 0,
-      'the source child is materialized')
+    H.assert_buf_eq({ 'sub/', '  from-child.txt', 'stay.txt' }, 0, 'the source child is materialized')
 
     vim.api.nvim_buf_set_text(0, 1, 0, 1, 2, { '' })
 
     local ok, reason = listing:sync()
 
     H.assert_true(ok == true, tostring(reason))
-    H.assert_fs_eq(ws, { 'from-child.txt', 'stay.txt', 'sub/' },
-      'the child is moved into the root listing')
-    H.assert_eq(vim.fn.readfile(ws .. '/from-child.txt'), { 'preserve me' },
-      'the moved file contents are preserved')
+    H.assert_fs_eq(ws, { 'from-child.txt', 'stay.txt', 'sub/' }, 'the child is moved into the root listing')
+    H.assert_eq(vim.fn.readfile(ws .. '/from-child.txt'), { 'preserve me' }, 'the moved file contents are preserved')
   end)
 
   H.it('renames an expanded child directory and restores its nested expansion', function()
@@ -273,8 +313,7 @@ H.describe('sync: editable expanded subtrees', function()
     local listing = buffer.list(ws)
     listing:expand(1)
     listing:expand(2)
-    H.assert_buf_eq({ 'sub/', '  nested/', '    deep.txt' }, 0,
-      'the nested directory is expanded')
+    H.assert_buf_eq({ 'sub/', '  nested/', '    deep.txt' }, 0, 'the nested directory is expanded')
 
     vim.api.nvim_buf_set_text(0, 1, 2, 1, #'  nested/', { 'renamed/' })
 
@@ -282,10 +321,15 @@ H.describe('sync: editable expanded subtrees', function()
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_fs_eq(ws, {
-      'sub/', 'sub/renamed/', 'sub/renamed/deep.txt',
+      'sub/',
+      'sub/renamed/',
+      'sub/renamed/deep.txt',
     }, 'the directory and its contents move together')
-    H.assert_eq(listing:get_paths(3, 3), { sub .. '/renamed/deep.txt' },
-      'the nested expansion is restored at the renamed path')
+    H.assert_eq(
+      listing:get_paths(3, 3),
+      { sub .. '/renamed/deep.txt' },
+      'the nested expansion is restored at the renamed path'
+    )
   end)
 
   H.it('uses a same-slot whole-line replacement as a child rename', function()
@@ -297,18 +341,23 @@ H.describe('sync: editable expanded subtrees', function()
     H.mkfile(sub, 'old.txt', { 'preserve me' })
     local listing = buffer.list(ws)
     listing:expand(1)
-    H.assert_buf_eq({ 'sub/', '  anchor.txt', '  old.txt' }, 0,
-      'both original identities are materialized')
+    H.assert_buf_eq({ 'sub/', '  anchor.txt', '  old.txt' }, 0, 'both original identities are materialized')
 
     vim.api.nvim_buf_set_lines(0, 2, 3, false, { '  renamed.txt' })
 
     local ok, reason = listing:sync()
 
     H.assert_true(ok == true, tostring(reason))
-    H.assert_fs_eq(ws, { 'sub/', 'sub/anchor.txt', 'sub/renamed.txt' },
-      'the replacement is interpreted as a rename, not delete/create')
-    H.assert_eq(vim.fn.readfile(sub .. '/renamed.txt'), { 'preserve me' },
-      'whole-line rename preserves the original contents')
+    H.assert_fs_eq(
+      ws,
+      { 'sub/', 'sub/anchor.txt', 'sub/renamed.txt' },
+      'the replacement is interpreted as a rename, not delete/create'
+    )
+    H.assert_eq(
+      vim.fn.readfile(sub .. '/renamed.txt'),
+      { 'preserve me' },
+      'whole-line rename preserves the original contents'
+    )
   end)
 
   H.it('accepts sibling row reordering as presentation-only', function()
@@ -328,8 +377,7 @@ H.describe('sync: editable expanded subtrees', function()
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_eq(H.fs_snapshot(ws), before, 'row order does not move filesystem entries')
-    H.assert_buf_eq({ 'sub/', '  a.txt', '  b.txt' }, 0,
-      'the refreshed directory returns to its sorted order')
+    H.assert_buf_eq({ 'sub/', '  a.txt', '  b.txt' }, 0, 'the refreshed directory returns to its sorted order')
     H.assert_eq(history_lines('undo.log'), {}, 'a presentation-only reorder writes no history')
   end)
 
@@ -345,17 +393,25 @@ H.describe('sync: editable expanded subtrees', function()
     vim.api.nvim_buf_set_text(0, 1, 2, 1, 2 + #'old.txt', { 'renamed.txt' })
     local yanked = 0
     local yank = register.yank
-    register.yank = function(...) yanked = yanked + 1; return yank(...) end
+    register.yank = function(...)
+      yanked = yanked + 1
+      return yank(...)
+    end
 
     H.capture_messages()
     local ok, reason = listing:sync()
 
     register.yank = yank
-    H.assert_true(ok, 'unrelated external additions do not block an expanded rename: '
-      .. tostring(reason) .. '\n' .. H.messages())
+    H.assert_true(
+      ok,
+      'unrelated external additions do not block an expanded rename: ' .. tostring(reason) .. '\n' .. H.messages()
+    )
     H.assert_eq(yanked, 0, 'a rename does not auto-yank the unchanged source')
-    H.assert_eq(H.fs_snapshot(ws), { 'sub/', 'sub/external.txt', 'sub/renamed.txt' },
-      'both the external addition and requested rename remain on disk')
+    H.assert_eq(
+      H.fs_snapshot(ws),
+      { 'sub/', 'sub/external.txt', 'sub/renamed.txt' },
+      'both the external addition and requested rename remain on disk'
+    )
     H.assert_false(vim.bo.modified, 'successful sync refreshes the listing')
   end)
 
@@ -365,13 +421,18 @@ H.describe('sync: editable expanded subtrees', function()
     local ws = H.mkdir(sb.root, 'ws')
     local listing = buffer.list(ws)
     vim.api.nvim_buf_set_lines(0, 0, -1, false, {
-      'new/', '  nested/', '    file.txt',
+      'new/',
+      '  nested/',
+      '    file.txt',
     })
 
     local ok, reason = listing:sync()
 
     H.assert_true(ok == true, tostring(reason))
-    H.assert_fs_eq(ws, { 'new/', 'new/nested/', 'new/nested/file.txt' },
-      'parent directories are created before nested entries')
+    H.assert_fs_eq(
+      ws,
+      { 'new/', 'new/nested/', 'new/nested/file.txt' },
+      'parent directories are created before nested entries'
+    )
   end)
 end)

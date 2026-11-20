@@ -19,41 +19,40 @@ local M = {}
 local skip_tag = {}
 local platform = require('direct.platform')
 
-function M.is_windows()
-  return platform.is_windows
-end
+function M.is_windows() return platform.is_windows end
 
 function M.wait_for_direct(timeout_ms)
-  M.assert_true(vim.wait(timeout_ms or 5000, function()
-    local registries = { require('direct.pending') }
-    local buffer = package.loaded['direct.buffer.buffer']
-    local history = package.loaded['direct.history.history']
-    if buffer and buffer._pending_for_test then
-      registries[#registries + 1] = buffer._pending_for_test
-    end
-    if history and history.pending then registries[#registries + 1] = history.pending end
-    for _, pending in ipairs(registries) do
-      if pending.is_pending() then return false end
-    end
-    return true
-  end), 'pending Direct operation completes')
+  M.assert_true(
+    vim.wait(timeout_ms or 5000, function()
+      local registries = { require('direct.pending') }
+      local buffer = package.loaded['direct.buffer.buffer']
+      local history = package.loaded['direct.history.history']
+      if buffer and buffer._pending_for_test then registries[#registries + 1] = buffer._pending_for_test end
+      if history and history.pending then registries[#registries + 1] = history.pending end
+      for _, pending in ipairs(registries) do
+        if pending.is_pending() then return false end
+      end
+      return true
+    end),
+    'pending Direct operation completes'
+  )
 end
 
 -- ---------------------------------------------------------------------------
 -- Configuration and per-run state
 -- ---------------------------------------------------------------------------
 
-M._base = nil                 -- temp root for this run (realpath-resolved)
-M._verbose = false            -- per-assert output when true
-M._suites = {}                -- registered describe() blocks, for the current file
-M._current = nil              -- describe() block currently open
-M._sandboxes = {}             -- sandboxes created during the current test
-M._file_home = nil            -- per-spec XDG_DATA_HOME temp dir
-M._file_ui = nil              -- direct.ui captured before the per-file unload
-M._option_snapshot = nil      -- every global option captured at setup()
-M._boot_augroups = nil        -- augroups present at boot (protected baseline)
-M._boot_autocmd_kinds = nil   -- autocmd identities present at boot (protected baseline)
-M._assert_log = {}            -- per-test assert trace, only used with --verbose
+M._base = nil -- temp root for this run (realpath-resolved)
+M._verbose = false -- per-assert output when true
+M._suites = {} -- registered describe() blocks, for the current file
+M._current = nil -- describe() block currently open
+M._sandboxes = {} -- sandboxes created during the current test
+M._file_home = nil -- per-spec XDG_DATA_HOME temp dir
+M._file_ui = nil -- direct.ui captured before the per-file unload
+M._option_snapshot = nil -- every global option captured at setup()
+M._boot_augroups = nil -- augroups present at boot (protected baseline)
+M._boot_autocmd_kinds = nil -- autocmd identities present at boot (protected baseline)
+M._assert_log = {} -- per-test assert trace, only used with --verbose
 
 -- setup() must run after the boot runtime files are sourced (tests/run.lua), so
 -- the baseline it captures is the pristine post-boot state.
@@ -88,8 +87,7 @@ end
 -- that merely reuses a boot group/event/pattern would match a baseline entry
 -- and survive every boundary.
 function M._autocmd_kind(au)
-  return string.format('%s\0%s\0%s\0%s',
-    au.group_name or '', au.event or '', au.pattern or '', au.command or '')
+  return string.format('%s\0%s\0%s\0%s', au.group_name or '', au.event or '', au.pattern or '', au.command or '')
 end
 
 -- ---------------------------------------------------------------------------
@@ -120,9 +118,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local function trace(line)
-  if M._verbose then
-    M._assert_log[#M._assert_log + 1] = '      ' .. line
-  end
+  if M._verbose then M._assert_log[#M._assert_log + 1] = '      ' .. line end
 end
 
 -- ---------------------------------------------------------------------------
@@ -136,24 +132,17 @@ end
 
 -- skip(reason) marks a test as unavailable on this host without counting it as
 -- a pass. The test still goes through teardown so any sandbox is cleaned up.
-function M.skip(reason)
-  error({ _direct_test_skip = skip_tag, reason = tostring(reason or 'not available') }, 0)
-end
+function M.skip(reason) error({ _direct_test_skip = skip_tag, reason = tostring(reason or 'not available') }, 0) end
 
 local function test_error(err)
-  if type(err) == 'table' and err._direct_test_skip == skip_tag then
-    return err
-  end
+  if type(err) == 'table' and err._direct_test_skip == skip_tag then return err end
   return debug.traceback(err, 2)
 end
 
-local function pass(label, msg)
-  trace('ok   ' .. label .. (msg and (': ' .. msg) or ''))
-end
+local function pass(label, msg) trace('ok   ' .. label .. (msg and (': ' .. msg) or '')) end
 
 local function format_mismatch(label, actual, expected)
-  return string.format('%s\n  expected: %s\n  actual:   %s',
-    label, vim.inspect(expected), vim.inspect(actual))
+  return string.format('%s\n  expected: %s\n  actual:   %s', label, vim.inspect(expected), vim.inspect(actual))
 end
 
 function M.assert_eq(actual, expected, msg)
@@ -164,9 +153,7 @@ function M.assert_eq(actual, expected, msg)
   if platform.is_windows then
     local function normalize_paths(value)
       if type(value) == 'string' then
-        if value:match('^%a:[/\\]') or value:match('^[/\\][/\\]') then
-          return value:gsub('\\', '/')
-        end
+        if value:match('^%a:[/\\]') or value:match('^[/\\][/\\]') then return value:gsub('\\', '/') end
         return value
       elseif type(value) == 'table' then
         local normalized = {}
@@ -182,16 +169,16 @@ function M.assert_eq(actual, expected, msg)
   if vim.deep_equal(actual, expected) then
     pass('assert_eq', msg)
   else
-    M.fail(msg and (msg .. '\n' .. format_mismatch('assert_eq failed', actual, expected))
-      or format_mismatch('assert_eq failed', actual, expected))
+    M.fail(
+      msg and (msg .. '\n' .. format_mismatch('assert_eq failed', actual, expected))
+        or format_mismatch('assert_eq failed', actual, expected)
+    )
   end
 end
 
 function M.is_absolute_path(path)
   if type(path) ~= 'string' then return false end
-  if platform.is_windows then
-    return path:match('^%a:[/\\]') ~= nil or path:match('^[/\\][/\\]') ~= nil
-  end
+  if platform.is_windows then return path:match('^%a:[/\\]') ~= nil or path:match('^[/\\][/\\]') ~= nil end
   return path:sub(1, 1) == '/'
 end
 
@@ -229,9 +216,7 @@ end
 
 function M.assert_error(fn, pattern, msg)
   local ok, err = pcall(fn)
-  if ok then
-    M.fail(msg or 'assert_error: expected an error, got none')
-  end
+  if ok then M.fail(msg or 'assert_error: expected an error, got none') end
   err = tostring(err)
   if pattern and not err:find(pattern, 1, true) then
     M.fail(string.format('assert_error: error %q did not contain %q', err, pattern))
@@ -247,9 +232,7 @@ end
 local function mkdtemp(prefix)
   local template = vim.fs.joinpath(M._base, prefix .. '-XXXXXX')
   local created = vim.uv.fs_mkdtemp(template)
-  if not created then
-    M.fail('could not create temp dir from template ' .. template)
-  end
+  if not created then M.fail('could not create temp dir from template ' .. template) end
   return vim.uv.fs_realpath(created) or created
 end
 
@@ -268,9 +251,7 @@ end
 local function to_lines(contents)
   if contents == nil then return {} end
   if type(contents) == 'table' then return contents end
-  if type(contents) == 'string' then
-    return vim.split(contents, '\n', { plain = true })
-  end
+  if type(contents) == 'string' then return vim.split(contents, '\n', { plain = true }) end
   M.fail('mkfile contents must be a string, a list, or nil')
 end
 
@@ -289,14 +270,11 @@ end
 function M.set_direct_rows(bufnr, lines)
   if bufnr == nil or bufnr == 0 then bufnr = vim.api.nvim_get_current_buf() end
   local state = require('direct.buffer.buffer')._state_for_test(bufnr)
-  if not state then
-    return vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-  end
+  if not state then return vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines) end
   local namespace = vim.api.nvim_get_namespaces()['direct-listing-rows']
   local old_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local ids_by_row = {}
-  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, namespace,
-      0, -1, { details = true })) do
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, { details = true })) do
     if not (mark[4] and mark[4].invalid) then ids_by_row[mark[2] + 1] = mark[1] end
   end
 
@@ -344,22 +322,16 @@ end
 -- assuming the command exists; callers can explicitly skip only the test that
 -- depends on this filesystem feature.
 function M.mkfifo(path)
-  if platform.is_windows then
-    return nil, 'POSIX FIFOs are unavailable on Windows'
-  end
+  if platform.is_windows then return nil, 'POSIX FIFOs are unavailable on Windows' end
   vim.fn.system({ 'mkfifo', path })
   local stat = vim.uv.fs_lstat(path)
-  if stat and stat.type == 'fifo' then
-    return true
-  end
+  if stat and stat.type == 'fifo' then return true end
   return nil, 'mkfifo is unavailable or could not create a FIFO'
 end
 
 -- Create a symbolic link with the Windows directory flag when its target is
 -- an existing directory. POSIX platforms ignore this distinction.
-function M.symlink(target, link)
-  return platform.create_symlink(target, link, target)
-end
+function M.symlink(target, link) return platform.create_symlink(target, link, target) end
 
 function M.ls(root)
   local names = {}
@@ -370,9 +342,7 @@ function M.ls(root)
   return names
 end
 
-function M.exists(root, rel)
-  return vim.uv.fs_stat(vim.fs.joinpath(root, rel)) ~= nil
-end
+function M.exists(root, rel) return vim.uv.fs_stat(vim.fs.joinpath(root, rel)) ~= nil end
 
 function M.inode_of(path)
   local stat = vim.uv.fs_stat(path)
@@ -421,9 +391,7 @@ end
 -- Buffer oracle
 -- ---------------------------------------------------------------------------
 
-function M.buf_lines(bufnr)
-  return vim.api.nvim_buf_get_lines(bufnr or 0, 0, -1, false)
-end
+function M.buf_lines(bufnr) return vim.api.nvim_buf_get_lines(bufnr or 0, 0, -1, false) end
 
 -- assert_buf_eq(expected, bufnr): expected lines first (matching the documented
 -- assert_buf_eq(lines) form); bufnr defaults to the current buffer.
@@ -459,9 +427,7 @@ end
 -- Message oracle
 -- ---------------------------------------------------------------------------
 
-function M.messages()
-  return vim.api.nvim_exec2('messages', { output = true }).output or ''
-end
+function M.messages() return vim.api.nvim_exec2('messages', { output = true }).output or '' end
 
 -- capture_messages() clears the message history and returns a handle with
 -- :messages() and :assert(pattern[, level]) so a test can assert only on what
@@ -469,12 +435,8 @@ end
 function M.capture_messages()
   vim.cmd('messages clear')
   local handle = {}
-  function handle.messages()
-    return M.messages()
-  end
-  function handle.assert(_, pattern, level)
-    M.assert_notified(pattern, level)
-  end
+  function handle.messages() return M.messages() end
+  function handle.assert(_, pattern, level) M.assert_notified(pattern, level) end
   return handle
 end
 
@@ -488,8 +450,7 @@ function M.assert_notified(pattern, level)
     text = text:gsub('\\', '/')
   end
   if not text:find(pattern, 1, true) then
-    M.fail(string.format('expected notification containing %q; messages:\n%s',
-      pattern, text))
+    M.fail(string.format('expected notification containing %q; messages:\n%s', pattern, text))
   end
   pass('assert_notified', nil)
   return level
@@ -510,11 +471,14 @@ end
 function M.with_prompt(fn, answers)
   local ui = require('direct.ui')
   if M._file_ui ~= nil and ui ~= M._file_ui then
-    error('with_prompt: stale direct.ui module -- the spec captured a '
-      .. 'different ui table before the modules were unloaded, so stubbing the '
-      .. 'fresh table would miss and the real vim.fn.input could abort the run. '
-      .. 'Stub the captured table with H.stub(ui, "prompt", ...) instead, or '
-      .. 'require direct.* only inside the spec body.', 0)
+    error(
+      'with_prompt: stale direct.ui module -- the spec captured a '
+        .. 'different ui table before the modules were unloaded, so stubbing the '
+        .. 'fresh table would miss and the real vim.fn.input could abort the run. '
+        .. 'Stub the captured table with H.stub(ui, "prompt", ...) instead, or '
+        .. 'require direct.* only inside the spec body.',
+      0
+    )
   end
   local responder
   if type(answers) == 'function' then
@@ -527,16 +491,21 @@ function M.with_prompt(fn, answers)
     end
   end
   local restore_prompt = M.stub(ui, 'prompt', responder)
-  local restore_input = M.stub(vim.fn, 'input', function()
-    error('with_prompt: vim.fn.input reached under -l -- the prompt seam was '
-      .. 'bypassed (stale ui table?); refusing to truncate the run', 0)
-  end)
+  local restore_input = M.stub(
+    vim.fn,
+    'input',
+    function()
+      error(
+        'with_prompt: vim.fn.input reached under -l -- the prompt seam was '
+          .. 'bypassed (stale ui table?); refusing to truncate the run',
+        0
+      )
+    end
+  )
   local ok, err = xpcall(fn, debug.traceback)
   restore_input()
   restore_prompt()
-  if not ok then
-    error(err, 0)
-  end
+  if not ok then error(err, 0) end
 end
 
 -- with_env(vars, fn): temporarily overwrites the named environment variables,
@@ -555,9 +524,7 @@ function M.with_env(vars, fn)
   for name, prev in pairs(saved) do
     vim.env[name] = prev.present and prev.value or nil
   end
-  if not ok then
-    error(err, 0)
-  end
+  if not ok then error(err, 0) end
 end
 
 -- with_option(name, value, fn): scoped global option change; the previous value
@@ -567,9 +534,7 @@ function M.with_option(name, value, fn)
   vim.o[name] = value
   local ok, err = xpcall(fn, debug.traceback)
   pcall(function() vim.o[name] = saved end)
-  if not ok then
-    error(err, 0)
-  end
+  if not ok then error(err, 0) end
 end
 
 -- with_cwd(dir, fn) scopes the window cwd and restores it even if fn raises.
@@ -579,18 +544,14 @@ function M.with_cwd(dir, fn)
   pcall(vim.cmd, 'lcd ' .. vim.fn.fnameescape(dir))
   local ok, err = xpcall(fn, debug.traceback)
   pcall(vim.cmd, 'lcd ' .. vim.fn.fnameescape(old))
-  if not ok then
-    error(err, 0)
-  end
+  if not ok then error(err, 0) end
 end
 
 -- ---------------------------------------------------------------------------
 -- Per-spec and per-test isolation (driven by tests/run.lua)
 -- ---------------------------------------------------------------------------
 
-local function wipe_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function wipe_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 -- The filetype machinery belongs to `filetype plugin on` and must outlive the
 -- per-spec autocmd reset. It does so by boot-baseline membership alone: the
@@ -604,14 +565,10 @@ end
 local function clear_foreign_autocmds()
   if not M._boot_augroups then return end
   for _, name in ipairs(vim.fn.getcompletion('', 'augroup')) do
-    if name ~= 'END' and not M._boot_augroups[name] then
-      pcall(vim.api.nvim_del_augroup_by_name, name)
-    end
+    if name ~= 'END' and not M._boot_augroups[name] then pcall(vim.api.nvim_del_augroup_by_name, name) end
   end
   for _, au in ipairs(vim.api.nvim_get_autocmds({})) do
-    if not M._boot_autocmd_kinds[M._autocmd_kind(au)] then
-      pcall(vim.api.nvim_del_autocmd, au.id)
-    end
+    if not M._boot_autocmd_kinds[M._autocmd_kind(au)] then pcall(vim.api.nvim_del_autocmd, au.id) end
   end
 end
 
@@ -637,9 +594,7 @@ end
 local function forget_direct_modules()
   local keys = {}
   for k in pairs(package.loaded) do
-    if k == 'direct' or k:match('^direct%.') then
-      keys[#keys + 1] = k
-    end
+    if k == 'direct' or k:match('^direct%.') then keys[#keys + 1] = k end
   end
   for _, k in ipairs(keys) do
     package.loaded[k] = nil
@@ -653,10 +608,10 @@ function M._begin_file()
   -- table, so if the two differ the spec's consumer modules hold a stale table
   -- and the stub would silently miss (the real vim.fn.input path).
   M._file_ui = package.loaded['direct.ui']
-  forget_direct_modules()                 -- unload before the re-source
+  forget_direct_modules() -- unload before the re-source
   reset_options()
   M._file_home = mkdtemp('direct-spec')
-  vim.env.XDG_DATA_HOME = M._file_home    -- home before the re-source
+  vim.env.XDG_DATA_HOME = M._file_home -- home before the re-source
   reset_runtime()
 end
 
@@ -677,9 +632,7 @@ end
 
 function M._begin_test()
   M._sandboxes = {}
-  if M._file_home then
-    vim.env.XDG_DATA_HOME = M._file_home
-  end
+  if M._file_home then vim.env.XDG_DATA_HOME = M._file_home end
   reset_options()
   local config = require('direct.config')
   config.defaults.directory_separator = '/'
@@ -697,9 +650,7 @@ function M._end_test()
     pcall(vim.fs.rm, dir, { recursive = true, force = true })
   end
   M._sandboxes = {}
-  if M._file_home then
-    vim.env.XDG_DATA_HOME = M._file_home
-  end
+  if M._file_home then vim.env.XDG_DATA_HOME = M._file_home end
 end
 
 -- ---------------------------------------------------------------------------
@@ -744,8 +695,7 @@ function M.run_all()
           lines[#lines + 1] = string.format('  ok   %s :: %s', suite.name, test.name)
         elseif type(err) == 'table' and err._direct_test_skip == skip_tag then
           skipped = skipped + 1
-          lines[#lines + 1] = string.format('  SKIP %s :: %s (%s)',
-            suite.name, test.name, err.reason)
+          lines[#lines + 1] = string.format('  SKIP %s :: %s (%s)', suite.name, test.name, err.reason)
         else
           failed = failed + 1
           lines[#lines + 1] = string.format('  FAIL %s :: %s', suite.name, test.name)
@@ -754,15 +704,19 @@ function M.run_all()
             trace = tostring(err),
           }
         end
-        if M._verbose and #M._assert_log > 0 then
-          lines[#lines + 1] = table.concat(M._assert_log, '\n')
-        end
+        if M._verbose and #M._assert_log > 0 then lines[#lines + 1] = table.concat(M._assert_log, '\n') end
       end
       total_passed = total_passed + passed
       total_skipped = total_skipped + skipped
       total_failed = total_failed + failed
-      lines[#lines + 1] = string.format('%s: %d spec, %d passed, %d skipped, %d failed',
-        suite.name, passed + skipped + failed, passed, skipped, failed)
+      lines[#lines + 1] = string.format(
+        '%s: %d spec, %d passed, %d skipped, %d failed',
+        suite.name,
+        passed + skipped + failed,
+        passed,
+        skipped,
+        failed
+      )
     end
   end
 

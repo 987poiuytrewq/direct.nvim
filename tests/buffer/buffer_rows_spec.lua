@@ -6,9 +6,7 @@ local paths = require('direct.paths')
 
 -- Within-file isolation: the harness wipes buffers only at FILE boundaries, so a
 -- modified buffer left by one spec would make the next `enew` raise E37.
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 -- Symlink helper: luv returns true|nil, err from fs_symlink, so existence is
 -- checked through lstat instead of the return value.
@@ -16,7 +14,6 @@ local function make_symlink(target, link)
   pcall(H.symlink, target, link)
   return vim.uv.fs_lstat(link) ~= nil
 end
-
 
 H.describe('buffer: row identity and filtered rendering', function()
   H.it('avoids full decoration redraws for in-place normal-mode edits', function()
@@ -36,8 +33,7 @@ H.describe('buffer: row identity and filtered rendering', function()
     vim.api.nvim_buf_set_text(bufnr, 0, 0, 0, 0, { 'prefix-' })
     vim.api.nvim_buf_get_extmarks = original
 
-    H.assert_eq(calls, 1,
-      'in-place edits inspect only the changed row instead of redrawing every row')
+    H.assert_eq(calls, 1, 'in-place edits inspect only the changed row instead of redrawing every row')
   end)
 
   H.it('skips insert-mode decoration refreshes when row count is unchanged', function()
@@ -58,8 +54,7 @@ H.describe('buffer: row identity and filtered rendering', function()
     vim.api.nvim_exec_autocmds('TextChangedI', { buffer = bufnr })
     vim.api.nvim_buf_get_extmarks = original
 
-    H.assert_eq(calls, 0,
-      'same-line insert edits do not rebuild row highlights and icons')
+    H.assert_eq(calls, 0, 'same-line insert edits do not rebuild row highlights and icons')
   end)
 
   H.it('nested directories reveal only their immediate children when expanded', function()
@@ -73,11 +68,13 @@ H.describe('buffer: row identity and filtered rendering', function()
     local listing = buffer.list(ws)
 
     listing:expand(1)
-    H.assert_buf_eq({ 'sub/', '  nested/', '  sibling.txt' }, 0,
-      'the root expand is exactly one level')
+    H.assert_buf_eq({ 'sub/', '  nested/', '  sibling.txt' }, 0, 'the root expand is exactly one level')
     listing:expand(2)
-    H.assert_buf_eq({ 'sub/', '  nested/', '    deep.txt', '  sibling.txt' }, 0,
-      'nested contents are materialized only on the nested directory')
+    H.assert_buf_eq(
+      { 'sub/', '  nested/', '    deep.txt', '  sibling.txt' },
+      0,
+      'nested contents are materialized only on the nested directory'
+    )
     H.assert_eq(listing:get_paths(3, 3), { ws .. '/sub/nested/deep.txt' })
   end)
 
@@ -98,30 +95,35 @@ H.describe('buffer: row identity and filtered rendering', function()
     H.mkfile(bat, 'two.txt', { 'two' })
 
     config.setup({})
-    H.assert_true(config.defaults.collapse_single_entry_directories,
-      'directory chain collapsing is enabled by default')
+    H.assert_true(config.defaults.collapse_single_entry_directories, 'directory chain collapsing is enabled by default')
     local listing = buffer.list(ws)
-    H.assert_buf_eq({ 'baz/bat/', 'branch/', 'foo/bar/' }, 0,
-      'only chains with one visible entry collapse')
-    H.assert_eq(listing:get_paths(3, 3), { ws .. '/foo/bar/' },
-      'a collapsed directory row resolves to its leaf directory')
+    H.assert_buf_eq({ 'baz/bat/', 'branch/', 'foo/bar/' }, 0, 'only chains with one visible entry collapse')
+    H.assert_eq(
+      listing:get_paths(3, 3),
+      { ws .. '/foo/bar/' },
+      'a collapsed directory row resolves to its leaf directory'
+    )
     listing:expand(1)
-    H.assert_buf_eq({ 'baz/bat/', '  one.txt', '  two.txt', 'branch/',
-      'foo/bar/' }, 0,
-    'a collapsed directory row can still be expanded at its deepest directory')
+    H.assert_buf_eq(
+      { 'baz/bat/', '  one.txt', '  two.txt', 'branch/', 'foo/bar/' },
+      0,
+      'a collapsed directory row can still be expanded at its deepest directory'
+    )
     H.assert_false(vim.bo.modified, 'expansion keeps the listing unmodified')
-    H.assert_not_nil(buffer._state_for_test(vim.api.nvim_get_current_buf()),
-      'the current buffer retains its listing state')
+    H.assert_not_nil(
+      buffer._state_for_test(vim.api.nvim_get_current_buf()),
+      'the current buffer retains its listing state'
+    )
     local toggled, toggle_err = buffer.toggle_collapse_single_entry_directories()
     H.assert_true(toggled ~= nil, tostring(toggle_err))
-    H.assert_false(buffer._state_for_test(vim.api.nvim_get_current_buf()).collapse_single_entry_directories,
-      'the toggle updates collapse state')
-    H.assert_buf_eq({ 'baz/', 'branch/', 'foo/' }, 0,
-      'gC disables directory chain collapsing in the current listing')
+    H.assert_false(
+      buffer._state_for_test(vim.api.nvim_get_current_buf()).collapse_single_entry_directories,
+      'the toggle updates collapse state'
+    )
+    H.assert_buf_eq({ 'baz/', 'branch/', 'foo/' }, 0, 'gC disables directory chain collapsing in the current listing')
     toggled, toggle_err = buffer.toggle_collapse_single_entry_directories()
     H.assert_true(toggled ~= nil, tostring(toggle_err))
-    H.assert_buf_eq({ 'baz/bat/', 'branch/', 'foo/bar/' }, 0,
-      'gC enables directory chain collapsing again')
+    H.assert_buf_eq({ 'baz/bat/', 'branch/', 'foo/bar/' }, 0, 'gC enables directory chain collapsing again')
     config.setup({})
   end)
 
@@ -137,12 +139,14 @@ H.describe('buffer: row identity and filtered rendering', function()
 
     config.setup({ collapse_single_entry_directories = true })
     buffer.list(ws)
-    H.assert_buf_eq({ 'folder/' }, 0,
-      'the visible dotfile keeps the directory from collapsing by default')
+    H.assert_buf_eq({ 'folder/' }, 0, 'the visible dotfile keeps the directory from collapsing by default')
     config.setup({ collapse_single_entry_directories = true, show_hidden = false })
     buffer.list(ws)
-    H.assert_buf_eq({ 'folder/visible-dir/' }, 0,
-      'filtering the dotfile leaves one visible directory and collapses the path')
+    H.assert_buf_eq(
+      { 'folder/visible-dir/' },
+      0,
+      'filtering the dotfile leaves one visible directory and collapses the path'
+    )
     config.setup({})
   end)
 
@@ -162,10 +166,12 @@ H.describe('buffer: row identity and filtered rendering', function()
     local ok, err = listing:sync()
 
     H.assert_true(ok == true, tostring(err))
-    H.assert_true(H.exists(ws, 'renamed/bar/baz.txt'),
-      'editing the first component renames its directory')
-    H.assert_eq(vim.fn.readfile(ws .. '/renamed/bar/baz.txt'), { 'contents' },
-      'the directory rename preserves the nested file')
+    H.assert_true(H.exists(ws, 'renamed/bar/baz.txt'), 'editing the first component renames its directory')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/renamed/bar/baz.txt'),
+      { 'contents' },
+      'the directory rename preserves the nested file'
+    )
     config.setup({})
   end)
 
@@ -185,11 +191,9 @@ H.describe('buffer: row identity and filtered rendering', function()
     local ok, err = listing:sync()
 
     H.assert_true(ok == true, tostring(err))
-    H.assert_true(H.exists(ws, 'foo/baz/file.txt'),
-      'editing the final component renames that directory')
+    H.assert_true(H.exists(ws, 'foo/baz/file.txt'), 'editing the final component renames that directory')
     H.assert_true(H.exists(ws, 'foo'), 'the unchanged parent directory remains')
-    H.assert_eq(vim.fn.readfile(ws .. '/foo/baz/file.txt'), { 'contents' },
-      'the nested file contents are preserved')
+    H.assert_eq(vim.fn.readfile(ws .. '/foo/baz/file.txt'), { 'contents' }, 'the nested file contents are preserved')
     config.setup({})
   end)
 
@@ -203,8 +207,11 @@ H.describe('buffer: row identity and filtered rendering', function()
     local listing = direct.list(ws)
     listing:expand(1)
 
-    H.assert_eq(listing:get_paths(2, 2), { ws .. '/sub/inside.txt' },
-      'child path comes from its baseline, not root plus indentation')
+    H.assert_eq(
+      listing:get_paths(2, 2),
+      { ws .. '/sub/inside.txt' },
+      'child path comes from its baseline, not root plus indentation'
+    )
     local register = require('direct.register')
     local original_yank_async = register.yank_async
     local yanked
@@ -219,8 +226,10 @@ H.describe('buffer: row identity and filtered rendering', function()
     H.assert_eq(yanked, { ws .. '/sub/inside.txt' }, 'DirectYank uses child identity')
 
     direct.open('  inside.txt')
-    H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/sub/inside.txt'),
-      'open uses the child baseline path')
+    H.assert_true(
+      fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/sub/inside.txt'),
+      'open uses the child baseline path'
+    )
     H.assert_buf_eq({ 'inside' }, 0)
   end)
 
@@ -318,13 +327,14 @@ H.describe('buffer: row identity and filtered rendering', function()
     local refreshed = buffer.restore()
     refreshed:list()
 
-    H.assert_buf_eq({ 'a/', '  inside.txt' }, 0,
-      'the expanded child remains visible after refresh through the alias')
+    H.assert_buf_eq({ 'a/', '  inside.txt' }, 0, 'the expanded child remains visible after refresh through the alias')
     local after_marks = vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, {})
     H.assert_eq(after_marks[1][1], root_id, 'same root identity is reused')
     H.assert_eq(after_marks[2][1], child_id, 'same child identity is reused')
-    H.assert_true(fs.same_path(refreshed:get_paths(2, 2)[1], real .. '/a/inside.txt'),
-      'the retained child identity denotes the real directory entry')
+    H.assert_true(
+      fs.same_path(refreshed:get_paths(2, 2)[1], real .. '/a/inside.txt'),
+      'the retained child identity denotes the real directory entry'
+    )
   end)
 
   H.it('DirectYank preserves edits to a root row that matches another entry', function()
@@ -355,13 +365,14 @@ H.describe('buffer: row identity and filtered rendering', function()
     register.yank_async = original_yank_async
     if not ok then error(err) end
 
-    H.assert_eq(yanked, { ws .. '/unrelated.txt' },
-      ':DirectYank uses only the selected unrelated root file')
-    H.assert_buf_eq({ 'b/', '  inside.txt', 'b/', 'unrelated.txt' }, 0,
-      'yanking does not refresh and discard the modified listing')
+    H.assert_eq(yanked, { ws .. '/unrelated.txt' }, ':DirectYank uses only the selected unrelated root file')
+    H.assert_buf_eq(
+      { 'b/', '  inside.txt', 'b/', 'unrelated.txt' },
+      0,
+      'yanking does not refresh and discard the modified listing'
+    )
     H.assert_true(vim.bo.modified, 'the user edit remains pending')
-    H.assert_eq(H.fs_snapshot(ws), before,
-      'yanking performs no filesystem actions')
+    H.assert_eq(H.fs_snapshot(ws), before, 'yanking performs no filesystem actions')
   end)
 
   H.it('DirectYank preserves hostile duplicate rows in a modified listing', function()
@@ -393,13 +404,18 @@ H.describe('buffer: row identity and filtered rendering', function()
     register.yank_async = original_yank_async
     if not ok then error(err) end
 
-    H.assert_eq(yanked, { ws .. '/unrelated.txt' },
-      ':DirectYank still resolves the unrelated file in an ambiguous listing')
-    H.assert_buf_eq({ 'b/', '  inside.txt', 'b/', 'b/', 'unrelated.txt' }, 0,
-      'yanking does not refresh and discard the modified listing')
+    H.assert_eq(
+      yanked,
+      { ws .. '/unrelated.txt' },
+      ':DirectYank still resolves the unrelated file in an ambiguous listing'
+    )
+    H.assert_buf_eq(
+      { 'b/', '  inside.txt', 'b/', 'b/', 'unrelated.txt' },
+      0,
+      'yanking does not refresh and discard the modified listing'
+    )
     H.assert_true(vim.bo.modified, 'the user edits remain pending')
-    H.assert_eq(H.fs_snapshot(ws), before,
-      'yanking performs no filesystem actions')
+    H.assert_eq(H.fs_snapshot(ws), before, 'yanking performs no filesystem actions')
   end)
 
   H.it('DirectYank discards expansions when distinct root names share a filesystem identity', function()
@@ -415,8 +431,7 @@ H.describe('buffer: row identity and filtered rendering', function()
     -- to unprivileged test processes; there the fallback creates two directories
     -- and stubs only their identity fingerprints. Stat-failure fallback is tested
     -- independently through fs.same_path in fs_spec.
-    local native_aliases = make_symlink(target, alias_a)
-      and make_symlink(target, alias_b)
+    local native_aliases = make_symlink(target, alias_a) and make_symlink(target, alias_b)
     local original_path_identity = fs.path_identity
     if not native_aliases then
       for _, alias in ipairs({ alias_a, alias_b }) do
@@ -429,34 +444,38 @@ H.describe('buffer: row identity and filtered rendering', function()
       fs.path_identity = function(path, st)
         local identity = original_path_identity(path, st)
         path = type(path) == 'string' and path:gsub('/+$', '') or path
-        if path == normalized_a or path == normalized_b then
-          identity.inode = 'test-shared-inode'
-        end
+        if path == normalized_a or path == normalized_b then identity.inode = 'test-shared-inode' end
         return identity
       end
     end
 
     local direct = require('direct')
     local listing = direct.list(ws)
-    H.assert_buf_eq({ 'alias-a/', 'alias-b/', 'unrelated.txt' }, 0,
-      'filesystem listing includes both distinct root spellings')
-    H.assert_true(fs.same_path(alias_a, alias_b),
-      'both root spellings have the same filesystem identity')
+    H.assert_buf_eq(
+      { 'alias-a/', 'alias-b/', 'unrelated.txt' },
+      0,
+      'filesystem listing includes both distinct root spellings'
+    )
+    H.assert_true(fs.same_path(alias_a, alias_b), 'both root spellings have the same filesystem identity')
     if native_aliases then
       H.assert_eq(vim.uv.fs_readlink(alias_a), target, 'alias-a is a native symlink')
       H.assert_eq(vim.uv.fs_readlink(alias_b), target, 'alias-b is a native symlink')
     end
 
     listing:expand(1)
-    H.assert_buf_eq({ 'alias-a/', '  child.txt', 'alias-b/', 'unrelated.txt' }, 0,
-      'one alias has a materialized child before refresh')
+    H.assert_buf_eq(
+      { 'alias-a/', '  child.txt', 'alias-b/', 'unrelated.txt' },
+      0,
+      'one alias has a materialized child before refresh'
+    )
     local bufnr = vim.api.nvim_get_current_buf()
     local namespace = vim.api.nvim_get_namespaces()['direct-listing-rows']
     local before_marks = vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, {})
-    local old_root_a, old_child, old_root_b =
-      before_marks[1][1], before_marks[2][1], before_marks[3][1]
-    H.assert_true(old_root_a ~= old_root_b and old_child ~= old_root_a
-      and old_child ~= old_root_b, 'the two filesystem roots and child start with distinct identities')
+    local old_root_a, old_child, old_root_b = before_marks[1][1], before_marks[2][1], before_marks[3][1]
+    H.assert_true(
+      old_root_a ~= old_root_b and old_child ~= old_root_a and old_child ~= old_root_b,
+      'the two filesystem roots and child start with distinct identities'
+    )
     local before = H.fs_snapshot(ws)
 
     local register = require('direct.register')
@@ -472,26 +491,32 @@ H.describe('buffer: row identity and filtered rendering', function()
     fs.path_identity = original_path_identity
     if not ok then error(err) end
 
-    H.assert_eq(yanked, { ws .. '/unrelated.txt' },
-      ':DirectYank sends only the selected unrelated file to the register')
-    H.assert_buf_eq({ 'alias-a/', 'alias-b/', 'unrelated.txt' }, 0,
-      'refresh discards the ambiguous stale expansion')
+    H.assert_eq(
+      yanked,
+      { ws .. '/unrelated.txt' },
+      ':DirectYank sends only the selected unrelated file to the register'
+    )
+    H.assert_buf_eq({ 'alias-a/', 'alias-b/', 'unrelated.txt' }, 0, 'refresh discards the ambiguous stale expansion')
     local after_marks = vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, {})
-    H.assert_true(after_marks[1][1] ~= old_root_a and after_marks[1][1] ~= old_root_b,
-      'alias-a receives a fresh root identity instead of either ambiguous old identity')
-    H.assert_true(after_marks[2][1] ~= old_root_a and after_marks[2][1] ~= old_root_b,
-      'alias-b receives a fresh root identity instead of either ambiguous old identity')
-    H.assert_true(after_marks[1][1] ~= after_marks[2][1],
-      'the distinct spellings retain distinct row identities')
+    H.assert_true(
+      after_marks[1][1] ~= old_root_a and after_marks[1][1] ~= old_root_b,
+      'alias-a receives a fresh root identity instead of either ambiguous old identity'
+    )
+    H.assert_true(
+      after_marks[2][1] ~= old_root_a and after_marks[2][1] ~= old_root_b,
+      'alias-b receives a fresh root identity instead of either ambiguous old identity'
+    )
+    H.assert_true(after_marks[1][1] ~= after_marks[2][1], 'the distinct spellings retain distinct row identities')
     H.assert_eq(#after_marks, 3, 'the stale child identity is discarded from the refreshed rows')
     for _, mark in ipairs(after_marks) do
-      H.assert_true(mark[1] ~= old_child,
-        'the old child identity is not attached to another alias or row')
+      H.assert_true(mark[1] ~= old_child, 'the old child identity is not attached to another alias or row')
     end
-    H.assert_eq(listing:get_paths(1, 2), { alias_a .. '/', alias_b .. '/' },
-      'the refreshed root paths preserve their own spellings')
-    H.assert_eq(H.fs_snapshot(ws), before,
-      'refresh and yank do not modify filesystem entries')
+    H.assert_eq(
+      listing:get_paths(1, 2),
+      { alias_a .. '/', alias_b .. '/' },
+      'the refreshed root paths preserve their own spellings'
+    )
+    H.assert_eq(H.fs_snapshot(ws), before, 'refresh and yank do not modify filesystem entries')
   end)
 
   H.it('<CR> opens a nested listing and keeps the previous direct buffer', function()
@@ -507,10 +532,11 @@ H.describe('buffer: row identity and filtered rendering', function()
     vim.api.nvim_feedkeys('\r', 'mx', false)
 
     H.assert_buf_eq({ 'inside.txt' }, 0)
-    H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/sub'),
-      '<CR> opens the directory listing')
-    H.assert_true(vim.api.nvim_buf_is_valid(previous),
-      'the prior direct buffer remains available for parent navigation')
+    H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/sub'), '<CR> opens the directory listing')
+    H.assert_true(
+      vim.api.nvim_buf_is_valid(previous),
+      'the prior direct buffer remains available for parent navigation'
+    )
   end)
 
   H.it('double-click opens the directory or file under the mouse', function()
@@ -524,8 +550,7 @@ H.describe('buffer: row identity and filtered rendering', function()
 
     local function double_click(row, column)
       local callback = vim.fn.maparg('<2-LeftMouse>', 'n', false, true).callback
-      H.assert_true(type(callback) == 'function',
-        'direct buffers install the double-click handler')
+      H.assert_true(type(callback) == 'function', 'direct buffers install the double-click handler')
       local mouse = {
         winid = vim.api.nvim_get_current_win(),
         line = row,
@@ -539,19 +564,24 @@ H.describe('buffer: row identity and filtered rendering', function()
 
     local old_buf = vim.api.nvim_get_current_buf()
     double_click(1)
-    H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/sub'),
-      'double-clicking a directory opens its listing')
+    H.assert_true(
+      fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/sub'),
+      'double-clicking a directory opens its listing'
+    )
     H.assert_buf_eq({ 'inside.txt' }, 0)
-    H.assert_true(vim.api.nvim_buf_is_valid(old_buf),
-      'opening the directory keeps the old listing for parent navigation')
+    H.assert_true(
+      vim.api.nvim_buf_is_valid(old_buf),
+      'opening the directory keeps the old listing for parent navigation'
+    )
 
     old_buf = vim.api.nvim_get_current_buf()
     double_click(1)
-    H.assert_true(fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/sub/inside.txt'),
-      'double-clicking a file opens the file')
+    H.assert_true(
+      fs.same_path(vim.api.nvim_buf_get_name(0), ws .. '/sub/inside.txt'),
+      'double-clicking a file opens the file'
+    )
     H.assert_buf_eq({ 'inside' }, 0)
-    H.assert_false(vim.api.nvim_buf_is_valid(old_buf),
-      'opening the file replaces the old listing')
+    H.assert_false(vim.api.nvim_buf_is_valid(old_buf), 'opening the file replaces the old listing')
   end)
 
   H.it('full list replacement reattaches child identities without re-reading', function()
@@ -584,16 +614,21 @@ H.describe('buffer: row identity and filtered rendering', function()
     vim.cmd('undo')
     vim.cmd('redo')
     local id = vim.api.nvim_buf_set_extmark(bufnr, ns, 1, 0, {
-      invalidate = true, undo_restore = true,
+      invalidate = true,
+      undo_restore = true,
     })
     vim.api.nvim_buf_set_lines(bufnr, 1, 2, false, {})
     local invalid = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns, id, { details = true })
-    H.assert_true(#invalid > 0 and invalid[3].invalid == true,
-      'deleted identity is visible as invalid, not silently absent')
+    H.assert_true(
+      #invalid > 0 and invalid[3].invalid == true,
+      'deleted identity is visible as invalid, not silently absent'
+    )
     vim.cmd('undo')
     local restored = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns, id, { details = true })
-    H.assert_true(#restored > 0 and not restored[3].invalid,
-      'undo_restore reattaches the identity at its exact position')
+    H.assert_true(
+      #restored > 0 and not restored[3].invalid,
+      'undo_restore reattaches the identity at its exact position'
+    )
     H.assert_eq(restored[1], 1, 'identity returns to its original line')
   end)
 
@@ -628,18 +663,18 @@ H.describe('buffer: row identity and filtered rendering', function()
     vim.api.nvim_buf_delete(first_buf, { force = true })
 
     H.assert_nil(buffer._state_for_test(first_buf), 'BufWipeout releases its row state')
-    H.assert_true(buffer._state_for_test(second_buf) ~= nil,
-      'wiping the first buffer preserves the second state')
+    H.assert_true(buffer._state_for_test(second_buf) ~= nil, 'wiping the first buffer preserves the second state')
     H.assert_false(vim.api.nvim_buf_is_valid(first_buf), 'first direct buffer is wiped')
     H.assert_true(vim.api.nvim_buf_is_valid(second_buf), 'surviving buffer remains valid')
     H.assert_true(vim.api.nvim_win_is_valid(first_win), 'the other window survives the wipe')
     H.assert_true(vim.api.nvim_win_is_valid(second_win), 'the survivor window remains valid')
-    H.assert_eq(vim.api.nvim_win_get_buf(first_win), second_buf,
-      'the other window remains on the surviving buffer')
-    H.assert_eq(vim.api.nvim_win_get_buf(second_win), second_buf,
-      'the surviving window stays on its direct buffer')
-    H.assert_eq(buffer.restore():get_paths(1, 1), { second_root .. '/second.txt' },
-      'the surviving buffer still resolves its paths')
+    H.assert_eq(vim.api.nvim_win_get_buf(first_win), second_buf, 'the other window remains on the surviving buffer')
+    H.assert_eq(vim.api.nvim_win_get_buf(second_win), second_buf, 'the surviving window stays on its direct buffer')
+    H.assert_eq(
+      buffer.restore():get_paths(1, 1),
+      { second_root .. '/second.txt' },
+      'the surviving buffer still resolves its paths'
+    )
     local scoped_after = 0
     for _, au in ipairs(vim.api.nvim_get_autocmds({ group = 'direct-buffer' })) do
       if au.buffer == first_buf then scoped_after = scoped_after + 1 end
@@ -673,14 +708,14 @@ H.describe('buffer: row identity and filtered rendering', function()
     H.mkfile(ws, 'a.log', { 'a' })
     H.mkfile(ws, 'b.txt', { 'b' })
 
-    H.with_option('wildignore', ' *.log , junk ', function()
-      buffer.list(ws)
-    end)
+    H.with_option('wildignore', ' *.log , junk ', function() buffer.list(ws) end)
 
     -- the *.log file and the junk/ dir are ignored.
     H.assert_buf_eq({ 'keep/', 'b.txt' })
-    H.assert_true(H.exists(ws, 'a.log') and H.exists(ws, 'junk'),
-      'wildignore filters the listing only, it does not delete')
+    H.assert_true(
+      H.exists(ws, 'a.log') and H.exists(ws, 'junk'),
+      'wildignore filters the listing only, it does not delete'
+    )
   end)
 
   H.it('glob uses nosuf, so a suffix option cannot fabricate an ignore match', function()
@@ -693,9 +728,7 @@ H.describe('buffer: row identity and filtered rendering', function()
     -- The ignore pattern is the exact name `note`; 'suffixes' would make a
     -- glob WITHOUT nosuf match `note.md` too and wrongly ignore it.
     H.with_option('suffixes', '.md', function()
-      H.with_option('wildignore', 'note', function()
-        buffer.list(ws)
-      end)
+      H.with_option('wildignore', 'note', function() buffer.list(ws) end)
     end)
 
     -- `nosuf` makes the exact glob match the only ignored entry.
@@ -705,14 +738,12 @@ H.describe('buffer: row identity and filtered rendering', function()
   -- A newline cannot be represented in a buffer line, so skip it with a notice
   -- rather than aborting the listing; space-named entries remain representable.
   H.it('a newline-named entry is dropped with a notice, a space-named one survives', function()
-    if H.is_windows() then
-      H.skip('Windows filenames cannot contain newline characters')
-    end
+    if H.is_windows() then H.skip('Windows filenames cannot contain newline characters') end
     clean_buffers()
     local sb = H.sandbox()
     local ws = H.mkdir(sb.root, 'ws')
     H.mkfile(ws, 'a.txt', { 'a' })
-    H.mkfile(ws, 'b\nc.txt', { 'x' })    -- newline in the name: unlistable
+    H.mkfile(ws, 'b\nc.txt', { 'x' }) -- newline in the name: unlistable
     H.mkfile(ws, 'my file.txt', { 's' }) -- space in the name: listable
 
     H.capture_messages()

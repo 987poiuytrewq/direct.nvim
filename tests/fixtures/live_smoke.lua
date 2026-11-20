@@ -2,9 +2,7 @@
 local function run()
   local fs = require('direct.fs')
   local directory_separator = package.config:sub(1, 1)
-  local function is_same_path(a, b)
-    return fs.same_path(a, b) == true
-  end
+  local function is_same_path(a, b) return fs.same_path(a, b) == true end
 
   if vim.env.DIRECT_LIVE_MAP_DEFAULT_KEYS == 'false' then
     local function has_lhs(maps, lhs)
@@ -14,21 +12,19 @@ local function run()
       return false
     end
     assert(vim.bo.filetype == 'direct', 'directory startup was not intercepted with mappings off')
-    assert(not has_lhs(vim.api.nvim_get_keymap('n'), '-'),
-      'map_default_keys=false left the global - mapping installed')
-    assert(not has_lhs(vim.api.nvim_buf_get_keymap(0, 'n'), '-'),
-      'map_default_keys=false left a buffer-local - mapping installed')
+    assert(not has_lhs(vim.api.nvim_get_keymap('n'), '-'), 'map_default_keys=false left the global - mapping installed')
+    assert(
+      not has_lhs(vim.api.nvim_buf_get_keymap(0, 'n'), '-'),
+      'map_default_keys=false left a buffer-local - mapping installed'
+    )
     return 'LIVE_STARTUP_OPTOUT_OK'
   end
 
-  local root = assert(vim.uv.fs_realpath(vim.env.DIRECT_LIVE_WORKSPACE),
-    'workspace path is required and must resolve')
+  local root = assert(vim.uv.fs_realpath(vim.env.DIRECT_LIVE_WORKSPACE), 'workspace path is required and must resolve')
   local file = vim.fs.joinpath(root, 'alpha.txt')
   local child = vim.fs.joinpath(root, 'sub')
 
-  local function lines()
-    return vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  end
+  local function lines() return vim.api.nvim_buf_get_lines(0, 0, -1, false) end
 
   local function feed(lhs)
     local keys = vim.api.nvim_replace_termcodes(lhs, true, false, true)
@@ -36,51 +32,64 @@ local function run()
   end
 
   assert(vim.bo.filetype == 'direct', 'CLI directory startup was not intercepted')
-  assert(is_same_path(vim.api.nvim_buf_get_name(0), root),
+  assert(
+    is_same_path(vim.api.nvim_buf_get_name(0), root),
     'startup listing is not attached to the requested directory: '
-      .. vim.inspect(vim.api.nvim_buf_get_name(0)) .. ' != ' .. vim.inspect(root))
-  assert(vim.deep_equal(lines(), { 'sub' .. directory_separator, 'alpha.txt' }),
-    'startup listing contents differ: ' .. vim.inspect(lines()))
+      .. vim.inspect(vim.api.nvim_buf_get_name(0))
+      .. ' != '
+      .. vim.inspect(root)
+  )
+  assert(
+    vim.deep_equal(lines(), { 'sub' .. directory_separator, 'alpha.txt' }),
+    'startup listing contents differ: ' .. vim.inspect(lines())
+  )
 
   -- Exercise the buffer-local Enter mapping to open a file, then the global
   -- `-` mapping to list that file's directory.
   vim.api.nvim_win_set_cursor(0, { 2, 0 })
   feed('<CR>')
-  assert(is_same_path(vim.api.nvim_buf_get_name(0), file),
-    '<CR> did not open the selected file')
+  assert(is_same_path(vim.api.nvim_buf_get_name(0), file), '<CR> did not open the selected file')
   assert(vim.bo.filetype ~= 'direct', 'opening a file left it in a direct buffer')
   feed('-')
   assert(vim.bo.filetype == 'direct', 'global - did not list the file directory')
-  assert(is_same_path(vim.api.nvim_buf_get_name(0), root),
-    'global - listed the wrong directory')
+  assert(is_same_path(vim.api.nvim_buf_get_name(0), root), 'global - listed the wrong directory')
 
   -- Enter a child directory and use the buffer-local `-` override to return.
   vim.api.nvim_win_set_cursor(0, { 1, 0 })
   feed('<CR>')
   local child_buffer_name = vim.api.nvim_buf_get_name(0)
-  assert(is_same_path(child_buffer_name, child),
-    '<CR> did not open the selected directory: '
-      .. vim.inspect(child_buffer_name) .. ' != ' .. vim.inspect(child))
+  assert(
+    is_same_path(child_buffer_name, child),
+    '<CR> did not open the selected directory: ' .. vim.inspect(child_buffer_name) .. ' != ' .. vim.inspect(child)
+  )
   local expected_parent = vim.fn.fnamemodify(child_buffer_name, ':h')
   feed('-')
   local parent_result = vim.api.nvim_buf_get_name(0)
-  assert(is_same_path(parent_result, root),
+  assert(
+    is_same_path(parent_result, root),
     'buffer-local - did not navigate to the parent directory: '
-      .. vim.inspect(parent_result) .. ' != ' .. vim.inspect(root)
-      .. ' (from ' .. vim.inspect(child_buffer_name) .. ' via '
-      .. vim.inspect(expected_parent) .. ')'
-      .. '; mapping=' .. vim.inspect(vim.fn.maparg('-', 'n', false, true)))
+      .. vim.inspect(parent_result)
+      .. ' != '
+      .. vim.inspect(root)
+      .. ' (from '
+      .. vim.inspect(child_buffer_name)
+      .. ' via '
+      .. vim.inspect(expected_parent)
+      .. ')'
+      .. '; mapping='
+      .. vim.inspect(vim.fn.maparg('-', 'n', false, true))
+  )
 
   -- Exercise the user-facing write path rather than calling Buffer:sync().
   local rows = lines()
   rows[#rows + 1] = 'created.txt'
   vim.api.nvim_buf_set_lines(0, 0, -1, false, rows)
   vim.cmd('write')
-  assert(vim.wait(5000, function()
-    return not require('direct.pending').is_pending()
-  end), 'asynchronous :write did not settle')
-  assert(vim.uv.fs_stat(vim.fs.joinpath(root, 'created.txt')) ~= nil,
-    ':write did not create the new entry')
+  assert(
+    vim.wait(5000, function() return not require('direct.pending').is_pending() end),
+    'asynchronous :write did not settle'
+  )
+  assert(vim.uv.fs_stat(vim.fs.joinpath(root, 'created.txt')) ~= nil, ':write did not create the new entry')
   assert(not vim.bo.modified, 'successful :write left the listing modified')
   return 'LIVE_STARTUP_OK'
 end

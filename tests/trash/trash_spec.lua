@@ -9,13 +9,9 @@ local paths = require('direct.paths')
 local register = require('direct.register')
 local trash = require('direct.trash')
 
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
-local function list_dir(path)
-  return require('direct').list(path)
-end
+local function list_dir(path) return require('direct').list(path) end
 
 H.describe('trash management', function()
   H.it('records original path and deletion time, and keeps metadata across undo/redo', function()
@@ -31,8 +27,7 @@ H.describe('trash management', function()
     H.assert_eq(#entries, 1, 'the deleted file appears in the trash')
     local entry = entries[1]
     H.assert_eq(entry.original, original, 'metadata remembers the original path')
-    H.assert_true(type(entry.deleted_at) == 'string' and #entry.deleted_at > 0,
-      'metadata includes a deletion time')
+    H.assert_true(type(entry.deleted_at) == 'string' and #entry.deleted_at > 0, 'metadata includes a deletion time')
     H.assert_eq(entry.kind, 'file', 'metadata records the entry type')
     H.assert_eq(entry.size, #'trash bytes\n', 'trash listing reports payload size')
     local metadata_path = trash_metadata.path(entry.path)
@@ -45,15 +40,13 @@ H.describe('trash management', function()
     H.wait_for_direct()
     local after_undo = trash.entries()
     H.assert_eq(#after_undo, 0, 'restored entries are not shown as trashed items')
-    H.assert_true(vim.uv.fs_lstat(entry.path) ~= nil,
-      'undo keeps an empty reservation at the old trash slot')
+    H.assert_true(vim.uv.fs_lstat(entry.path) ~= nil, 'undo keeps an empty reservation at the old trash slot')
     H.assert_true(H.exists(ws, 'gone.txt'), 'undo restores the deleted item')
 
     vim.cmd('DirectRedo')
     H.wait_for_direct()
     local after_redo = trash.entries()
-    H.assert_eq(#after_redo, 1,
-      'redo uses a fresh trash slot and hides the old reservation')
+    H.assert_eq(#after_redo, 1, 'redo uses a fresh trash slot and hides the old reservation')
     local active
     for _, candidate in ipairs(after_redo) do
       if not candidate.reserved then active = candidate end
@@ -76,13 +69,13 @@ H.describe('trash management', function()
 
     H.assert_eq(vim.bo.filetype, 'direct-trash', 'trash view has its own filetype')
     H.assert_false(vim.bo.modifiable, 'trash view is read-only')
-    H.assert_true(table.concat(H.buf_lines(), '\n'):find(entry.id, 1, true) ~= nil,
-      'the view exposes the ID used by the restore command')
-    H.assert_true(table.concat(H.buf_lines(), '\n'):find(source, 1, true) ~= nil,
-      'the view displays the original path')
+    H.assert_true(
+      table.concat(H.buf_lines(), '\n'):find(entry.id, 1, true) ~= nil,
+      'the view exposes the ID used by the restore command'
+    )
+    H.assert_true(table.concat(H.buf_lines(), '\n'):find(source, 1, true) ~= nil, 'the view displays the original path')
     vim.cmd('DirectTrash restore ' .. entry.id)
-    H.assert_eq(vim.uv.fs_stat(source).size, 1,
-      'the restore subcommand restores the empty entry')
+    H.assert_eq(vim.uv.fs_stat(source).size, 1, 'the restore subcommand restores the empty entry')
   end)
 
   H.it('aligns the trash view and completes its operations and entry IDs', function()
@@ -101,18 +94,28 @@ H.describe('trash management', function()
       return byte and vim.fn.strdisplaywidth(line:sub(1, byte - 1)) or nil
     end
 
-    H.assert_false(lines[2]:find('\t', 1, true) ~= nil,
-      'the trash columns use spaces rather than raw tabs')
-    H.assert_eq(column_start(lines[2], 'DELETED'), column_start(lines[3], entry.deleted_at),
-      'the deletion-time column lines up')
-    H.assert_eq(column_start(lines[2], 'ORIGINAL PATH'), column_start(lines[3], source),
-      'the path column lines up')
-    H.assert_eq(complete('r', 'DirectTrash r', #'DirectTrash r'),
-      { 'restore' }, 'subcommand completion includes restore')
-    H.assert_eq(complete('', 'DirectTrash ', #'DirectTrash '),
-      { 'empty', 'restore' }, 'subcommand completion includes empty')
-    H.assert_eq(complete('', 'DirectTrash restore ', #'DirectTrash restore '),
-      { entry.id }, 'restore completion includes the current trash ID')
+    H.assert_false(lines[2]:find('\t', 1, true) ~= nil, 'the trash columns use spaces rather than raw tabs')
+    H.assert_eq(
+      column_start(lines[2], 'DELETED'),
+      column_start(lines[3], entry.deleted_at),
+      'the deletion-time column lines up'
+    )
+    H.assert_eq(column_start(lines[2], 'ORIGINAL PATH'), column_start(lines[3], source), 'the path column lines up')
+    H.assert_eq(
+      complete('r', 'DirectTrash r', #'DirectTrash r'),
+      { 'restore' },
+      'subcommand completion includes restore'
+    )
+    H.assert_eq(
+      complete('', 'DirectTrash ', #'DirectTrash '),
+      { 'empty', 'restore' },
+      'subcommand completion includes empty'
+    )
+    H.assert_eq(
+      complete('', 'DirectTrash restore ', #'DirectTrash restore '),
+      { entry.id },
+      'restore completion includes the current trash ID'
+    )
   end)
 
   H.it('restores the row under the cursor from the trash view after confirmation', function()
@@ -135,15 +138,15 @@ H.describe('trash management', function()
     vim.wait(1000, function() return H.exists(ws, 'view-restore.txt') end)
     restore_confirm()
 
-    H.assert_eq(vim.fn.readfile(source), { 'restore payload' },
-      'the selected trash row is restored')
+    H.assert_eq(vim.fn.readfile(source), { 'restore payload' }, 'the selected trash row is restored')
     H.assert_eq(#prompts, 1, 'view restore confirms before changing the filesystem')
-    H.assert_true(prompts[1]:find(entry.id, 1, true) ~= nil,
-      'the prompt names the selected trash entry')
+    H.assert_true(prompts[1]:find(entry.id, 1, true) ~= nil, 'the prompt names the selected trash entry')
     local refreshed = vim.api.nvim_get_current_buf()
     H.assert_true(refreshed ~= view, 'the view is refreshed after a successful restore')
-    H.assert_true(table.concat(H.buf_lines(refreshed), '\n'):find('(empty)', 1, true) ~= nil,
-      'the restored entry disappears from the refreshed view')
+    H.assert_true(
+      table.concat(H.buf_lines(refreshed), '\n'):find('(empty)', 1, true) ~= nil,
+      'the restored entry disappears from the refreshed view'
+    )
 
     vim.api.nvim_feedkeys('q', 'x', false)
     vim.wait(1000, function() return not vim.api.nvim_buf_is_valid(refreshed) end)
@@ -160,26 +163,28 @@ H.describe('trash management', function()
     H.assert_true(remove['do'](), 'move the file into the trash')
     H.assert_true(history.log(remove), 'record the trash destination in history')
     local entry = trash.entries()[1]
-    H.assert_true(vim.uv.fs_unlink(trash_metadata.path(entry.path)),
-      'simulate a legacy entry without its sidecar metadata')
+    H.assert_true(
+      vim.uv.fs_unlink(trash_metadata.path(entry.path)),
+      'simulate a legacy entry without its sidecar metadata'
+    )
 
     local view = trash.show()
 
     H.assert_not_nil(view, 'the legacy trash entry remains listable')
-    H.assert_true(table.concat(H.buf_lines(view), '\n'):find(source, 1, true) ~= nil,
-      'listing recovers the original path from the delete action')
+    H.assert_true(
+      table.concat(H.buf_lines(view), '\n'):find(source, 1, true) ~= nil,
+      'listing recovers the original path from the delete action'
+    )
     local recovered = trash.entries()[1]
     H.assert_eq(recovered.original, source, 'recovery writes canonical metadata')
     H.assert_eq(recovered.kind, 'file', 'recovery records the trashed entry kind')
     H.assert_true(recovered.deleted_at_estimated, 'the recovered deletion time is marked estimated')
-    H.assert_true(recovered.deleted_at_epoch ~= nil,
-      'recovery estimates a deletion time for retention')
+    H.assert_true(recovered.deleted_at_epoch ~= nil, 'recovery estimates a deletion time for retention')
 
     local restore_confirm = H.stub(vim.fn, 'confirm', function() return 1 end)
     local restored, restore_err = trash.restore(entry.id, nil, true)
     restore_confirm()
-    H.assert_true(restored, 'the recovered metadata restores without a typed path: '
-      .. tostring(restore_err))
+    H.assert_true(restored, 'the recovered metadata restores without a typed path: ' .. tostring(restore_err))
     H.assert_eq(vim.fn.readfile(source), { 'legacy payload' }, 'restored contents are intact')
     require('direct.config').setup({})
   end)
@@ -194,17 +199,17 @@ H.describe('trash management', function()
     H.assert_true(remove['do'](), 'move the directory into the trash')
     H.assert_true(history.log(remove), 'record the directory trash destination')
     local entry = trash.entries()[1]
-    H.assert_true(vim.uv.fs_unlink(trash_metadata.path(entry.path)),
-      'simulate an older directory entry without metadata')
+    H.assert_true(
+      vim.uv.fs_unlink(trash_metadata.path(entry.path)),
+      'simulate an older directory entry without metadata'
+    )
 
     local recovered = trash.entries()[1]
 
-    H.assert_eq(recovered.original, paths.canonical(source_dir),
-      'history restores the directory original path')
+    H.assert_eq(recovered.original, paths.canonical(source_dir), 'history restores the directory original path')
     H.assert_eq(recovered.kind, 'directory', 'the trash payload supplies its entry kind')
     H.assert_not_nil(recovered.deleted_at_epoch, 'the deletion time is estimated')
-    H.assert_not_nil(vim.uv.fs_stat(trash_metadata.path(entry.path)),
-      'recovery writes a metadata sidecar')
+    H.assert_not_nil(vim.uv.fs_stat(trash_metadata.path(entry.path)), 'recovery writes a metadata sidecar')
   end)
 
   H.it('trash restore completion lists IDs without measuring or recovering entries', function()
@@ -215,23 +220,23 @@ H.describe('trash management', function()
     local remove = action.Remove(source)
     H.assert_true(remove['do'](), 'create a trash entry')
     local entry = trash.entries()[1]
-    H.assert_true(vim.uv.fs_unlink(trash_metadata.path(entry.path)),
-      'simulate an older entry that completion must not recover')
+    H.assert_true(
+      vim.uv.fs_unlink(trash_metadata.path(entry.path)),
+      'simulate an older entry that completion must not recover'
+    )
     local calls = 0
     local restore_entries = H.stub(trash, 'entries', function()
       calls = calls + 1
       error('completion must not call entries')
     end)
 
-    local completed, completions = pcall(trash.complete, '', 'DirectTrash restore ',
-      #'DirectTrash restore ')
+    local completed, completions = pcall(trash.complete, '', 'DirectTrash restore ', #'DirectTrash restore ')
 
     restore_entries()
     H.assert_true(completed, 'completion avoids the expensive entry scan')
     H.assert_eq(calls, 0, 'completion does not walk trash entries, measure sizes, or recover metadata')
     H.assert_eq(completions, { entry.id }, 'completion returns the current trash entry ID')
-    H.assert_nil(vim.uv.fs_stat(trash_metadata.path(entry.path)),
-      'completion does not write recovered metadata')
+    H.assert_nil(vim.uv.fs_stat(trash_metadata.path(entry.path)), 'completion does not write recovered metadata')
   end)
 
   H.it('estimates recovered deletion time from the trash entry filesystem time', function()
@@ -244,8 +249,7 @@ H.describe('trash management', function()
     H.assert_true(remove['do'](), 'create a trash entry')
     H.assert_true(history.log(remove), 'history identifies the trash payload')
     local entry = trash.entries()[1]
-    H.assert_true(vim.uv.fs_unlink(trash_metadata.path(entry.path)),
-      'remove metadata to simulate an older entry')
+    H.assert_true(vim.uv.fs_unlink(trash_metadata.path(entry.path)), 'remove metadata to simulate an older entry')
     local expected_epoch = os.time() - 2 * 24 * 60 * 60
     local original_lstat = vim.uv.fs_lstat
     local restore_lstat = H.stub(vim.uv, 'fs_lstat', function(path)
@@ -261,15 +265,20 @@ H.describe('trash management', function()
     local recovered = trash.entries()[1]
 
     restore_lstat()
-    H.assert_not_nil(recovered.deleted_at_epoch,
-      'history recovery writes a timestamp: ' .. tostring(recovered.metadata_error))
-    H.assert_true(math.abs(recovered.deleted_at_epoch - expected_epoch) < 2,
-      'mtime supplies the estimated deletion timestamp')
-    H.assert_true(recovered.deleted_at_estimated,
-      'the recovered timestamp is marked as estimated')
+    H.assert_not_nil(
+      recovered.deleted_at_epoch,
+      'history recovery writes a timestamp: ' .. tostring(recovered.metadata_error)
+    )
+    H.assert_true(
+      math.abs(recovered.deleted_at_epoch - expected_epoch) < 2,
+      'mtime supplies the estimated deletion timestamp'
+    )
+    H.assert_true(recovered.deleted_at_estimated, 'the recovered timestamp is marked as estimated')
     local view = trash.show()
-    H.assert_true(table.concat(H.buf_lines(view), '\n'):find('(estimated)', 1, true) ~= nil,
-      'the trash view identifies the recovered timestamp as an estimate')
+    H.assert_true(
+      table.concat(H.buf_lines(view), '\n'):find('(estimated)', 1, true) ~= nil,
+      'the trash view identifies the recovered timestamp as an estimate'
+    )
     require('direct.config').setup({})
   end)
 
@@ -315,8 +324,10 @@ H.describe('trash management', function()
     vim.cmd('DirectTrash! restore ' .. entry.id)
     restore_confirm()
     H.assert_eq(#prompts, 2, 'force restore confirms before discarding referenced history')
-    H.assert_true(prompts[2].prompt:find('1 undo step and 0 redo steps', 1, true) ~= nil,
-      'restore confirmation reports the number of history steps affected')
+    H.assert_true(
+      prompts[2].prompt:find('1 undo step and 0 redo steps', 1, true) ~= nil,
+      'restore confirmation reports the number of history steps affected'
+    )
     H.assert_eq(vim.fn.readfile(original), { 'restore me' }, 'restored bytes are intact')
     H.assert_eq(#trash.entries(), 0, 'restored items are no longer listed as trash')
     H.assert_notified('discarded 1 undo step and 0 redo steps', vim.log.levels.WARN)
@@ -369,7 +380,10 @@ H.describe('trash management', function()
     list_dir(ws)
     local current = H.buf_lines()
     for index, line in ipairs(current) do
-      if line == 'logged.txt' then table.remove(current, index); break end
+      if line == 'logged.txt' then
+        table.remove(current, index)
+        break
+      end
     end
     vim.api.nvim_buf_set_lines(0, 0, -1, false, current)
     H.assert_true(require('direct').sync(), 'record the trash-backed deletion on top')
@@ -384,24 +398,29 @@ H.describe('trash management', function()
     end)
     local cancelled, cancel_err = require('direct').trash_empty(true)
     H.assert_nil(cancelled, 'the user can cancel the destructive operation')
-    H.assert_true(tostring(cancel_err):find('cancelled', 1, true) ~= nil,
-      'cancellation is reported')
+    H.assert_true(tostring(cancel_err):find('cancelled', 1, true) ~= nil, 'cancellation is reported')
     H.assert_eq(#trash.entries(), 1, 'cancelling preserves the trash payload')
-    H.assert_true(prompts[1].prompt:find('1 undo step and 0 redo steps', 1, true) ~= nil,
-      'the cancellation prompt describes the history loss')
+    H.assert_true(
+      prompts[1].prompt:find('1 undo step and 0 redo steps', 1, true) ~= nil,
+      'the cancellation prompt describes the history loss'
+    )
     vim.cmd('DirectTrash! empty')
     restore_confirm()
 
     H.assert_eq(#prompts, 2, 'force asks before dropping history and emptying trash')
-    H.assert_true(prompts[2].prompt:find('1 undo step and 0 redo steps', 1, true) ~= nil,
-      'confirmation explains exactly how many undo steps are dropped')
+    H.assert_true(
+      prompts[2].prompt:find('1 undo step and 0 redo steps', 1, true) ~= nil,
+      'confirmation explains exactly how many undo steps are dropped'
+    )
     H.assert_eq(#trash.entries(), 0, 'the confirmed force empties the trash')
     H.assert_notified('discarded 1 undo step and 0 redo steps', vim.log.levels.WARN)
 
     vim.cmd('DirectUndo')
     H.wait_for_direct()
-    H.assert_false(H.exists(ws, 'keep-undo.txt'),
-      'the next independent undo remains usable after the trash-backed step is removed')
+    H.assert_false(
+      H.exists(ws, 'keep-undo.txt'),
+      'the next independent undo remains usable after the trash-backed step is removed'
+    )
     H.assert_false(H.exists(ws, 'logged.txt'), 'the emptied trash item stays deleted')
   end)
 
@@ -429,11 +448,12 @@ H.describe('trash management', function()
 
     H.assert_true(emptied, 'the confirmed force empties the trash')
     H.assert_eq(#prompts, 1, 'the dependent steps are confirmed together')
-    H.assert_true(prompts[1]:find('2 undo steps and 0 redo steps', 1, true) ~= nil,
-      'the prompt includes the earlier rename that depends on the deleted path')
+    H.assert_true(
+      prompts[1]:find('2 undo steps and 0 redo steps', 1, true) ~= nil,
+      'the prompt includes the earlier rename that depends on the deleted path'
+    )
     local state = require('direct.history.history').preflight()
-    H.assert_eq(#state.undo_lines, 1,
-      'both the delete and dependent rename records are removed from undo history')
+    H.assert_eq(#state.undo_lines, 1, 'both the delete and dependent rename records are removed from undo history')
     H.assert_false(H.exists(ws, 'a.txt'), 'the deleted path remains empty')
     H.assert_false(H.exists(ws, 'b.txt'), 'the earlier rename is not left as a broken undo')
   end)
@@ -464,8 +484,10 @@ H.describe('trash management', function()
     restore_confirm()
 
     H.assert_true(emptied, 'the directory trash entry is emptied')
-    H.assert_true(prompts[1]:find('3 undo steps and 0 redo steps', 1, true) ~= nil,
-      'the prompt includes mkdir, child creation, and directory deletion')
+    H.assert_true(
+      prompts[1]:find('3 undo steps and 0 redo steps', 1, true) ~= nil,
+      'the prompt includes mkdir, child creation, and directory deletion'
+    )
     local state = require('direct.history.history').preflight()
     H.assert_eq(#state.undo_lines, 1, 'all path-dependent directory history is removed')
   end)
@@ -494,8 +516,10 @@ H.describe('trash management', function()
     H.assert_true(trash.empty(true), 'force-empty the pasted file')
     restore_confirm()
 
-    H.assert_true(prompts[1]:find('2 undo steps and 0 redo steps', 1, true) ~= nil,
-      'confirmation includes both the delete and the paste')
+    H.assert_true(
+      prompts[1]:find('2 undo steps and 0 redo steps', 1, true) ~= nil,
+      'confirmation includes both the delete and the paste'
+    )
     local state = history.preflight()
     H.assert_eq(#state.undo_lines, 1, 'the deleted paste and its creator are removed')
     H.capture_messages()
@@ -528,8 +552,10 @@ H.describe('trash management', function()
     H.assert_true(trash.empty(true), 'force-empty the deleted descendant')
     restore_confirm()
 
-    H.assert_true(prompts[1]:find('2 undo steps and 0 redo steps', 1, true) ~= nil,
-      'the directory paste is linked to its deleted descendant')
+    H.assert_true(
+      prompts[1]:find('2 undo steps and 0 redo steps', 1, true) ~= nil,
+      'the directory paste is linked to its deleted descendant'
+    )
     local state = history.preflight()
     H.assert_eq(#state.undo_lines, 1, 'the deleted child and its directory paste are removed')
   end)
@@ -557,8 +583,10 @@ H.describe('trash management', function()
 
     H.assert_true(emptied, 'the reservation is emptied')
     H.assert_eq(#prompts, 1, 'force confirms loss of the redo reference')
-    H.assert_true(prompts[1]:find('0 undo steps and 1 redo step', 1, true) ~= nil,
-      'confirmation reports the redo step that will be dropped')
+    H.assert_true(
+      prompts[1]:find('0 undo steps and 1 redo step', 1, true) ~= nil,
+      'confirmation reports the redo step that will be dropped'
+    )
     vim.cmd('DirectRedo')
     H.wait_for_direct()
     H.assert_true(H.exists(original), 'the stale redo entry cannot remove the restored file')
@@ -641,9 +669,7 @@ H.describe('trash management', function()
     local trash_scans = 0
     vim.uv.fs_scandir = function(path, ...)
       local key = paths.canonical(path):gsub('\\', '/'):lower()
-      if key == root_key or key:sub(1, #root_key + 1) == root_key .. '/' then
-        trash_scans = trash_scans + 1
-      end
+      if key == root_key or key:sub(1, #root_key + 1) == root_key .. '/' then trash_scans = trash_scans + 1 end
       return original_scandir(path, ...)
     end
 
@@ -664,10 +690,11 @@ H.describe('trash management', function()
     H.assert_true(first_save, 'the first post-retention save succeeds: ' .. tostring(first_err))
     H.assert_true(second_save, 'the second post-retention save succeeds: ' .. tostring(second_err))
     H.assert_true(first_save_scans > 0, 'the first automatic retention pass walks the trash tree')
-    H.assert_eq(later_save_scans, 0,
-      'later saves do not recursively rescan trash again during the session')
+    H.assert_eq(later_save_scans, 0, 'later saves do not recursively rescan trash again during the session')
     H.assert_not_nil(trash_bufnr, 'opening the trash view succeeds')
-    H.assert_true(explicit_scans > first_save_scans + later_save_scans,
-      'opening the trash view explicitly forces a fresh trash walk')
+    H.assert_true(
+      explicit_scans > first_save_scans + later_save_scans,
+      'opening the trash view explicitly forces a fresh trash walk'
+    )
   end)
 end)

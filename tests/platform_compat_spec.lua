@@ -4,9 +4,7 @@ local H = require('tests.support.harness')
 local buffer = require('direct.buffer.buffer')
 local fs = require('direct.fs')
 
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 H.describe('platform path compatibility', function()
   H.it('renders directory rows with the native separator and uses native paths', function()
@@ -20,15 +18,19 @@ H.describe('platform path compatibility', function()
     local sb = H.sandbox()
     local root = H.mkdir(sb.root, 'workspace')
     H.mkdir(root, 'existing')
-    H.assert_false(fs.same_path(root, vim.fs.joinpath(root, 'existing')),
-      'a directory is distinct from its child directory')
+    H.assert_false(
+      fs.same_path(root, vim.fs.joinpath(root, 'existing')),
+      'a directory is distinct from its child directory'
+    )
 
     buffer.list(root)
 
     H.assert_buf_eq({ 'existing' .. separator })
-    H.assert_eq(buffer.entry_path(root, 'existing' .. separator),
+    H.assert_eq(
+      buffer.entry_path(root, 'existing' .. separator),
       vim.fs.joinpath(root, 'existing') .. separator,
-      'the rendered marker maps to a native filesystem path')
+      'the rendered marker maps to a native filesystem path'
+    )
   end)
 
   H.it('supports a configured marker for nested creates without leaking it into paths', function()
@@ -46,8 +48,7 @@ H.describe('platform path compatibility', function()
     local listing = buffer.list(root)
 
     H.assert_buf_eq({ 'existing' .. marker })
-    H.assert_eq(buffer.entry_path(root, 'existing' .. marker),
-      vim.fs.joinpath(root, 'existing') .. native)
+    H.assert_eq(buffer.entry_path(root, 'existing' .. marker), vim.fs.joinpath(root, 'existing') .. native)
 
     vim.api.nvim_buf_set_lines(0, -1, -1, false, {
       'created' .. marker,
@@ -55,12 +56,13 @@ H.describe('platform path compatibility', function()
       'nested' .. marker .. 'child.txt',
     })
     local synced, sync_err = listing:sync()
-    H.assert_true(synced == true,
-      'configured directory rows sync successfully: ' .. tostring(sync_err))
+    H.assert_true(synced == true, 'configured directory rows sync successfully: ' .. tostring(sync_err))
     H.assert_true(fs.is_dir(vim.fs.joinpath(root, 'created')))
     H.assert_true(fs.is_file(vim.fs.joinpath(root, 'nested', 'child.txt')))
-    H.assert_not_nil(buffer._component_reason('bad' .. marker .. 'name'),
-      'the configured row separator is reserved inside entry names')
+    H.assert_not_nil(
+      buffer._component_reason('bad' .. marker .. 'name'),
+      'the configured row separator is reserved inside entry names'
+    )
   end)
 
   H.it('uses atomic no-replace moves on the current platform', function()
@@ -72,10 +74,8 @@ H.describe('platform path compatibility', function()
     H.assert_eq(vim.fn.readfile(destination), { 'source' })
 
     local second_source = H.mkfile(sb.root, 'second.txt', 'second')
-    H.assert_true(fs.rename_noreplace(second_source, destination) == nil,
-      'occupied destination is refused')
+    H.assert_true(fs.rename_noreplace(second_source, destination) == nil, 'occupied destination is refused')
     H.assert_true(fs.exists(second_source), 'refused source remains in place')
-    H.assert_eq(vim.fn.readfile(destination), { 'source' },
-      'refused move leaves the existing destination intact')
+    H.assert_eq(vim.fn.readfile(destination), { 'source' }, 'refused move leaves the existing destination intact')
   end)
 end)

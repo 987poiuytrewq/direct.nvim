@@ -92,16 +92,16 @@ H.describe('log', function()
   H.it('write() replaces the whole file with the given lines', function()
     local sb = H.sandbox()
     local path = sb.root .. '/undo.log'
-    H.assert_true(log.write(path, { '#direct-history-v2' }) == true,
-      'write creates the file')
-    H.assert_eq(vim.fn.readfile(path), { '#direct-history-v2' },
-      'the given lines are the whole file')
+    H.assert_true(log.write(path, { '#direct-history-v2' }) == true, 'write creates the file')
+    H.assert_eq(vim.fn.readfile(path), { '#direct-history-v2' }, 'the given lines are the whole file')
     log.push(path, 'mv\ta\tb')
-    H.assert_eq(vim.fn.readfile(path), { '#direct-history-v2', 'mv\ta\tb' },
-      'precondition: an appended entry follows the marker')
+    H.assert_eq(
+      vim.fn.readfile(path),
+      { '#direct-history-v2', 'mv\ta\tb' },
+      'precondition: an appended entry follows the marker'
+    )
     H.assert_true(log.write(path, { '#direct-history-v2' }) == true, 'overwrite succeeds')
-    H.assert_eq(vim.fn.readfile(path), { '#direct-history-v2' },
-      'the previous content is gone, not appended to')
+    H.assert_eq(vim.fn.readfile(path), { '#direct-history-v2' }, 'the previous content is gone, not appended to')
   end)
 
   H.it('write() rejects a non-table without touching the file', function()
@@ -121,8 +121,7 @@ H.describe('log', function()
     local sb = H.sandbox()
     local path = sb.root .. '/undo.log'
     H.assert_true(log.write(path, { 'original' }) == true, 'initial log')
-    local real_open, real_write, real_close = log.uv.fs_open,
-      log.uv.fs_write, log.uv.fs_close
+    local real_open, real_write, real_close = log.uv.fs_open, log.uv.fs_write, log.uv.fs_close
     local collision, injected = nil, false
     local restore = H.stub(log.uv, 'fs_open', function(candidate, flags, mode)
       if not injected and flags == 'wx' then
@@ -136,13 +135,15 @@ H.describe('log', function()
       return real_open(candidate, flags, mode)
     end)
 
-    H.assert_true(log.write(path, { 'replacement' }) == true,
-      'write retries with another unique temp')
+    H.assert_true(log.write(path, { 'replacement' }) == true, 'write retries with another unique temp')
     restore()
 
     H.assert_eq(log.read_raw(path), 'replacement\n', 'owned history was replaced')
-    H.assert_eq(log.read_raw(collision), 'foreign-temp-bytes',
-      'the colliding temp belongs to someone else and remains untouched')
+    H.assert_eq(
+      log.read_raw(collision),
+      'foreign-temp-bytes',
+      'the colliding temp belongs to someone else and remains untouched'
+    )
   end)
 
   H.it('partial write, fsync, close, and rename failures preserve old bytes and clean own temps', function()
@@ -150,8 +151,7 @@ H.describe('log', function()
     local path = sb.root .. '/undo.log'
     local faults = { 'partial write', 'fsync', 'close', 'rename' }
     for _, fault in ipairs(faults) do
-      H.assert_true(log.write(path, { 'original-' .. fault }) == true,
-        'initial ' .. fault .. ' content')
+      H.assert_true(log.write(path, { 'original-' .. fault }) == true, 'initial ' .. fault .. ' content')
       local before = log.read_raw(path)
       local restores = {}
       if fault == 'partial write' then
@@ -161,8 +161,7 @@ H.describe('log', function()
           return nil, 'forced partial write failure'
         end)
       elseif fault == 'fsync' then
-        restores[#restores + 1] = H.stub(log.uv, 'fs_fsync',
-          function() return nil, 'forced fsync failure' end)
+        restores[#restores + 1] = H.stub(log.uv, 'fs_fsync', function() return nil, 'forced fsync failure' end)
       elseif fault == 'close' then
         local real = log.uv.fs_close
         restores[#restores + 1] = H.stub(log.uv, 'fs_close', function(fd)
@@ -170,18 +169,18 @@ H.describe('log', function()
           return nil, 'forced close failure'
         end)
       else
-        restores[#restores + 1] = H.stub(log.uv, 'fs_rename',
-          function() return nil, 'forced rename failure' end)
+        restores[#restores + 1] = H.stub(log.uv, 'fs_rename', function() return nil, 'forced rename failure' end)
       end
 
       local ok, err = log.write(path, { 'replacement' })
-      for i = #restores, 1, -1 do restores[i]() end
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
 
       H.assert_nil(ok, fault .. ' is reported')
       H.assert_true(type(err) == 'string' and #err > 0, fault .. ' has an error')
       H.assert_eq(log.read_raw(path), before, fault .. ' leaves original bytes unchanged')
-      H.assert_eq(vim.fn.glob(path .. '.direct-tmp-*'), '',
-        fault .. ' removes only its own temp')
+      H.assert_eq(vim.fn.glob(path .. '.direct-tmp-*'), '', fault .. ' removes only its own temp')
     end
   end)
 end)

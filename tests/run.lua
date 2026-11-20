@@ -48,9 +48,7 @@ vim.opt.runtimepath:prepend(root)
 -- plugin. Resolve it immediately so fixtures use a consistent real path.
 local os_tmp = vim.uv.os_tmpdir() or vim.env.TMPDIR or '/tmp'
 local created = vim.uv.fs_mkdtemp(vim.fs.joinpath(os_tmp, 'direct-tests-XXXXXX'))
-if not created then
-  error('could not create temp root under ' .. os_tmp)
-end
+if not created then error('could not create temp root under ' .. os_tmp) end
 local base = vim.uv.fs_realpath(created) or created
 local boot_home = vim.fs.joinpath(base, 'boot-home')
 vim.fn.mkdir(boot_home, 'p')
@@ -110,8 +108,7 @@ local specs = {}
 local function discover_specs(directory, relative_directory)
   for name, kind in vim.fs.dir(directory) do
     local path = vim.fs.joinpath(directory, name)
-    local relative = relative_directory == '' and name
-      or (relative_directory .. '/' .. name)
+    local relative = relative_directory == '' and name or (relative_directory .. '/' .. name)
     if kind == 'directory' then
       discover_specs(path, relative)
     elseif kind == 'file' and name:match('_spec%.lua$') and matches_filters(relative) then
@@ -183,8 +180,15 @@ local function main()
     end
   end
 
-  io.write(string.format('RUN: %d spec(s), %d passed, %d skipped, %d failed\n',
-    total_specs, total_passed, total_skipped, total_failed))
+  io.write(
+    string.format(
+      'RUN: %d spec(s), %d passed, %d skipped, %d failed\n',
+      total_specs,
+      total_passed,
+      total_skipped,
+      total_failed
+    )
+  )
   if #failures > 0 then
     io.write('\nFailures:\n')
     for index, failure in ipairs(failures) do
@@ -197,13 +201,9 @@ end
 local ok, result = xpcall(main, debug.traceback)
 
 -- Boot cleanup: remove the run temp root (and every sandbox under it).
-if base then
-  pcall(vim.fs.rm, base, { recursive = true, force = true })
-end
+if base then pcall(vim.fs.rm, base, { recursive = true, force = true }) end
 
-if not ok then
-  io.stderr:write('harness error:\n' .. tostring(result) .. '\n')
-end
+if not ok then io.stderr:write('harness error:\n' .. tostring(result) .. '\n') end
 
 local exit_code = (ok and result) and 0 or 1
 io.stdout:flush()

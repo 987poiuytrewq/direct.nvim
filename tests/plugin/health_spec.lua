@@ -9,36 +9,39 @@ H.describe('health: :checkhealth direct', function()
     vim.cmd('checkhealth direct')
 
     local buf = vim.api.nvim_get_current_buf()
-    H.assert_eq(vim.api.nvim_buf_get_name(buf), 'health://',
-      'checkhealth focuses the health report buffer')
+    H.assert_eq(vim.api.nvim_buf_get_name(buf), 'health://', 'checkhealth focuses the health report buffer')
     H.assert_eq(vim.bo[buf].filetype, 'checkhealth', 'and marks it as a health buffer')
 
     local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
     H.assert_true(text:find('Neovim', 1, true) ~= nil, 'the report names Neovim')
-    H.assert_true(text:find('(>= 0.11.7 required)', 1, true) ~= nil,
-      'the report states the 0.11.7 floor')
+    H.assert_true(text:find('(>= 0.11.7 required)', 1, true) ~= nil, 'the report states the 0.11.7 floor')
     H.assert_true(text:find('OK', 1, true) ~= nil, 'the version check is OK on this runtime')
-    H.assert_true(text:find('data directory: ' .. paths.data_home(), 1, true) ~= nil,
-      'the report names the resolved data directory')
-    H.assert_true(text:find('data directory is writable:', 1, true) ~= nil,
-      'the report checks that Direct can write its data directory')
-    H.assert_true(text:find('safe no-replace renames work in the data directory', 1, true) ~= nil,
-      'the report confirms the data-directory no-replace probe')
+    H.assert_true(
+      text:find('data directory: ' .. paths.data_home(), 1, true) ~= nil,
+      'the report names the resolved data directory'
+    )
+    H.assert_true(
+      text:find('data directory is writable:', 1, true) ~= nil,
+      'the report checks that Direct can write its data directory'
+    )
+    H.assert_true(
+      text:find('safe no-replace renames work in the data directory', 1, true) ~= nil,
+      'the report confirms the data-directory no-replace probe'
+    )
     H.assert_true(text:find('Git:', 1, true) ~= nil, 'the report includes Git availability/version')
-    H.assert_true(text:find('undo.log: not initialized (fresh)', 1, true) ~= nil,
-      'the report classifies fresh history')
-    H.assert_true(text:find('history steps: undo=0, redo=0 (limit=1000)', 1, true) ~= nil,
-      'the report includes both history step counts and their limit')
-    H.assert_true(text:find('recovery journal: none', 1, true) ~= nil,
-      'the report checks for interrupted transactions')
-    H.assert_true(text:find('trash size: 0 bytes', 1, true) ~= nil,
-      'the report includes the trash size')
-    H.assert_true(text:find('register size: 0 bytes', 1, true) ~= nil,
-      'the report includes the register size')
-    H.assert_true(text:find('nvim-web-devicons:', 1, true) ~= nil,
-      'the report notes optional icon-provider availability')
-    H.assert_true(text:find('icons enabled:', 1, true) ~= nil,
-      'the report includes current icon settings')
+    H.assert_true(text:find('undo.log: not initialized (fresh)', 1, true) ~= nil, 'the report classifies fresh history')
+    H.assert_true(
+      text:find('history steps: undo=0, redo=0 (limit=1000)', 1, true) ~= nil,
+      'the report includes both history step counts and their limit'
+    )
+    H.assert_true(text:find('recovery journal: none', 1, true) ~= nil, 'the report checks for interrupted transactions')
+    H.assert_true(text:find('trash size: 0 bytes', 1, true) ~= nil, 'the report includes the trash size')
+    H.assert_true(text:find('register size: 0 bytes', 1, true) ~= nil, 'the report includes the register size')
+    H.assert_true(
+      text:find('nvim-web-devicons:', 1, true) ~= nil,
+      'the report notes optional icon-provider availability'
+    )
+    H.assert_true(text:find('icons enabled:', 1, true) ~= nil, 'the report includes current icon settings')
   end)
 
   H.it('warns when history reaches its limit or register storage exceeds 1 GiB', function()
@@ -49,8 +52,7 @@ H.describe('health: :checkhealth direct', function()
     config.setup({ history_limit = 1, trash_retention = false })
     H.assert_true(require('direct.register').yank({ source }), 'create a register snapshot')
     local action = require('direct.action.action')
-    H.assert_true(require('direct.history.history').log(action.Touch(ws .. '/recorded.txt')),
-      'create one history step')
+    H.assert_true(require('direct.history.history').log(action.Touch(ws .. '/recorded.txt')), 'create one history step')
 
     local register = require('direct.register')
     local original_size = register.size_bytes
@@ -59,12 +61,12 @@ H.describe('health: :checkhealth direct', function()
     register.size_bytes = original_size
 
     local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
-    H.assert_true(text:find('history steps: undo=1, redo=0 (limit=1)', 1, true) ~= nil,
-      'the one-step history size is reported')
-    H.assert_true(text:find('history_limit reached', 1, true) ~= nil,
-      'a full history stack is called out')
-    H.assert_true(text:find('register exceeds 1 GiB', 1, true) ~= nil,
-      'large register storage produces a warning')
+    H.assert_true(
+      text:find('history steps: undo=1, redo=0 (limit=1)', 1, true) ~= nil,
+      'the one-step history size is reported'
+    )
+    H.assert_true(text:find('history_limit reached', 1, true) ~= nil, 'a full history stack is called out')
+    H.assert_true(text:find('register exceeds 1 GiB', 1, true) ~= nil, 'large register storage produces a warning')
     config.setup({})
   end)
 
@@ -74,8 +76,7 @@ H.describe('health: :checkhealth direct', function()
     vim.fn.mkdir(history_dir, 'p')
     local undo_path = vim.fs.joinpath(history_dir, 'undo.log')
     local malformed = '{"format":"direct-history","version":1}\nnot-json\n'
-    H.assert_true(require('direct.log').write_raw_atomic(undo_path, malformed),
-      'write a damaged history fixture')
+    H.assert_true(require('direct.log').write_raw_atomic(undo_path, malformed), 'write a damaged history fixture')
     local transaction = require('direct.history.transaction')
     local journal = vim.json.encode({
       format = transaction.FORMAT,
@@ -84,18 +85,27 @@ H.describe('health: :checkhealth direct', function()
       undo = { transaction.HEADER },
       redo = { transaction.HEADER },
     }) .. '\n'
-    H.assert_true(require('direct.log').write_raw_atomic(
-      vim.fs.joinpath(history_dir, 'transaction.json'), journal), 'write a valid transaction')
+    H.assert_true(
+      require('direct.log').write_raw_atomic(vim.fs.joinpath(history_dir, 'transaction.json'), journal),
+      'write a valid transaction'
+    )
 
     vim.cmd('checkhealth direct')
 
     local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
-    H.assert_true(text:find('undo.log: preserved because damaged or unrecognized', 1, true) ~= nil,
-      'damaged history is reported as preserved')
-    H.assert_true(text:find('unfinished transaction requires recovery', 1, true) ~= nil,
-      'a parseable pending journal is reported as recovery-needed')
-    H.assert_eq(require('direct.log').read_raw(undo_path), malformed,
-      'health inspection leaves damaged history byte-for-byte')
+    H.assert_true(
+      text:find('undo.log: preserved because damaged or unrecognized', 1, true) ~= nil,
+      'damaged history is reported as preserved'
+    )
+    H.assert_true(
+      text:find('unfinished transaction requires recovery', 1, true) ~= nil,
+      'a parseable pending journal is reported as recovery-needed'
+    )
+    H.assert_eq(
+      require('direct.log').read_raw(undo_path),
+      malformed,
+      'health inspection leaves damaged history byte-for-byte'
+    )
   end)
 
   H.it('reports when the Git executable is unavailable', function()
@@ -109,8 +119,7 @@ H.describe('health: :checkhealth direct', function()
 
     vim.fn.executable = real_executable
     local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
-    H.assert_true(text:find('Git executable is unavailable', 1, true) ~= nil,
-      'health warns when Git is missing')
+    H.assert_true(text:find('Git executable is unavailable', 1, true) ~= nil, 'health warns when Git is missing')
   end)
 
   H.it('reports a data-directory write failure and skips history inspection', function()
@@ -130,10 +139,11 @@ H.describe('health: :checkhealth direct', function()
 
     vim.uv.fs_open = real_open
     local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
-    H.assert_true(text:find('data directory is not writable', 1, true) ~= nil,
-      'write probe failure is reported')
-    H.assert_true(text:find('history checks skipped because the data directory is not writable',
-      1, true) ~= nil, 'history checks do not create data files after failed write probe')
+    H.assert_true(text:find('data directory is not writable', 1, true) ~= nil, 'write probe failure is reported')
+    H.assert_true(
+      text:find('history checks skipped because the data directory is not writable', 1, true) ~= nil,
+      'history checks do not create data files after failed write probe'
+    )
   end)
 
   H.it('probes safe renames only inside Direct data and reports unsupported filesystems', function()
@@ -152,13 +162,13 @@ H.describe('health: :checkhealth direct', function()
 
     fs.rename_noreplace = real_rename
     local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
-    H.assert_true(text:find('safe no-replace renames are unavailable in the data directory', 1, true) ~= nil,
-      'health identifies the unsupported capability')
+    H.assert_true(
+      text:find('safe no-replace renames are unavailable in the data directory', 1, true) ~= nil,
+      'health identifies the unsupported capability'
+    )
     H.assert_eq(#probed, 1, 'health performs one no-replace probe')
-    H.assert_true(probed[1][1]:sub(1, #directory + 1) == directory .. '/',
-      'probe source is inside Direct data')
-    H.assert_true(probed[1][2]:sub(1, #directory + 1) == directory .. '/',
-      'probe destination is inside Direct data')
+    H.assert_true(probed[1][1]:sub(1, #directory + 1) == directory .. '/', 'probe source is inside Direct data')
+    H.assert_true(probed[1][2]:sub(1, #directory + 1) == directory .. '/', 'probe destination is inside Direct data')
     H.assert_nil(vim.uv.fs_lstat(probed[1][1]), 'source probe file is removed')
     H.assert_nil(vim.uv.fs_lstat(probed[1][2]), 'destination probe file is removed')
   end)

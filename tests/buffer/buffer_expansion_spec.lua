@@ -7,9 +7,7 @@ require('direct.config').setup({ collapse_single_entry_directories = false })
 
 -- Within-file isolation: the harness wipes buffers only at FILE boundaries, so a
 -- modified buffer left by one spec would make the next `enew` raise E37.
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 -- Symlink helper: luv returns true|nil, err from fs_symlink, so existence is
 -- checked through lstat instead of the return value.
@@ -17,7 +15,6 @@ local function make_symlink(target, link)
   pcall(H.symlink, target, link)
   return vim.uv.fs_lstat(link) ~= nil
 end
-
 
 H.describe('buffer: expansion and collapse lifecycle', function()
   H.it('[d and ]d jump between visible directory rows without changing expansion', function()
@@ -34,30 +31,39 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     listing:expand(1)
     listing:expand(2)
     H.assert_buf_eq({
-      'alpha/', '  inner/', '    deep.txt', '  alpha.txt', 'beta/', 'gamma/',
+      'alpha/',
+      '  inner/',
+      '    deep.txt',
+      '  alpha.txt',
+      'beta/',
+      'gamma/',
     }, 0)
 
     vim.api.nvim_win_set_cursor(0, { 4, 0 })
     vim.api.nvim_feedkeys('[d', 'mx', false)
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 2,
-      '[d skips preceding files and reaches a nested directory')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 2, '[d skips preceding files and reaches a nested directory')
 
     vim.api.nvim_feedkeys(']d', 'mx', false)
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 5,
-      ']d skips files and collapsed descendants to reach the next visible directory')
+    H.assert_eq(
+      vim.api.nvim_win_get_cursor(0)[1],
+      5,
+      ']d skips files and collapsed descendants to reach the next visible directory'
+    )
     vim.api.nvim_feedkeys(']d', 'mx', false)
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 6,
-      ']d continues across visible root directories')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 6, ']d continues across visible root directories')
     vim.api.nvim_feedkeys(']d', 'mx', false)
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 6,
-      ']d stays put when there is no later visible directory')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 6, ']d stays put when there is no later visible directory')
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
     vim.api.nvim_feedkeys('[d', 'mx', false)
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 1,
-      '[d stays put when there is no earlier visible directory')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 1, '[d stays put when there is no earlier visible directory')
 
     H.assert_buf_eq({
-      'alpha/', '  inner/', '    deep.txt', '  alpha.txt', 'beta/', 'gamma/',
+      'alpha/',
+      '  inner/',
+      '    deep.txt',
+      '  alpha.txt',
+      'beta/',
+      'gamma/',
     }, 0, 'directory jumps do not expand, collapse, or edit the listing')
   end)
 
@@ -93,8 +99,11 @@ H.describe('buffer: expansion and collapse lifecycle', function()
       H.assert_eq(calls, 1, 'repeat expansion does not re-read')
       H.assert_eq(vim.api.nvim_buf_line_count(0), 4, 'repeat expansion does not duplicate')
       H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], 1, 'cursor stays on the directory')
-      H.assert_eq(vim.fn.undotree().seq_cur, before.seq_cur + 1,
-        'expansion starts its own undo block after the prior change')
+      H.assert_eq(
+        vim.fn.undotree().seq_cur,
+        before.seq_cur + 1,
+        'expansion starts its own undo block after the prior change'
+      )
     end)
     buffer.read = read
     if not ok then error(err) end
@@ -131,21 +140,32 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     buffer.list(ws)
 
     vim.api.nvim_feedkeys('zO', 'mx', false)
-    H.assert_buf_eq({ 'a/', '  b/', '    c/', '      deep.txt', 'other/' }, 0,
-      'zO recursively expands the directory under the cursor')
+    H.assert_buf_eq(
+      { 'a/', '  b/', '    c/', '      deep.txt', 'other/' },
+      0,
+      'zO recursively expands the directory under the cursor'
+    )
 
     vim.api.nvim_feedkeys('zA', 'mx', false)
     H.assert_buf_eq({ 'a/', 'other/' }, 0, 'zA recursively collapses an open directory')
     vim.api.nvim_feedkeys('zA', 'mx', false)
-    H.assert_buf_eq({ 'a/', '  b/', '    c/', '      deep.txt', 'other/' }, 0,
-      'zA recursively expands a closed directory')
+    H.assert_buf_eq(
+      { 'a/', '  b/', '    c/', '      deep.txt', 'other/' },
+      0,
+      'zA recursively expands a closed directory'
+    )
     vim.api.nvim_feedkeys('zC', 'mx', false)
     H.assert_buf_eq({ 'a/', 'other/' }, 0, 'zC recursively collapses the directory')
 
     vim.api.nvim_feedkeys('zR', 'mx', false)
     H.assert_buf_eq({
-      'a/', '  b/', '    c/', '      deep.txt',
-      'other/', '  child/', '    file.txt',
+      'a/',
+      '  b/',
+      '    c/',
+      '      deep.txt',
+      'other/',
+      '  child/',
+      '    file.txt',
     }, 0, 'zR recursively expands every root directory')
     vim.api.nvim_feedkeys('zM', 'mx', false)
     H.assert_buf_eq({ 'a/', 'other/' }, 0, 'zM collapses every root directory')
@@ -164,12 +184,14 @@ H.describe('buffer: expansion and collapse lifecycle', function()
 
     vim.api.nvim_feedkeys('zR', 'mx', false)
 
-    H.assert_buf_eq({ 'a/', '  b/', '    c/' }, 0,
-      'depth two opens a and b but leaves c closed')
+    H.assert_buf_eq({ 'a/', '  b/', '    c/' }, 0, 'depth two opens a and b but leaves c closed')
     vim.api.nvim_win_set_cursor(0, { 3, 0 })
     vim.api.nvim_feedkeys('zo', 'mx', false)
-    H.assert_buf_eq({ 'a/', '  b/', '    c/', '      deep.txt' }, 0,
-      'the recursive limit does not restrict ordinary one-level browsing')
+    H.assert_buf_eq(
+      { 'a/', '  b/', '    c/', '      deep.txt' },
+      0,
+      'the recursive limit does not restrict ordinary one-level browsing'
+    )
     config.setup({ max_recursive_expand_depth = false, collapse_single_entry_directories = false })
   end)
 
@@ -187,8 +209,11 @@ H.describe('buffer: expansion and collapse lifecycle', function()
 
     vim.api.nvim_feedkeys('zO', 'mx', false)
 
-    H.assert_buf_eq({ 'sub/', '  loop/', '    sub/' }, 0,
-      'the repeated directory identity is shown but not expanded again')
+    H.assert_buf_eq(
+      { 'sub/', '  loop/', '    sub/' },
+      0,
+      'the repeated directory identity is shown but not expanded again'
+    )
   end)
 
   H.it('collapsing a parent removes its complete expanded nested subtree', function()
@@ -209,9 +234,11 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     H.assert_buf_eq({ 'sub/' }, 0, 'all descendants disappear with the parent collapse')
     local state = buffer._state_for_test(vim.api.nvim_get_current_buf())
     H.assert_nil(state.expanded[state.root_ids[1]], 'parent expansion record is cleared')
-    H.assert_eq(#vim.api.nvim_buf_get_extmarks(0,
-      vim.api.nvim_get_namespaces()['direct-listing-rows'], 0, -1, {}), 1,
-      'only the parent row identity remains')
+    H.assert_eq(
+      #vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_get_namespaces()['direct-listing-rows'], 0, -1, {}),
+      1,
+      'only the parent row identity remains'
+    )
   end)
 
   H.it('collapse on a row hidden by a collapsed parent is a safe no-op', function()
@@ -228,8 +255,11 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     local ok = listing:collapse(2)
 
     H.assert_nil(ok, 'a hidden child row has no current identity')
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), before,
-      'the hidden child cannot affect the collapsed parent')
+    H.assert_eq(
+      vim.api.nvim_buf_get_lines(0, 0, -1, false),
+      before,
+      'the hidden child cannot affect the collapsed parent'
+    )
   end)
 
   H.it('preserves expansion state when a direct buffer is re-entered', function()
@@ -246,8 +276,7 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     vim.cmd('enew')
     vim.cmd('buffer ' .. bufnr)
 
-    H.assert_buf_eq({ 'sub/', '  inside.txt' }, bufnr,
-      're-entry preserves the materialized child rows')
+    H.assert_buf_eq({ 'sub/', '  inside.txt' }, bufnr, 're-entry preserves the materialized child rows')
   end)
 
   H.it('collapse undo restores child rows and identities once; redo collapses again', function()
@@ -265,13 +294,19 @@ H.describe('buffer: expansion and collapse lifecycle', function()
 
     listing:collapse(1)
     H.assert_buf_eq({ 'sub/' }, 0, 'collapse removes child rows')
-    H.assert_eq(vim.fn.maparg('<C-r>', 'n', false, true).rhs, '<Cmd>DirectRedo<CR>',
-      'direct buffer maps <C-r> to filesystem redo')
+    H.assert_eq(
+      vim.fn.maparg('<C-r>', 'n', false, true).rhs,
+      '<Cmd>DirectRedo<CR>',
+      'direct buffer maps <C-r> to filesystem redo'
+    )
     vim.cmd('undo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
     H.assert_buf_eq({ 'sub/', '  inside.txt' }, 0, 'undo restores exact child rows')
-    H.assert_eq(vim.api.nvim_buf_get_extmarks(bufnr, row_ns, 0, -1, {}), before_marks,
-      'undo restores the exact row identity marks')
+    H.assert_eq(
+      vim.api.nvim_buf_get_extmarks(bufnr, row_ns, 0, -1, {}),
+      before_marks,
+      'undo restores the exact row identity marks'
+    )
     vim.cmd('redo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
     H.assert_buf_eq({ 'sub/' }, 0, 'redo re-collapses without duplicate rows')
@@ -317,8 +352,11 @@ H.describe('buffer: expansion and collapse lifecycle', function()
 
     H.mkfile(sub, 'new.txt', { 'new' })
     listing:expand(1)
-    H.assert_buf_eq({ 'sub/', '  new.txt', '  old.txt' }, 0,
-      'expansion rereads current contents after an external change')
+    H.assert_buf_eq(
+      { 'sub/', '  new.txt', '  old.txt' },
+      0,
+      'expansion rereads current contents after an external change'
+    )
   end)
 
   H.it('collapse undo after re-list restores child identities and remains syncable', function()
@@ -339,19 +377,27 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     vim.cmd('undo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
 
-    H.assert_buf_eq({ 'sub/', '  inside.txt' }, bufnr,
-      'undo restores the exact rows after the row namespace was rebuilt')
+    H.assert_buf_eq(
+      { 'sub/', '  inside.txt' },
+      bufnr,
+      'undo restores the exact rows after the row namespace was rebuilt'
+    )
     local state = buffer._state_for_test(bufnr)
     local parent_id = state.root_ids[1]
     H.assert_not_nil(state.expanded[parent_id], 'undo restores the expansion record')
-    H.assert_eq(vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, {}), before_marks,
-      'undo restores the saved parent and child identities')
-    H.assert_eq(listing:get_paths(2, 2), { ws .. '/sub/inside.txt' },
-      'the restored child identity resolves to its filesystem path')
+    H.assert_eq(
+      vim.api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, {}),
+      before_marks,
+      'undo restores the saved parent and child identities'
+    )
+    H.assert_eq(
+      listing:get_paths(2, 2),
+      { ws .. '/sub/inside.txt' },
+      'the restored child identity resolves to its filesystem path'
+    )
     local ok, reason = listing:sync()
     H.assert_true(ok == true, 'sync accepts the restored child state: ' .. tostring(reason))
-    H.assert_buf_eq({ 'sub/', '  inside.txt' }, bufnr,
-      'successful sync retains the expanded materialization')
+    H.assert_buf_eq({ 'sub/', '  inside.txt' }, bufnr, 'successful sync retains the expanded materialization')
   end)
 
   H.it('collapse undo after re-list restores identities across expanded sibling subtrees', function()
@@ -369,14 +415,17 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     listing:expand(4)
     listing:expand(5)
     local expanded = {
-      'a/', '  sub/', '    inside.txt',
-      'b/', '  sub/', '    inside.txt',
+      'a/',
+      '  sub/',
+      '    inside.txt',
+      'b/',
+      '  sub/',
+      '    inside.txt',
     }
     H.assert_buf_eq(expanded, 0, 'both similarly-shaped sibling subtrees are expanded')
     listing:collapse(1)
     listing:list()
-    H.assert_buf_eq({ 'a/', 'b/', '  sub/', '    inside.txt' }, 0,
-      're-list keeps a collapsed and b expanded')
+    H.assert_buf_eq({ 'a/', 'b/', '  sub/', '    inside.txt' }, 0, 're-list keeps a collapsed and b expanded')
     vim.cmd('undo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = vim.api.nvim_get_current_buf() })
 
@@ -385,8 +434,12 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     H.assert_not_nil(state.expanded[state.root_ids[1]], 'a expansion is restored')
     H.assert_not_nil(state.expanded[state.root_ids[2]], 'b expansion remains restored')
     H.assert_eq(listing:get_paths(1, 6), {
-      ws .. '/a/', ws .. '/a/sub/', ws .. '/a/sub/inside.txt',
-      ws .. '/b/', ws .. '/b/sub/', ws .. '/b/sub/inside.txt',
+      ws .. '/a/',
+      ws .. '/a/sub/',
+      ws .. '/a/sub/inside.txt',
+      ws .. '/b/',
+      ws .. '/b/sub/',
+      ws .. '/b/sub/inside.txt',
     }, 'every row retains its own sibling-specific path identity')
     local ok, reason = listing:sync()
     H.assert_true(ok == true, 'sync accepts every restored sibling row: ' .. tostring(reason))
@@ -404,30 +457,36 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     local row_namespace = vim.api.nvim_get_namespaces()['direct-listing-rows']
     listing:expand(1)
     vim.api.nvim_buf_set_text(bufnr, 2, 0, 2, #'root.txt', { 'renamed.txt' })
-    local root_mark = vim.api.nvim_buf_get_extmarks(bufnr, row_namespace,
-      { 2, 0 }, { 2, -1 }, { details = true })[1]
+    local root_mark = vim.api.nvim_buf_get_extmarks(bufnr, row_namespace, { 2, 0 }, { 2, -1 }, { details = true })[1]
     H.assert_not_nil(root_mark, 'pending rename retains its root row identity')
-    H.assert_false(root_mark[4] and root_mark[4].invalid or false,
-      'pending root rename keeps a valid identity mark')
+    H.assert_false(root_mark[4] and root_mark[4].invalid or false, 'pending root rename keeps a valid identity mark')
 
     listing:collapse(1)
     listing:list()
     vim.cmd('undo')
     vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
 
-    H.assert_buf_eq({ 'sub/', '  inside.txt', 'renamed.txt' }, bufnr,
-      'undo restores children while retaining the pending root rename')
+    H.assert_buf_eq(
+      { 'sub/', '  inside.txt', 'renamed.txt' },
+      bufnr,
+      'undo restores children while retaining the pending root rename'
+    )
     local state = buffer._state_for_test(bufnr)
     H.assert_not_nil(state.expanded[state.root_ids[1]], 'collapsed subtree expansion is restored')
     local paths, path_err = listing:get_paths(1, 3)
     H.assert_eq(paths, {
-      ws .. '/sub/', ws .. '/sub/inside.txt', ws .. '/renamed.txt',
+      ws .. '/sub/',
+      ws .. '/sub/inside.txt',
+      ws .. '/renamed.txt',
     }, 'all restored rows have usable paths: ' .. tostring(path_err))
 
     local ok, reason = listing:sync()
     H.assert_true(ok == true, 'sync applies the pending root rename: ' .. tostring(reason))
-    H.assert_fs_eq(ws, { 'renamed.txt', 'sub/', 'sub/inside.txt' },
-      'sync applies the root rename without disturbing the expanded subtree')
+    H.assert_fs_eq(
+      ws,
+      { 'renamed.txt', 'sub/', 'sub/inside.txt' },
+      'sync applies the root rename without disturbing the expanded subtree'
+    )
   end)
 
   H.it('edited child rows still block collapse after an expand undo/redo cycle', function()
@@ -449,8 +508,7 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     local ok = listing:collapse(1)
 
     H.assert_false(ok, 'restored but edited child rows still refuse collapse')
-    H.assert_buf_eq({ 'sub/', '  edited.txt' }, bufnr,
-      'refusal after redo keeps the edited row visible')
+    H.assert_buf_eq({ 'sub/', '  edited.txt' }, bufnr, 'refusal after redo keeps the edited row visible')
     H.assert_notified('unsaved edits', vim.log.levels.ERROR)
   end)
 
@@ -465,8 +523,14 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     local register = require('direct.register')
     local history_calls, yank_calls = 0, 0
     local original_log, original_yank = history.log, register.yank
-    history.log = function(...) history_calls = history_calls + 1; return original_log(...) end
-    register.yank = function(...) yank_calls = yank_calls + 1; return original_yank(...) end
+    history.log = function(...)
+      history_calls = history_calls + 1
+      return original_log(...)
+    end
+    register.yank = function(...)
+      yank_calls = yank_calls + 1
+      return original_yank(...)
+    end
     local ok, err = pcall(function()
       listing:expand(1)
       listing:collapse(1)
@@ -499,12 +563,13 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     local ok, reason = listing:collapse(1)
 
     H.assert_false(ok, 'collapse is refused')
-    H.assert_true(tostring(reason):find('unsaved', 1, true) ~= nil,
-      'reason identifies the unsaved child row')
-    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), before_lines,
-      'refusal leaves every buffer row unchanged')
-    H.assert_eq(vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, {}), before_marks,
-      'refusal leaves every row identity unchanged')
+    H.assert_true(tostring(reason):find('unsaved', 1, true) ~= nil, 'reason identifies the unsaved child row')
+    H.assert_eq(vim.api.nvim_buf_get_lines(0, 0, -1, false), before_lines, 'refusal leaves every buffer row unchanged')
+    H.assert_eq(
+      vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, {}),
+      before_marks,
+      'refusal leaves every row identity unchanged'
+    )
     H.assert_eq(state.expanded, before_expanded, 'refusal leaves expansion state unchanged')
     H.assert_notified('collapse', vim.log.levels.ERROR)
   end)
@@ -525,8 +590,7 @@ H.describe('buffer: expansion and collapse lifecycle', function()
     local ok = listing:collapse(1)
 
     H.assert_false(ok, 'missing child identity refuses collapse')
-    H.assert_buf_eq({ 'sub/', '  inside.txt' }, 0,
-      'refusal keeps child rows present')
+    H.assert_buf_eq({ 'sub/', '  inside.txt' }, 0, 'refusal keeps child rows present')
     H.assert_notified('identity', vim.log.levels.ERROR)
   end)
 end)

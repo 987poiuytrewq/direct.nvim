@@ -3,7 +3,9 @@ local H = require('tests.support.harness')
 
 local function git(root, ...)
   local args = { 'git', '-C', root }
-  for _, part in ipairs({ ... }) do args[#args + 1] = part end
+  for _, part in ipairs({ ... }) do
+    args[#args + 1] = part
+  end
   local result = vim.system(args, { text = true }):wait()
   if result.code ~= 0 then error(result.stderr) end
 end
@@ -39,7 +41,10 @@ H.describe('asynchronous Git status', function()
     vim.system = function(argv, options, on_exit)
       local is_status = false
       for _, arg in ipairs(argv) do
-        if arg == 'status' then is_status = true; break end
+        if arg == 'status' then
+          is_status = true
+          break
+        end
       end
       if is_status then
         status_started = true
@@ -59,24 +64,25 @@ H.describe('asynchronous Git status', function()
     local listing = require('direct').list(root)
     local elapsed_ms = (vim.uv.hrtime() - started) / 1000000
     H.assert_not_nil(listing, 'listing succeeds while Git status is unresolved')
-    H.assert_true(elapsed_ms < 500,
-      string.format('listing returned before the 500ms status timeout (%.1fms)', elapsed_ms))
-    H.assert_true(vim.tbl_contains(H.buf_lines(), 'tracked.txt'),
-      'ordinary entries render immediately')
+    H.assert_true(
+      elapsed_ms < 500,
+      string.format('listing returned before the 500ms status timeout (%.1fms)', elapsed_ms)
+    )
+    H.assert_true(vim.tbl_contains(H.buf_lines(), 'tracked.txt'), 'ordinary entries render immediately')
 
-    H.assert_true(vim.wait(2000, function()
-      return status_started and H.messages():find('Git status timed out', 1, true) ~= nil
-    end), 'the timeout is reported after the listing appears')
+    H.assert_true(
+      vim.wait(2000, function() return status_started and H.messages():find('Git status timed out', 1, true) ~= nil end),
+      'the timeout is reported after the listing appears'
+    )
     H.assert_eq(kill_calls, 1, 'the timed-out Git process is terminated')
-    H.assert_eq(message_count(H.messages(), 'Git status unavailable'), 1,
-      'the user is warned once for this repository')
+    H.assert_eq(message_count(H.messages(), 'Git status unavailable'), 1, 'the user is warned once for this repository')
 
     require('direct.buffer.buffer').refresh_git_status()
-    H.assert_true(vim.wait(1000, function()
-      return kill_calls == 2
-    end), 'a second status request also reaches its timeout')
-    H.assert_eq(message_count(H.messages(), 'Git status unavailable'), 1,
-      'a later timeout does not repeat the warning')
+    H.assert_true(
+      vim.wait(1000, function() return kill_calls == 2 end),
+      'a second status request also reaches its timeout'
+    )
+    H.assert_eq(message_count(H.messages(), 'Git status unavailable'), 1, 'a later timeout does not repeat the warning')
     vim.system = real_system
   end)
 end)

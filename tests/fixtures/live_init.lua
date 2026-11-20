@@ -7,9 +7,7 @@ local source = debug.getinfo(1, 'S').source:gsub('^@', '')
 local repo = vim.fn.fnamemodify(source, ':p:h:h:h')
 vim.opt.runtimepath:prepend(repo)
 
-if vim.env.DIRECT_LIVE_MAP_DEFAULT_KEYS == 'false' then
-  require('direct').setup({ map_default_keys = false })
-end
+if vim.env.DIRECT_LIVE_MAP_DEFAULT_KEYS == 'false' then require('direct').setup({ map_default_keys = false }) end
 
 -- Run black-box assertions only after the normal startup lifecycle has fired.
 -- Scheduling puts the smoke after plugin/direct.lua's VimEnter handler too.
@@ -17,9 +15,7 @@ if vim.env.DIRECT_LIVE_SMOKE then
   vim.api.nvim_create_autocmd('VimEnter', {
     once = true,
     callback = function()
-      vim.schedule(function()
-        dofile(vim.env.DIRECT_LIVE_SMOKE)
-      end)
+      vim.schedule(function() dofile(vim.env.DIRECT_LIVE_SMOKE) end)
     end,
   })
 end

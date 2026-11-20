@@ -8,15 +8,15 @@ H.describe('ui', function()
     local ui = require('direct.ui')
     H.assert_true(type(ui.prompt) == 'function', 'ui.prompt exists')
 
-    local restore_input = H.stub(vim.fn, 'input', function()
-      error('vim.fn.input called under -l')
-    end)
+    local restore_input = H.stub(vim.fn, 'input', function() error('vim.fn.input called under -l') end)
     local answer
     local saved_file_ui = H._file_ui
     H._file_ui = ui
-    local ok, err = pcall(H.with_prompt, function()
-      answer = require('direct.ui').prompt('paste as: ', 'default', 'file')
-    end, { 'renamed.txt' })
+    local ok, err = pcall(
+      H.with_prompt,
+      function() answer = require('direct.ui').prompt('paste as: ', 'default', 'file') end,
+      { 'renamed.txt' }
+    )
     H._file_ui = saved_file_ui
     restore_input()
     if not ok then error(err, 0) end
@@ -32,15 +32,15 @@ H.describe('ui', function()
     H.assert_true(fresh ~= ui, 'a fresh require yields a distinct ui table')
 
     local ok, err = pcall(function()
-      H.with_prompt(function()
-        ui.prompt('paste as: ', 'default', 'file')
-      end, { 'x' })
+      H.with_prompt(function() ui.prompt('paste as: ', 'default', 'file') end, { 'x' })
     end)
     package.loaded['direct.ui'] = saved
 
     H.assert_false(ok, 'the stale stub could not silently miss and truncate')
-    H.assert_true(type(err) == 'string' and err:find('vim.fn.input', 1, true) ~= nil,
-      'the raise names the bypassed vim.fn.input')
+    H.assert_true(
+      type(err) == 'string' and err:find('vim.fn.input', 1, true) ~= nil,
+      'the raise names the bypassed vim.fn.input'
+    )
     H.assert_true(type(vim.fn.input) == 'function', 'vim.fn.input is restored')
   end)
 
@@ -51,16 +51,16 @@ H.describe('ui', function()
     H._file_ui = saved
 
     H.assert_false(ok, 'a stale-module mismatch is refused')
-    H.assert_true(type(err) == 'string' and err:find('stale direct.ui', 1, true) ~= nil,
-      'the error explains the stale module')
+    H.assert_true(
+      type(err) == 'string' and err:find('stale direct.ui', 1, true) ~= nil,
+      'the error explains the stale module'
+    )
   end)
 
   H.it('notify routes through vim.notify and applies the direct prefix', function()
     local ui = require('direct.ui')
     local seen = {}
-    local restore = H.stub(vim, 'notify', function(msg, level)
-      seen[#seen + 1] = { msg = msg, level = level }
-    end)
+    local restore = H.stub(vim, 'notify', function(msg, level) seen[#seen + 1] = { msg = msg, level = level } end)
     ui.notify('direct probe', vim.log.levels.WARN)
     restore()
     H.assert_eq(seen[1] and seen[1].msg, 'direct: direct probe', 'message is prefixed')
@@ -88,9 +88,7 @@ H.describe('ui', function()
     H.assert_eq(seen, 'direct: already prefixed', 'existing prefixes remain singular')
 
     local echoed
-    local restore_echo = H.stub(vim.api, 'nvim_echo', function(chunks)
-      echoed = chunks[1][1]
-    end)
+    local restore_echo = H.stub(vim.api, 'nvim_echo', function(chunks) echoed = chunks[1][1] end)
     ui.notify('copying 1/2 files', vim.log.levels.INFO, { ephemeral = true })
     restore_echo()
     H.assert_eq(echoed, 'direct: copying 1/2 files', 'ephemeral progress uses the same prefix')
@@ -107,15 +105,15 @@ H.describe('ui', function()
     H.assert_nil(result, 'error reporting returns nil')
     H.assert_eq(err, original, 'the original diagnostic remains available to callers')
     H.assert_notified('direct: Could not open the directory listing: injected listing failure')
-    H.assert_false(H.messages():find('stack traceback', 1, true) ~= nil,
-      'implementation traceback is not shown in the user notification')
+    H.assert_false(
+      H.messages():find('stack traceback', 1, true) ~= nil,
+      'implementation traceback is not shown in the user notification'
+    )
   end)
 
   H.it('notify falls back to the editor message area if vim.notify fails', function()
     local ui = require('direct.ui')
-    local restore = H.stub(vim, 'notify', function()
-      error('injected notification backend failure')
-    end)
+    local restore = H.stub(vim, 'notify', function() error('injected notification backend failure') end)
     H.capture_messages()
 
     ui.notify('Direct could not finish the operation', vim.log.levels.ERROR)
@@ -127,20 +125,21 @@ H.describe('ui', function()
   H.it('public API catches unexpected errors and reports a readable message', function()
     local api = require('direct')
     local buffer = require('direct.buffer.buffer')
-    local restore = H.stub(buffer, 'list', function()
-      error('injected list failure')
-    end)
+    local restore = H.stub(buffer, 'list', function() error('injected list failure') end)
     H.capture_messages()
 
     local result, err = api.list('/unimportant')
 
     restore()
     H.assert_nil(result, 'a raised implementation error becomes a normal API failure')
-    H.assert_true(type(err) == 'string'
-      and err:find('injected list failure', 1, true) ~= nil,
-      'the original error is retained for Lua callers')
+    H.assert_true(
+      type(err) == 'string' and err:find('injected list failure', 1, true) ~= nil,
+      'the original error is retained for Lua callers'
+    )
     H.assert_notified('direct: Could not open the directory listing: injected list failure')
-    H.assert_false(H.messages():find('stack traceback', 1, true) ~= nil,
-      'the public notification does not expose the stack trace')
+    H.assert_false(
+      H.messages():find('stack traceback', 1, true) ~= nil,
+      'the public notification does not expose the stack trace'
+    )
   end)
 end)

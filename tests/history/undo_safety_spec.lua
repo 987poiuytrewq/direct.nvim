@@ -1,9 +1,7 @@
 -- tests/history/undo_safety_spec.lua -- safe public undo/redo in listings.
 local H = require('tests.support.harness')
 
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 local function rename_in_listing(root, old_name, new_name)
   require('direct').list(root)
@@ -22,8 +20,7 @@ H.describe('undo and redo safety in listings', function()
     H.mkfile(ws, 'before.txt', { 'keep' })
     rename_in_listing(ws, 'before.txt', 'after.txt')
     local bufnr = vim.api.nvim_get_current_buf()
-    local undo_log = vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log'))
+    local undo_log = vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log'))
 
     vim.cmd('normal! dd')
     H.assert_true(vim.bo[bufnr].modified, 'deleting the row modifies the listing')
@@ -33,14 +30,20 @@ H.describe('undo and redo safety in listings', function()
     H.assert_false(vim.bo[bufnr].modified, 'text undo returns to the saved listing')
     H.assert_true(H.exists(ws, 'after.txt'), 'the filesystem rename is not undone')
     H.assert_false(H.exists(ws, 'before.txt'), 'the original filesystem path stays absent')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log')), undo_log, 'filesystem history is unchanged')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')),
+      undo_log,
+      'filesystem history is unchanged'
+    )
 
     vim.cmd('DirectRedo')
     H.assert_buf_eq({ '' }, bufnr, 'the paired redo stays in the local text undo tree')
     H.assert_true(H.exists(ws, 'after.txt'), 'text redo does not change the filesystem')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log')), undo_log, 'text redo leaves filesystem history unchanged')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')),
+      undo_log,
+      'text redo leaves filesystem history unchanged'
+    )
   end)
 
   H.it('DirectRedo uses text redo while the listing is marked modified', function()
@@ -73,8 +76,7 @@ H.describe('undo and redo safety in listings', function()
     local elsewhere = H.mkdir(sb.root, 'elsewhere')
     H.mkfile(changed, 'before.txt', { 'keep' })
     rename_in_listing(changed, 'before.txt', 'after.txt')
-    local undo_log = vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log'))
+    local undo_log = vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log'))
     require('direct').list(elsewhere)
     local bufnr = vim.api.nvim_get_current_buf()
     local prompt, buttons, default
@@ -88,17 +90,23 @@ H.describe('undo and redo safety in listings', function()
     vim.fn.confirm = original_confirm
 
     H.assert_true(ok, 'declining confirmation is handled normally: ' .. tostring(err))
-    H.assert_true(type(prompt) == 'string' and prompt:find('after.txt', 1, true) ~= nil,
-      'the prompt describes the filesystem change and affected paths')
-    H.assert_true(prompt:find('before.txt', 1, true) ~= nil,
-      'the prompt names the other affected path')
-    H.assert_true(buttons:find('Undo', 1, true) ~= nil
-      and buttons:find('Cancel', 1, true) ~= nil, 'the prompt has undo and cancel choices')
+    H.assert_true(
+      type(prompt) == 'string' and prompt:find('after.txt', 1, true) ~= nil,
+      'the prompt describes the filesystem change and affected paths'
+    )
+    H.assert_true(prompt:find('before.txt', 1, true) ~= nil, 'the prompt names the other affected path')
+    H.assert_true(
+      buttons:find('Undo', 1, true) ~= nil and buttons:find('Cancel', 1, true) ~= nil,
+      'the prompt has undo and cancel choices'
+    )
     H.assert_eq(default, 2, 'cancel is the safe default')
     H.assert_true(H.exists(changed, 'after.txt'), 'declining leaves disk unchanged')
     H.assert_false(H.exists(changed, 'before.txt'), 'declining does not restore the old path')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log')), undo_log, 'declining leaves history unchanged')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')),
+      undo_log,
+      'declining leaves history unchanged'
+    )
     H.assert_eq(vim.api.nvim_get_current_buf(), bufnr, 'the current listing is unchanged')
 
     vim.fn.confirm = function() return 1 end
@@ -119,7 +127,10 @@ H.describe('undo and redo safety in listings', function()
     rename_in_listing(ws, 'before.txt', 'after.txt')
     local calls = 0
     local original_confirm = vim.fn.confirm
-    vim.fn.confirm = function() calls = calls + 1; return 1 end
+    vim.fn.confirm = function()
+      calls = calls + 1
+      return 1
+    end
     H.capture_messages()
 
     local ok, err = pcall(vim.cmd, 'DirectUndo')
@@ -144,7 +155,10 @@ H.describe('undo and redo safety in listings', function()
     rename_in_listing(ws, 'before.txt', 'after.txt')
     local calls = 0
     local original_confirm = vim.fn.confirm
-    vim.fn.confirm = function() calls = calls + 1; return 2 end
+    vim.fn.confirm = function()
+      calls = calls + 1
+      return 2
+    end
     local ok, err = pcall(vim.cmd, 'DirectUndo')
     vim.fn.confirm = original_confirm
 

@@ -29,10 +29,8 @@ H.describe('sync: applying actions', function()
     H.assert_true(ok == true, 'sync applied')
     H.assert_fs_eq(ws, { 'a.txt', 'b.txt' })
     H.assert_false(vim.bo.modified, 're-listed and nomodified')
-    H.assert_eq(history_lines('undo.log'),
-      { HEADER, fixtures.touch(ws .. '/b.txt') }, 'exactly one touch record')
-    H.assert_eq(history_lines('redo.log'), { HEADER },
-      'a new action resets the redo branch to its header')
+    H.assert_eq(history_lines('undo.log'), { HEADER, fixtures.touch(ws .. '/b.txt') }, 'exactly one touch record')
+    H.assert_eq(history_lines('redo.log'), { HEADER }, 'a new action resets the redo branch to its header')
   end)
 
   H.it('ADD (directory + dirs-then-name ordering): mkdir lines are logged first', function()
@@ -60,12 +58,17 @@ H.describe('sync: applying actions', function()
     H.mkfile(ws, 'keep.txt', { 'keep' })
 
     local _, ok, reason = list_edit_and_sync(ws, {
-      'keep.txt', 'archive/2026/', 'archive/2026/summary.txt',
+      'keep.txt',
+      'archive/2026/',
+      'archive/2026/summary.txt',
     })
 
     H.assert_true(ok == true, tostring(reason))
     H.assert_eq(H.fs_snapshot(ws), {
-      'archive/', 'archive/2026/', 'archive/2026/summary.txt', 'keep.txt',
+      'archive/',
+      'archive/2026/',
+      'archive/2026/summary.txt',
+      'keep.txt',
     }, 'nested directory and file paths are materialized')
     H.assert_eq(history_lines('undo.log'), {
       HEADER,
@@ -73,10 +76,12 @@ H.describe('sync: applying actions', function()
       fixtures.mkdir(ws .. '/archive/2026/'),
       fixtures.touch(ws .. '/archive/2026/summary.txt'),
     }, 'each created directory and file is independently undoable')
-    H.assert_buf_eq({ 'archive/', '  2026/', '    summary.txt', 'keep.txt' }, 0,
-      'the new parent directories are expanded after the root refresh')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 3, 4 },
-      'the cursor lands on the last nested entry')
+    H.assert_buf_eq(
+      { 'archive/', '  2026/', '    summary.txt', 'keep.txt' },
+      0,
+      'the new parent directories are expanded after the root refresh'
+    )
+    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 3, 4 }, 'the cursor lands on the last nested entry')
   end)
 
   H.it('ADD (nested path): reuses existing parent directories', function()
@@ -87,7 +92,10 @@ H.describe('sync: applying actions', function()
     H.mkfile(ws, 'keep.txt', { 'keep' })
 
     local _, ok, reason = list_edit_and_sync(ws, {
-      'reports/', 'keep.txt', 'reports/summary.txt', 'reports/2026/final.txt',
+      'reports/',
+      'keep.txt',
+      'reports/summary.txt',
+      'reports/2026/final.txt',
     })
 
     H.assert_true(ok == true, tostring(reason))
@@ -100,10 +108,13 @@ H.describe('sync: applying actions', function()
       fixtures.touch(ws .. '/reports/summary.txt'),
     }, 'only missing parent directories receive mkdir history')
     H.assert_buf_eq({
-      'reports/', '  2026/', '    final.txt', '  summary.txt', 'keep.txt',
+      'reports/',
+      '  2026/',
+      '    final.txt',
+      '  summary.txt',
+      'keep.txt',
     }, 0, 'existing and newly created parent directories are expanded')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 3, 4 },
-      'the cursor lands on the last added entry')
+    H.assert_eq(vim.api.nvim_win_get_cursor(0), { 3, 4 }, 'the cursor lands on the last added entry')
   end)
 
   H.it('ADD (nested path): undo and redo remove and restore parents in order', function()
@@ -127,8 +138,7 @@ H.describe('sync: applying actions', function()
   end)
 
   H.it('ADD (nested path): refuses traversal, malformed separators, and file parents', function()
-    local invalid = { '../outside.txt', '/absolute.txt', 'bad//path.txt',
-      'bad/../path.txt', 'blocked/child.txt' }
+    local invalid = { '../outside.txt', '/absolute.txt', 'bad//path.txt', 'bad/../path.txt', 'blocked/child.txt' }
     for _, entry in ipairs(invalid) do
       clean_buffers()
       local sb = H.sandbox()
@@ -140,8 +150,7 @@ H.describe('sync: applying actions', function()
       local ok, reason = listing:sync()
       H.assert_nil(ok, entry .. ' is refused: ' .. tostring(reason))
       H.assert_true(vim.bo.modified, 'refusal keeps the edit visible')
-      H.assert_eq(H.fs_snapshot(ws), { 'blocked', 'keep.txt' },
-        entry .. ' makes no filesystem changes')
+      H.assert_eq(H.fs_snapshot(ws), { 'blocked', 'keep.txt' }, entry .. ' makes no filesystem changes')
       H.assert_eq(history_lines('undo.log'), {}, entry .. ' writes no action history')
       H.assert_false(H.exists(sb.root, 'outside.txt'), 'traversal did not escape the root')
     end
@@ -151,8 +160,7 @@ H.describe('sync: applying actions', function()
     local ws = H.mkdir(sb.root, 'ws')
     H.mkfile(ws, 'keep.txt', { 'keep' })
     local listing = buffer.list(ws)
-    vim.api.nvim_buf_set_lines(0, -1, -1, false,
-      { 'node', 'node/child.txt' })
+    vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'node', 'node/child.txt' })
     local ok, reason = listing:sync()
     H.assert_nil(ok, 'a file cannot also be a parent directory: ' .. tostring(reason))
     H.assert_fs_eq(ws, { 'keep.txt' }, 'conflicting planned paths make no changes')
@@ -173,8 +181,11 @@ H.describe('sync: applying actions', function()
     H.assert_fs_eq(ws, { 'a.txt' }, 'b.txt is gone from the workspace')
     local content = register.content()
     H.assert_not_nil(content, 'the register content pointer was written by the auto-yank')
-    H.assert_eq(vim.fn.readfile(register.resolve(content, 'b.txt')), { 'b' },
-      'the deleted file is available from its trash payload')
+    H.assert_eq(
+      vim.fn.readfile(register.resolve(content, 'b.txt')),
+      { 'b' },
+      'the deleted file is available from its trash payload'
+    )
     H.assert_notified('Yanked ' .. ws .. '/b.txt', vim.log.levels.INFO)
     local undo = history_lines('undo.log')
     H.assert_eq(undo[1], HEADER, 'the JSONL header is first')
@@ -199,12 +210,14 @@ H.describe('sync: applying actions', function()
     H.assert_false(vim.bo.modified, 'successful sync clears modified state')
     local content = register.content()
     H.assert_not_nil(content, 'the deleted file was auto-yanked')
-    H.assert_eq(vim.fn.readfile(register.resolve(content, 'only.txt')), { 'only entry' },
-      'the deleted file is available from its trash payload')
+    H.assert_eq(
+      vim.fn.readfile(register.resolve(content, 'only.txt')),
+      { 'only entry' },
+      'the deleted file is available from its trash payload'
+    )
     local undo = history_lines('undo.log')
     H.assert_eq(undo[1], HEADER, 'the JSONL header is first')
-    H.assert_eq(decode_record(undo, 2).src, ws .. '/only.txt',
-      'the final deletion is recorded for undo')
+    H.assert_eq(decode_record(undo, 2).src, ws .. '/only.txt', 'the final deletion is recorded for undo')
   end)
 
   H.it('DELETE (directory): trashes the tree and yanks it with its trailing slash', function()
@@ -222,8 +235,11 @@ H.describe('sync: applying actions', function()
     H.assert_fs_eq(ws, { 'a.txt' }, 'the sub tree is gone')
     local content = register.content()
     H.assert_not_nil(content, 'the directory was auto-yanked')
-    H.assert_eq(vim.fn.readfile(register.resolve(content, 'sub') .. '/inner.txt'), { 'i' },
-      'the yanked directory contents come from trash')
+    H.assert_eq(
+      vim.fn.readfile(register.resolve(content, 'sub') .. '/inner.txt'),
+      { 'i' },
+      'the yanked directory contents come from trash'
+    )
     H.assert_notified('Yanked ' .. ws .. '/sub/', vim.log.levels.INFO)
     local undo = history_lines('undo.log')
     H.assert_eq(decode_record(undo, 2).op, 'rmdir', 'an rmdir record was logged')
@@ -242,8 +258,7 @@ H.describe('sync: applying actions', function()
     -- removes a.txt and auto-yanks it into the register.
     route_write_to_test_buffer()
     buffer.list(ws)
-    H.assert_not_nil(buffer._state_for_test(vim.api.nvim_get_current_buf()),
-      'the listing stores sync safety state')
+    H.assert_not_nil(buffer._state_for_test(vim.api.nvim_get_current_buf()), 'the listing stores sync safety state')
     vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'keep.txt' })
     H.capture_messages()
     vim.cmd('write')
@@ -256,8 +271,7 @@ H.describe('sync: applying actions', function()
     local dst = H.mkdir(sb.root, 'dst')
     H.assert_true(register.paste(dst) ~= nil, 'the auto-yanked entry pastes back')
     H.assert_fs_eq(dst, { 'a.txt' }, 'the deleted entry landed in the paste destination')
-    H.assert_eq(vim.fn.readfile(dst .. '/a.txt'), { 'A' },
-      'the entry content survived the delete/paste round trip')
+    H.assert_eq(vim.fn.readfile(dst .. '/a.txt'), { 'A' }, 'the entry content survived the delete/paste round trip')
   end)
 
   H.it('delete-backed registers point at trash instead of copying the entry', function()
@@ -274,12 +288,9 @@ H.describe('sync: applying actions', function()
     local entries = register.entries(content)
     H.assert_eq(#entries, 1, 'one deleted entry is registered')
     H.assert_eq(entries[1].name, 'a.txt')
-    H.assert_false(fs.exists(content .. '/a.txt'),
-      'the register does not duplicate the deleted file')
-    H.assert_true(fs.exists(entries[1].path),
-      'the manifest points at the deleted file in trash')
-    H.assert_true(entries[1].path ~= content .. '/a.txt',
-      'the manifest path is the trash payload, not a register copy')
+    H.assert_false(fs.exists(content .. '/a.txt'), 'the register does not duplicate the deleted file')
+    H.assert_true(fs.exists(entries[1].path), 'the manifest points at the deleted file in trash')
+    H.assert_true(entries[1].path ~= content .. '/a.txt', 'the manifest path is the trash payload, not a register copy')
   end)
 
   H.it('pastes and unpastes a delete-backed entry without touching its trash payload', function()
@@ -315,8 +326,7 @@ H.describe('sync: applying actions', function()
     local content = register.content()
     H.assert_true(history.undo() ~= nil, 'undo restores the deleted file')
     H.assert_true(fs.exists(ws .. '/a.txt'))
-    H.assert_eq(register.resolve(content, 'a.txt'), ws .. '/a.txt',
-      'the restored original is the fallback source')
+    H.assert_eq(register.resolve(content, 'a.txt'), ws .. '/a.txt', 'the restored original is the fallback source')
 
     local dst = H.mkdir(sb.root, 'dst')
     H.assert_true(register.paste(dst) ~= nil, 'the restored original is still pasteable')
@@ -341,8 +351,11 @@ H.describe('sync: applying actions', function()
     H.assert_nil(register.paste(dst), 'nothing is pasted')
     H.assert_notified('no longer available', vim.log.levels.WARN)
     H.assert_fs_eq(dst, {}, 'the destination stays empty')
-    H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'replacement' },
-      'a replacement at the original path is not treated as the restored entry')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/a.txt'),
+      { 'replacement' },
+      'a replacement at the original path is not treated as the restored entry'
+    )
   end)
 
   H.it('bounds save history and lets retention remove newly unreferenced trash', function()
@@ -429,8 +442,7 @@ H.describe('sync: applying actions', function()
     end
     restore_entries()
 
-    H.assert_true(full_scans <= 1,
-      'five saves at a full history trigger at most one full trash scan')
+    H.assert_true(full_scans <= 1, 'five saves at a full history trigger at most one full trash scan')
     for index = 1, 3 do
       H.assert_false(fs.exists(old_paths[index]), 'trimmed old trash entry ' .. index .. ' is retained no longer')
       H.assert_true(fs.exists(new_paths[index]), 'the newest history entry ' .. index .. ' remains protected')
@@ -452,13 +464,16 @@ H.describe('sync: applying actions', function()
 
     vim.cmd('write')
 
-    H.assert_fs_eq(ws, { 'existing.txt', 'external.txt' },
-      'writing an unchanged buffer does not delete an external entry')
-    H.assert_buf_eq({ 'existing.txt', 'external.txt' }, 0,
-      ':write reloads rows from the current filesystem contents')
+    H.assert_fs_eq(
+      ws,
+      { 'existing.txt', 'external.txt' },
+      'writing an unchanged buffer does not delete an external entry'
+    )
+    H.assert_buf_eq({ 'existing.txt', 'external.txt' }, 0, ':write reloads rows from the current filesystem contents')
     H.assert_false(vim.bo.modified, ':write leaves the reloaded listing clean')
     H.assert_eq(listing:get_paths(1, 2), {
-      ws .. '/existing.txt', ws .. '/external.txt',
+      ws .. '/existing.txt',
+      ws .. '/external.txt',
     }, 'row paths match the reloaded entries')
   end)
 
@@ -469,14 +484,13 @@ H.describe('sync: applying actions', function()
     H.mkfile(ws, 'a.txt', { 'a' })
 
     local listing = buffer.list(ws)
-    vim.api.nvim_buf_set_text(0, 0, 0, 0, #('a.txt'), { 'b.txt' })
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, #'a.txt', { 'b.txt' })
     local ok = listing:sync()
 
     H.assert_true(ok == true, 'sync applied')
     H.assert_fs_eq(ws, { 'b.txt' })
     H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'a' }, 'content survived the move')
-    H.assert_eq(history_lines('undo.log'),
-      { HEADER, fixtures.move(ws .. '/a.txt', ws .. '/b.txt') })
+    H.assert_eq(history_lines('undo.log'), { HEADER, fixtures.move(ws .. '/a.txt', ws .. '/b.txt') })
   end)
 
   H.it('EXDEV commit with source-remove failure is still recorded as completed', function()
@@ -485,18 +499,15 @@ H.describe('sync: applying actions', function()
     local ws = H.mkdir(sb.root, 'ws')
     local src, dst = H.mkfile(ws, 'a.txt', { 'PAYLOAD' }), ws .. '/b.txt'
     local listing = buffer.list(ws)
-    vim.api.nvim_buf_set_text(0, 0, 0, 0, #('a.txt'), { 'b.txt' })
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, #'a.txt', { 'b.txt' })
 
     local real_rename, real_remove = fs.rename_noreplace, fs.rm_file
     local restore_rename = H.stub(fs, 'rename_noreplace', function(from, to)
-      if from == src and to == dst then
-        return nil, 'EXDEV: forced cross-device move', 'EXDEV'
-      end
+      if from == src and to == dst then return nil, 'EXDEV: forced cross-device move', 'EXDEV' end
       return real_rename(from, to)
     end)
     local restore_remove = H.stub(fs, 'rm_file', function(path)
-      if path:find('/.direct-exdev-source-', 1, true)
-        and path:sub(-#'/source') == '/source' then
+      if path:find('/.direct-exdev-source-', 1, true) and path:sub(-#'/source') == '/source' then
         return nil, 'forced source remove failure'
       end
       return real_remove(path)
@@ -512,8 +523,11 @@ H.describe('sync: applying actions', function()
     H.assert_eq(vim.fn.readfile(dst), { 'PAYLOAD' }, 'the destination copy committed')
     H.assert_notified(src, vim.log.levels.ERROR)
     H.assert_notified(dst, vim.log.levels.ERROR)
-    H.assert_eq(history_lines('undo.log'), { HEADER, fixtures.move(src, dst) },
-      'history records the committed destination for later recovery')
+    H.assert_eq(
+      history_lines('undo.log'),
+      { HEADER, fixtures.move(src, dst) },
+      'history records the committed destination for later recovery'
+    )
   end)
 
   H.it('RENAME (directory): moves the tree with trailing slashes on both ends', function()
@@ -524,13 +538,12 @@ H.describe('sync: applying actions', function()
     H.mkfile(ws, 'old/inner.txt', { 'i' })
 
     local listing = buffer.list(ws)
-    vim.api.nvim_buf_set_text(0, 0, 0, 0, #('old/'), { 'new/' })
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, #'old/', { 'new/' })
     local ok = listing:sync()
 
     H.assert_true(ok == true, 'sync applied')
     H.assert_fs_eq(ws, { 'new/', 'new/inner.txt' })
-    H.assert_eq(history_lines('undo.log'),
-      { HEADER, fixtures.move(ws .. '/old/', ws .. '/new/') })
+    H.assert_eq(history_lines('undo.log'), { HEADER, fixtures.move(ws .. '/old/', ws .. '/new/') })
   end)
 
   H.it('notifies a single joined summary of the applied actions', function()
@@ -542,9 +555,7 @@ H.describe('sync: applying actions', function()
     local buf = buffer.list(ws)
     vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'a.txt', 'b.txt', 'c.txt' })
     H.capture_messages()
-    H.with_cwd(ws, function()
-      buf:sync()
-    end)
+    H.with_cwd(ws, function() buf:sync() end)
 
     H.assert_notified('Created b.txt, Created c.txt', vim.log.levels.INFO)
   end)

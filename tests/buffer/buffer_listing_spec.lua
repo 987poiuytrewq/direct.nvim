@@ -6,9 +6,7 @@ local paths = require('direct.paths')
 
 -- Within-file isolation: the harness wipes buffers only at FILE boundaries, so a
 -- modified buffer left by one spec would make the next `enew` raise E37.
-local function clean_buffers()
-  pcall(vim.cmd, '%bwipeout!')
-end
+local function clean_buffers() pcall(vim.cmd, '%bwipeout!') end
 
 -- Symlink helper: luv returns true|nil, err from fs_symlink, so existence is
 -- checked through lstat instead of the return value.
@@ -16,7 +14,6 @@ local function make_symlink(target, link)
   pcall(H.symlink, target, link)
   return vim.uv.fs_lstat(link) ~= nil
 end
-
 
 H.describe('buffer: listing and path identity', function()
   H.it('indexes root identities with linear stats and no pairwise same_path calls', function()
@@ -31,17 +28,14 @@ H.describe('buffer: listing and path identity', function()
     vim.cmd('edit ' .. vim.fn.fnameescape(ws .. '/file-2000.txt'))
     local listing = buffer.Buffer(ws)
     local original_stat, original_same_path = vim.uv.fs_stat, fs.same_path
-    local original_scandir, original_get_extmarks =
-      vim.uv.fs_scandir, vim.api.nvim_buf_get_extmarks
+    local original_scandir, original_get_extmarks = vim.uv.fs_scandir, vim.api.nvim_buf_get_extmarks
     local stat_calls, same_path_calls, root_scans, extmark_calls = 0, 0, 0, 0
     vim.uv.fs_stat = function(...)
       stat_calls = stat_calls + 1
       return original_stat(...)
     end
     vim.uv.fs_scandir = function(path, ...)
-      if vim.fs.normalize(path) == vim.fs.normalize(ws) then
-        root_scans = root_scans + 1
-      end
+      if vim.fs.normalize(path) == vim.fs.normalize(ws) then root_scans = root_scans + 1 end
       return original_scandir(path, ...)
     end
     vim.api.nvim_buf_get_extmarks = function(...)
@@ -62,13 +56,14 @@ H.describe('buffer: listing and path identity', function()
     H.assert_true(initial_result == true, 'initial listing succeeds')
     H.assert_eq(same_path_calls, 0, 'initial listing avoids same_path comparisons')
     H.assert_eq(root_scans, 1, 'initial listing scans the root only once')
-    H.assert_true(extmark_calls <= 4,
-      'initial rendering reads extmarks in batches, got ' .. extmark_calls .. ' calls')
-    H.assert_true(initial_stats <= 2 * count + 10,
-      'initial listing uses at most 2*N+10 stats, got ' .. initial_stats)
+    H.assert_true(extmark_calls <= 4, 'initial rendering reads extmarks in batches, got ' .. extmark_calls .. ' calls')
+    H.assert_true(initial_stats <= 2 * count + 10, 'initial listing uses at most 2*N+10 stats, got ' .. initial_stats)
     H.assert_eq(vim.api.nvim_buf_line_count(0), count, 'all plain files are listed')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], count,
-      'cursor restoration finds the selected file through the precomputed identity')
+    H.assert_eq(
+      vim.api.nvim_win_get_cursor(0)[1],
+      count,
+      'cursor restoration finds the selected file through the precomputed identity'
+    )
     local ns = vim.api.nvim_get_namespaces()['direct-listing-rows']
     local before_marks = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})
     H.assert_eq(#before_marks, count, 'every row has a stable identity mark')
@@ -79,9 +74,7 @@ H.describe('buffer: listing and path identity', function()
       return original_stat(...)
     end
     vim.uv.fs_scandir = function(path, ...)
-      if vim.fs.normalize(path) == vim.fs.normalize(ws) then
-        root_scans = root_scans + 1
-      end
+      if vim.fs.normalize(path) == vim.fs.normalize(ws) then root_scans = root_scans + 1 end
       return original_scandir(path, ...)
     end
     vim.api.nvim_buf_get_extmarks = function(...)
@@ -102,14 +95,15 @@ H.describe('buffer: listing and path identity', function()
     H.assert_true(refresh_result == true, 'refresh succeeds')
     H.assert_eq(same_path_calls, 0, 'refresh avoids same_path comparisons')
     H.assert_eq(root_scans, 1, 'refresh scans the root only once')
-    H.assert_true(extmark_calls <= 4,
-      'refresh rendering reads extmarks in batches, got ' .. extmark_calls .. ' calls')
-    H.assert_true(refresh_stats <= 2 * count + 10,
-      'refresh uses at most 2*N+10 stats, got ' .. refresh_stats)
+    H.assert_true(extmark_calls <= 4, 'refresh rendering reads extmarks in batches, got ' .. extmark_calls .. ' calls')
+    H.assert_true(refresh_stats <= 2 * count + 10, 'refresh uses at most 2*N+10 stats, got ' .. refresh_stats)
     local after_marks = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})
     H.assert_eq(after_marks, before_marks, 'refresh preserves every row identity mark')
-    H.assert_eq(vim.api.nvim_win_get_cursor(0)[1], count,
-      'refresh restores the cursor without pairwise path comparisons')
+    H.assert_eq(
+      vim.api.nvim_win_get_cursor(0)[1],
+      count,
+      'refresh restores the cursor without pairwise path comparisons'
+    )
   end)
 
   H.it('retains expanded child identities and paths during an indexed refresh', function()
@@ -127,8 +121,7 @@ H.describe('buffer: listing and path identity', function()
     H.assert_true(listing:list(), 'refresh succeeds')
 
     H.assert_buf_eq({ 'child/', '  inside.txt' }, 0, 'expanded child stays rendered')
-    H.assert_eq(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {}), before,
-      'root and child marks retain their IDs')
+    H.assert_eq(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {}), before, 'root and child marks retain their IDs')
     H.assert_eq(listing:get_paths(1, 2), before_paths, 'child paths remain associated')
   end)
 
@@ -148,8 +141,7 @@ H.describe('buffer: listing and path identity', function()
     H.assert_buf_eq({ 'new.txt' }, 0, ':e replaces stale rows with current directory entries')
     H.assert_eq(vim.bo.filetype, 'direct', ':e keeps the direct buffer filetype')
     H.assert_false(vim.bo.modified, ':e leaves the refreshed listing unmodified')
-    H.assert_eq(listing:get_paths(1, 1), { ws .. '/new.txt' },
-      'row paths match the reloaded directory contents')
+    H.assert_eq(listing:get_paths(1, 1), { ws .. '/new.txt' }, 'row paths match the reloaded directory contents')
   end)
 
   H.it('refuses to re-list a modified directory buffer without changing it', function()
@@ -208,8 +200,7 @@ H.describe('buffer: listing and path identity', function()
     H.assert_eq(vim.api.nvim_get_current_buf(), buf, 'the listing remains current')
     H.assert_buf_eq({ 'edited row', 'file.txt' }, buf, 'unsaved text is preserved')
     H.assert_true(vim.bo[buf].modified, 'the buffer stays modified')
-    H.assert_eq(vim.fn.readfile(ws .. '/file.txt'), { 'on disk' },
-      'the file is not opened or changed')
+    H.assert_eq(vim.fn.readfile(ws .. '/file.txt'), { 'on disk' }, 'the file is not opened or changed')
     H.assert_notified('unsaved edits', vim.log.levels.ERROR)
   end)
 
@@ -231,8 +222,7 @@ H.describe('buffer: listing and path identity', function()
     local result = require('direct').list(ws)
 
     H.assert_nil(result, 'returning to the modified listing is refused')
-    H.assert_eq(vim.api.nvim_get_current_buf(), child_buf,
-      'the current child listing is unchanged')
+    H.assert_eq(vim.api.nvim_get_current_buf(), child_buf, 'the current child listing is unchanged')
     H.assert_buf_eq({ 'unsaved root edit' }, root_buf, 'the parent edit is preserved')
     H.assert_true(vim.bo[root_buf].modified, 'the parent stays modified')
     H.assert_notified('unsaved edits', vim.log.levels.ERROR)
@@ -248,13 +238,15 @@ H.describe('buffer: listing and path identity', function()
     local before = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})[1][1]
     local replacement = H.mkfile(ws, 'replacement.tmp', { 'new inode' })
     H.assert_false(fs.same_path(path, replacement), 'replacement has a distinct inode')
-    H.assert_true(vim.uv.fs_rename(replacement, path) == true,
-      'atomically replace the entry at the same path')
+    H.assert_true(vim.uv.fs_rename(replacement, path) == true, 'atomically replace the entry at the same path')
 
     H.assert_true(listing:list(), 'refresh succeeds after replacement')
 
-    H.assert_eq(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})[1][1], before,
-      'same path reuses its prior row identity')
+    H.assert_eq(
+      vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})[1][1],
+      before,
+      'same path reuses its prior row identity'
+    )
   end)
 
   H.it('keeps M.Buffer identities isolated across many directory roots', function()
@@ -275,10 +267,12 @@ H.describe('buffer: listing and path identity', function()
     for index, root in ipairs(roots) do
       local listing = buffer.Buffer(root.path)
       H.assert_true(listing:list(), 're-listing root ' .. index .. ' succeeds')
-      H.assert_eq(vim.api.nvim_get_current_buf(), root.bufnr,
-        'M.Buffer reuses the matching directory buffer')
-      H.assert_eq(vim.api.nvim_buf_get_extmarks(root.bufnr, ns, 0, -1, {})[1][1], row_ids[index],
-        'root ' .. index .. ' retains its own row identity')
+      H.assert_eq(vim.api.nvim_get_current_buf(), root.bufnr, 'M.Buffer reuses the matching directory buffer')
+      H.assert_eq(
+        vim.api.nvim_buf_get_extmarks(root.bufnr, ns, 0, -1, {})[1][1],
+        row_ids[index],
+        'root ' .. index .. ' retains its own row identity'
+      )
     end
   end)
 
@@ -300,10 +294,8 @@ H.describe('buffer: listing and path identity', function()
 
     local after = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})
     H.assert_eq(#after, 2, 'both names remain visible')
-    H.assert_true(after[1][1] ~= before[1][1] and after[1][1] ~= before[2][1],
-      'first duplicate gets a fresh identity')
-    H.assert_true(after[2][1] ~= before[1][1] and after[2][1] ~= before[2][1],
-      'second duplicate gets a fresh identity')
+    H.assert_true(after[1][1] ~= before[1][1] and after[1][1] ~= before[2][1], 'first duplicate gets a fresh identity')
+    H.assert_true(after[2][1] ~= before[1][1] and after[2][1] ~= before[2][1], 'second duplicate gets a fresh identity')
   end)
 
   H.it('does not reuse a deleted row identity when no replacement exists', function()
@@ -346,15 +338,20 @@ H.describe('buffer: listing and path identity', function()
 
     H.assert_true(first_ok and first_result == true, tostring(first_result))
     H.assert_true(second_ok and second_result == true, tostring(second_result))
-    H.assert_eq(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})[1][1], first_id,
-      'normalized-name fallback reuses only the same path identity')
+    H.assert_eq(
+      vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})[1][1],
+      first_id,
+      'normalized-name fallback reuses only the same path identity'
+    )
   end)
 
   H.it('keeps wildignored symlink aliases hidden with linear identity stat work', function()
     clean_buffers()
     local sb = H.sandbox()
     local ws = H.mkdir(sb.root, 'ws')
-    for index = 1, 40 do H.mkfile(ws, string.format('file-%02d.txt', index), '') end
+    for index = 1, 40 do
+      H.mkfile(ws, string.format('file-%02d.txt', index), '')
+    end
     local target = H.mkfile(ws, 'hidden.log', '')
     local alias = ws .. '/alias.txt'
     H.assert_true(make_symlink(target, alias), 'symlink alias created')
@@ -380,13 +377,16 @@ H.describe('buffer: listing and path identity', function()
     H.assert_true(ok, tostring(result))
     H.assert_true(result == true, 'wildignore listing succeeds')
     H.assert_eq(vim.api.nvim_buf_line_count(0), 40, 'the ignored target and its symlink alias are hidden')
-    H.assert_true(not vim.tbl_contains(vim.api.nvim_buf_get_lines(0, 0, -1, false), 'hidden.log'),
-      'the matched ignored entry is absent')
-    H.assert_true(not vim.tbl_contains(vim.api.nvim_buf_get_lines(0, 0, -1, false), 'alias.txt'),
-      'the same-inode alias stays hidden')
+    H.assert_true(
+      not vim.tbl_contains(vim.api.nvim_buf_get_lines(0, 0, -1, false), 'hidden.log'),
+      'the matched ignored entry is absent'
+    )
+    H.assert_true(
+      not vim.tbl_contains(vim.api.nvim_buf_get_lines(0, 0, -1, false), 'alias.txt'),
+      'the same-inode alias stays hidden'
+    )
     H.assert_eq(same_path_calls, 0, 'ignore matching avoids same_path comparisons')
-    H.assert_true(stat_count <= 2 * 42 + 5 + 10,
-      'stat work is linear in entries and patterns, got ' .. stat_count)
+    H.assert_true(stat_count <= 2 * 42 + 5 + 10, 'stat work is linear in entries and patterns, got ' .. stat_count)
   end)
 
   H.it('snapshot filtering indexes a large ignored set instead of comparing every pair', function()
@@ -398,9 +398,7 @@ H.describe('buffer: listing and path identity', function()
       H.mkfile(ws, string.format('ignored-%02d.log', index), '')
     end
     local listing
-    H.with_option('wildignore', '*.log', function()
-      listing = buffer.list(ws)
-    end)
+    H.with_option('wildignore', '*.log', function() listing = buffer.list(ws) end)
     -- Adding an entry runs apply_snapshot over the visible listing. Any
     -- pairwise same_path comparison there scales as visible x ignored.
     vim.api.nvim_buf_set_lines(0, -1, -1, false, { 'new.txt' })
@@ -414,8 +412,7 @@ H.describe('buffer: listing and path identity', function()
 
     H.assert_true(ok, tostring(result))
     H.assert_true(result == true, 'filtered save succeeds')
-    H.assert_eq(comparisons, 0,
-      'apply_snapshot performs indexed lookups, not visible-by-ignored same_path comparisons')
+    H.assert_eq(comparisons, 0, 'apply_snapshot performs indexed lookups, not visible-by-ignored same_path comparisons')
     H.assert_true(H.exists(ws, 'ignored-40.log'), 'ignored files remain untouched')
     H.assert_true(H.exists(ws, 'new.txt'), 'the visible addition is saved')
   end)

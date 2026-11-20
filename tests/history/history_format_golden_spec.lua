@@ -149,12 +149,15 @@ H.describe('v0.3.0 persisted-format goldens', function()
       { label = 'unsupported version', bytes = envelope({ version = transaction.VERSION + 1 }) },
       { label = 'unknown kind', bytes = envelope({ kind = 'future-kind' }) },
       { label = 'extra stack field', bytes = envelope({ extra = true }) },
-      { label = 'missing stack', bytes = vim.json.encode({
-        format = transaction.FORMAT,
-        version = transaction.VERSION,
-        kind = 'stacks',
-        undo = { transaction.HEADER },
-      }) },
+      {
+        label = 'missing stack',
+        bytes = vim.json.encode({
+          format = transaction.FORMAT,
+          version = transaction.VERSION,
+          kind = 'stacks',
+          undo = { transaction.HEADER },
+        }),
+      },
     }
     for _, case in ipairs(cases) do
       H.assert_nil(transaction.parse(case.bytes), case.label .. ' is refused')

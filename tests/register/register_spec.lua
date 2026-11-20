@@ -12,9 +12,7 @@ local action = require('direct.action.action')
 local fixtures = require('tests.support.history_fixtures')
 
 H.describe('register', function()
-  local function register_dir(sb)
-    return vim.fs.joinpath(sb.data_home, 'direct/register')
-  end
+  local function register_dir(sb) return vim.fs.joinpath(sb.data_home, 'direct/register') end
 
   local function sorted_dst(sb, sources)
     local sorted = vim.deepcopy(sources)
@@ -22,7 +20,7 @@ H.describe('register', function()
     return vim.fs.joinpath(register_dir(sb), paths.digest(sorted))
   end
 
-  H.it('yank stores dir1 (never \'\') and the tree, points content at the absolute dst', function()
+  H.it("yank stores dir1 (never '') and the tree, points content at the absolute dst", function()
     local sb = H.sandbox()
     local src_file = sb.root .. '/f.txt'
     local src_dir = sb.root .. '/dir1/'
@@ -36,8 +34,7 @@ H.describe('register', function()
     -- Trailing-slash-safe basename: the directory is stored as `dir1`,
     -- and both entries land in the sorted-digest destination with a tree.
     local dst = sorted_dst(sb, { src_file, src_dir })
-    H.assert_fs_eq(dst, { 'dir1/', 'dir1/sub.txt', 'f.txt' },
-      'register entry holds the file and the dir1 tree')
+    H.assert_fs_eq(dst, { 'dir1/', 'dir1/sub.txt', 'f.txt' }, 'register entry holds the file and the dir1 tree')
 
     -- content pointer: the absolute register path, not a relative one.
     local content_path = vim.fs.joinpath(register_dir(sb), 'content')
@@ -77,19 +74,22 @@ H.describe('register', function()
     H.assert_true(release ~= nil, 'the tree copy started')
 
     local probe = H.mkfile(sb.root, 'probe_lock.lua', {
-      "local root = assert(vim.env.DIRECT_FRESH_ROOT)",
+      'local root = assert(vim.env.DIRECT_FRESH_ROOT)',
       "package.path = root .. '/lua/?.lua;' .. package.path",
       "local lock = require('direct.history.lock')",
-      "local ok, err = lock.acquire()",
+      'local ok, err = lock.acquire()',
       "if ok then lock.release(); io.stdout:write('ACQUIRED')",
       "else io.stdout:write('BLOCKED ' .. tostring(err)) end",
     })
     local output
-    H.with_env({ XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() }, function()
-      output = vim.fn.system({ vim.v.progpath, '--headless', '-l', probe })
-    end)
-    H.assert_true(output:find('ACQUIRED', 1, true) ~= nil,
-      'another Neovim can use history while this yank copies: ' .. output)
+    H.with_env(
+      { XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() },
+      function() output = vim.fn.system({ vim.v.progpath, '--headless', '-l', probe }) end
+    )
+    H.assert_true(
+      output:find('ACQUIRED', 1, true) ~= nil,
+      'another Neovim can use history while this yank copies: ' .. output
+    )
 
     release()
     H.assert_false(pending.is_pending(), 'the guard is released after the copy')
@@ -148,34 +148,43 @@ H.describe('register', function()
       return true
     end)
     local async_ok, async_err
-    H.assert_true(reg.yank_async({ tree .. '/' }, function(ok, err)
-      async_ok, async_err = ok, err
-    end), 'the long copy starts')
+    H.assert_true(
+      reg.yank_async({ tree .. '/' }, function(ok, err)
+        async_ok, async_err = ok, err
+      end),
+      'the long copy starts'
+    )
     restore()
 
     local script = H.mkfile(sb.root, 'yank_in_other_nvim.lua', {
-      "local root = assert(vim.env.DIRECT_FRESH_ROOT)",
+      'local root = assert(vim.env.DIRECT_FRESH_ROOT)',
       "package.path = root .. '/lua/?.lua;' .. package.path",
       "local register = require('direct.register')",
       'local ok, err = register.yank({' .. string.format('%q', replacement) .. '})',
       "io.stdout:write(ok and 'YANKED' or ('FAILED ' .. tostring(err)))",
     })
     local output
-    H.with_env({ XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() }, function()
-      output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script })
-    end)
-    H.assert_true(output:find('YANKED', 1, true) ~= nil,
-      'another Neovim can replace the register during the copy: ' .. output)
+    H.with_env(
+      { XDG_DATA_HOME = sb.data_home, DIRECT_FRESH_ROOT = vim.fn.getcwd() },
+      function() output = vim.fn.system({ vim.v.progpath, '--headless', '-l', script }) end
+    )
+    H.assert_true(
+      output:find('YANKED', 1, true) ~= nil,
+      'another Neovim can replace the register during the copy: ' .. output
+    )
     local replacement_register = reg.content()
-    H.assert_true(replacement_register ~= sorted_dst(sb, { original }),
-      'the other yank changed the current content pointer')
+    H.assert_true(
+      replacement_register ~= sorted_dst(sb, { original }),
+      'the other yank changed the current content pointer'
+    )
 
     release()
     H.assert_false(async_ok, 'the older asynchronous yank is refused')
-    H.assert_true(tostring(async_err):find('register changed', 1, true) ~= nil,
-      'the refusal explains the pointer change')
-    H.assert_eq(reg.content(), replacement_register,
-      'the completed old copy does not overwrite the newer register')
+    H.assert_true(
+      tostring(async_err):find('register changed', 1, true) ~= nil,
+      'the refusal explains the pointer change'
+    )
+    H.assert_eq(reg.content(), replacement_register, 'the completed old copy does not overwrite the newer register')
   end)
 
   H.it('removes old register copies only after paste history stops referencing them', function()
@@ -212,7 +221,7 @@ H.describe('register', function()
     H.mkfile(root, 'a.txt', { 'a' })
     H.mkdir(root, 'sub')
     H.mkfile(root, 'sub/b.txt', { 'b' })
-  pcall(H.symlink, root .. '/a.txt', root .. '/sub/link')
+    pcall(H.symlink, root .. '/a.txt', root .. '/sub/link')
     H.assert_true(vim.uv.fs_lstat(root .. '/sub/link') ~= nil, 'nested symlink created')
 
     H.capture_messages()
@@ -223,10 +232,8 @@ H.describe('register', function()
     -- The register copy holds everything reproducible, with no stand-in for
     -- what could not be copied.
     local dst = sorted_dst(sb, { root })
-    H.assert_fs_eq(dst, { 'tree/', 'tree/a.txt', 'tree/sub/', 'tree/sub/b.txt' },
-      'the yank stored what it could copy')
-    H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt', 'sub/link@' },
-      'the source is untouched, symlink included')
+    H.assert_fs_eq(dst, { 'tree/', 'tree/a.txt', 'tree/sub/', 'tree/sub/b.txt' }, 'the yank stored what it could copy')
+    H.assert_fs_eq(root, { 'a.txt', 'sub/', 'sub/b.txt', 'sub/link@' }, 'the source is untouched, symlink included')
   end)
 
   H.it('digest is stable across orderings and a re-yank replaces the entry', function()
@@ -235,26 +242,20 @@ H.describe('register', function()
     H.mkdir(sb.root, 'dir1')
     H.mkfile(sb.root, 'dir1/a.txt', { '1' })
 
-    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/dir1' }) == true,
-      'first yank')
+    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/dir1' }) == true, 'first yank')
     local first = reg.content()
     H.assert_true(first ~= nil, 'content pointer written')
 
     -- Same sources, reversed caller order: same sorted digest -> same dst.
     H.mkfile(sb.root, 'dir1/b.txt', { '2' })
-    H.assert_true(reg.yank({ sb.root .. '/dir1', sb.root .. '/a.txt' }) == true,
-      're-yank in the opposite caller order')
-    H.assert_eq(reg.content(), first,
-      'digest is stable across caller orderings')
+    H.assert_true(reg.yank({ sb.root .. '/dir1', sb.root .. '/a.txt' }) == true, 're-yank in the opposite caller order')
+    H.assert_eq(reg.content(), first, 'digest is stable across caller orderings')
 
     -- Replace semantics: the stale member from the first yank is gone.
-    H.assert_fs_eq(first .. '/dir1', { 'a.txt', 'b.txt' },
-      'the re-yank kept the original member (re-copy, no loss)')
+    H.assert_fs_eq(first .. '/dir1', { 'a.txt', 'b.txt' }, 'the re-yank kept the original member (re-copy, no loss)')
     H.mkfile(sb.root, 'dir1/c.txt', { '3' })
-    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/dir1' }) == true,
-      'third yank')
-    H.assert_fs_eq(first .. '/dir1', { 'a.txt', 'b.txt', 'c.txt' },
-      're-yank copies the whole tree; no member is lost')
+    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/dir1' }) == true, 'third yank')
+    H.assert_fs_eq(first .. '/dir1', { 'a.txt', 'b.txt', 'c.txt' }, 're-yank copies the whole tree; no member is lost')
   end)
 
   H.it('paste pastes into dst, returns the last entry, logs history, notifies the summary once', function()
@@ -270,19 +271,19 @@ H.describe('register', function()
     H.assert_fs_eq(ws, { 'f.txt' }, 'file pasted')
 
     local text = H.messages()
-    H.assert_true(text:find('Pasted into ', 1, true) ~= nil,
-      'the summary is notified on success')
+    H.assert_true(text:find('Pasted into ', 1, true) ~= nil, 'the summary is notified on success')
     local _, count = text:gsub('Pasted into ', '')
     H.assert_eq(count, 1, 'the summary is emitted exactly once')
 
     -- History is logged only on success: the JSONL header plus one action record.
     local undo_path = vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')
     local redo_path = vim.fs.joinpath(sb.data_home, 'direct/history/redo.log')
-    H.assert_eq(vim.fn.readfile(undo_path),
+    H.assert_eq(
+      vim.fn.readfile(undo_path),
       { fixtures.header, fixtures.paste('p', src, ws, { 'f.txt' }, { 'f.txt' }) },
-      'the header plus canonical paste record is recorded')
-    H.assert_eq(vim.fn.readfile(redo_path), { fixtures.header },
-      'log() reset the redo log to its header')
+      'the header plus canonical paste record is recorded'
+    )
+    H.assert_eq(vim.fn.readfile(redo_path), { fixtures.header }, 'log() reset the redo log to its header')
   end)
 
   H.it('paste callback receives the final result and pasted-entry context once', function()
@@ -299,8 +300,10 @@ H.describe('register', function()
       callback_succeeded, callback_changed, callback_entry = succeeded, changed, pasted_entry
     end)
 
-    H.assert_true(vim.wait(5000, function() return callback_count == 1 end),
-      'paste callback runs after the operation settles')
+    H.assert_true(
+      vim.wait(5000, function() return callback_count == 1 end),
+      'paste callback runs after the operation settles'
+    )
     H.assert_eq(last, ws .. '/f.txt', 'synchronous paste result remains unchanged')
     H.assert_eq(callback_count, 1, 'the completion callback runs once')
     H.assert_eq(callback_result, ws .. '/f.txt', 'callback receives the paste result')
@@ -333,11 +336,12 @@ H.describe('register', function()
     H.assert_true(injected, 'the destination raced in after the check')
     H.assert_nil(result, 'exclusive copy refuses the raced destination')
     H.assert_eq(vim.fn.readfile(dst), { 'FOREIGN' }, 'raced file is unchanged')
-    H.assert_eq(vim.fn.readfile(reg.content() .. '/f.txt'), { 'REGISTER' },
-      'register source remains unchanged')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log')), { history.HEADER },
-      'a failed copy adds no action record')
+    H.assert_eq(vim.fn.readfile(reg.content() .. '/f.txt'), { 'REGISTER' }, 'register source remains unchanged')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')),
+      { history.HEADER },
+      'a failed copy adds no action record'
+    )
   end)
 
   H.it('directory paste refuses an occupant that races in before final placement', function()
@@ -364,14 +368,18 @@ H.describe('register', function()
 
     H.assert_true(injected, 'the destination raced in before placement')
     H.assert_nil(result, 'no-replace placement refuses the raced directory')
-    H.assert_eq(vim.fn.readfile(dst .. '/foreign.txt'), { 'KEEP' },
-      'the raced directory and its contents remain untouched')
+    H.assert_eq(
+      vim.fn.readfile(dst .. '/foreign.txt'),
+      { 'KEEP' },
+      'the raced directory and its contents remain untouched'
+    )
     H.assert_false(fs.exists(dst .. '/source.txt'), 'the source tree was not merged')
-    H.assert_eq(vim.fn.glob(ws .. '/.direct-copy-tree-*'), '',
-      'the failed private copy temp was cleaned')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log')), { history.HEADER },
-      'failed directory placement adds no action record')
+    H.assert_eq(vim.fn.glob(ws .. '/.direct-copy-tree-*'), '', 'the failed private copy temp was cleaned')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')),
+      { history.HEADER },
+      'failed directory placement adds no action record'
+    )
   end)
 
   H.it('a destination clash prompts and pastes under the answered name', function()
@@ -385,24 +393,19 @@ H.describe('register', function()
 
     H.capture_messages()
     local last = nil
-    local restore = H.stub(vim.ui, 'input', function(_, callback)
-      callback('other.txt')
-    end)
-    local ok, perr = xpcall(function()
-      last = reg.paste(ws)
-    end, debug.traceback)
+    local restore = H.stub(vim.ui, 'input', function(_, callback) callback('other.txt') end)
+    local ok, perr = xpcall(function() last = reg.paste(ws) end, debug.traceback)
     restore()
-    if not ok then
-      error(perr, 0)
-    end
+    if not ok then error(perr, 0) end
 
-    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'original' },
-      'the clashing entry is not overwritten')
-    H.assert_fs_eq(ws, { 'dir1/', 'dir1/sub.txt', 'f.txt', 'other.txt' },
-      'the clash was pasted under the answered name')
+    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'original' }, 'the clashing entry is not overwritten')
+    H.assert_fs_eq(
+      ws,
+      { 'dir1/', 'dir1/sub.txt', 'f.txt', 'other.txt' },
+      'the clash was pasted under the answered name'
+    )
     H.assert_eq(last, ws .. '/other.txt', 'the renamed copy is the last pasted entry')
-    H.assert_false(H.messages():find('Skipped', 1, true) ~= nil,
-      'a non-empty answer is not a skip')
+    H.assert_false(H.messages():find('Skipped', 1, true) ~= nil, 'a non-empty answer is not a skip')
   end)
 
   -- A clash answer that still names an existing entry must be rejected; otherwise
@@ -430,10 +433,8 @@ H.describe('register', function()
     if not ok then error(perr, 0) end
 
     H.assert_eq(prompts, 2, 'the still-colliding answer re-prompts')
-    H.assert_fs_eq(ws .. '/tree', { 'keep.txt' },
-      'the pre-existing directory was not merged into')
-    H.assert_fs_eq(ws .. '/fresh', { 'sub.txt' },
-      'the directory landed under the fresh name')
+    H.assert_fs_eq(ws .. '/tree', { 'keep.txt' }, 'the pre-existing directory was not merged into')
+    H.assert_fs_eq(ws .. '/fresh', { 'sub.txt' }, 'the directory landed under the fresh name')
     H.assert_eq(res, ws .. '/fresh', 'the fresh entry is the last pasted one')
   end)
 
@@ -447,16 +448,17 @@ H.describe('register', function()
     H.mkfile(ws, 'tree/keep.txt', { 'KEEP' })
 
     local answers = { 'tree', 'fresh' }
-    local restore = H.stub(vim.ui, 'input', function(_, callback)
-      callback(table.remove(answers, 1) or '')
-    end)
+    local restore = H.stub(vim.ui, 'input', function(_, callback) callback(table.remove(answers, 1) or '') end)
     local ok, perr = xpcall(function() reg.paste(ws) end, debug.traceback)
     restore()
     if not ok then error(perr, 0) end
 
     H.assert_true(history.undo() ~= nil, 'undo succeeds')
-    H.assert_fs_eq(ws, { 'tree/', 'tree/keep.txt' },
-      'undo removed exactly the pasted directory and spared the pre-existing one')
+    H.assert_fs_eq(
+      ws,
+      { 'tree/', 'tree/keep.txt' },
+      'undo removed exactly the pasted directory and spared the pre-existing one'
+    )
   end)
 
   H.it('cancelling the clash prompt changes nothing, even after a colliding answer', function()
@@ -470,15 +472,12 @@ H.describe('register', function()
 
     H.capture_messages()
     local answers = { 'tree', '' } -- collide once, then cancel
-    local restore = H.stub(vim.ui, 'input', function(_, callback)
-      callback(table.remove(answers, 1) or '')
-    end)
+    local restore = H.stub(vim.ui, 'input', function(_, callback) callback(table.remove(answers, 1) or '') end)
     local ok, perr = xpcall(function() reg.paste(ws) end, debug.traceback)
     restore()
     if not ok then error(perr, 0) end
 
-    H.assert_fs_eq(ws, { 'tree/', 'tree/keep.txt' },
-      'a cancelled paste left the filesystem exactly as it was')
+    H.assert_fs_eq(ws, { 'tree/', 'tree/keep.txt' }, 'a cancelled paste left the filesystem exactly as it was')
     H.assert_notified('Skipped tree')
   end)
 
@@ -494,23 +493,17 @@ H.describe('register', function()
     H.mkfile(ws, 'f.txt', { 'KEEP' })
 
     local answers = { 'f.txt', 'f-copy.txt' }
-    local restore = H.stub(vim.ui, 'input', function(_, callback)
-      callback(table.remove(answers, 1) or '')
-    end)
+    local restore = H.stub(vim.ui, 'input', function(_, callback) callback(table.remove(answers, 1) or '') end)
     local ok, perr = xpcall(function() reg.paste(ws) end, debug.traceback)
     restore()
     if not ok then error(perr, 0) end
 
-    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'KEEP' },
-      'the pre-existing file was not overwritten')
-    H.assert_eq(vim.fn.readfile(ws .. '/f-copy.txt'), { 'reg-f' },
-      'the copy landed under the fresh name')
+    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'KEEP' }, 'the pre-existing file was not overwritten')
+    H.assert_eq(vim.fn.readfile(ws .. '/f-copy.txt'), { 'reg-f' }, 'the copy landed under the fresh name')
 
     H.assert_true(history.undo() ~= nil, 'undo succeeds')
-    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'KEEP' },
-      'undo spared the pre-existing file')
-    H.assert_false(fs.exists(ws .. '/f-copy.txt'),
-      'undo removed only the pasted copy')
+    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'KEEP' }, 'undo spared the pre-existing file')
+    H.assert_false(fs.exists(ws .. '/f-copy.txt'), 'undo removed only the pasted copy')
   end)
 
   -- The clash loop must be bounded. A prompt that keeps
@@ -529,19 +522,15 @@ H.describe('register', function()
     local prompts = 0
     local restore = H.stub(vim.ui, 'input', function(_, callback)
       prompts = prompts + 1
-      if prompts > 50 then
-        error('paste clash prompt exceeded its ceiling: the loop is unbounded', 0)
-      end
+      if prompts > 50 then error('paste clash prompt exceeded its ceiling: the loop is unbounded', 0) end
       callback('f.txt') -- always the name that already exists
     end)
     local ok, perr = xpcall(function() reg.paste(ws) end, debug.traceback)
     restore()
     if not ok then error(perr, 0) end
 
-    H.assert_eq(prompts, action.PASTE_CLASH_ATTEMPTS,
-      'the loop stops at the attempt cap instead of spinning')
-    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'KEEP' },
-      'the pre-existing file was never touched')
+    H.assert_eq(prompts, action.PASTE_CLASH_ATTEMPTS, 'the loop stops at the attempt cap instead of spinning')
+    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'KEEP' }, 'the pre-existing file was never touched')
     H.assert_notified('Skipped f.txt')
   end)
 
@@ -552,10 +541,11 @@ H.describe('register', function()
     H.mkfile(sb.root, 'f.txt', { 'reg-f' })
     H.assert_true(reg.yank({ sb.root .. '/f.txt' }) == true, 'yank')
     local ws = H.mkdir(sb.root, 'ws')
-    H.assert_true(H.symlink(ws .. '/nowhere', ws .. '/f.txt') == true,
-      'dangling symlink occupying the paste destination name')
-    H.assert_false(fs.exists(ws .. '/f.txt'),
-      'the following check reports the name free')
+    H.assert_true(
+      H.symlink(ws .. '/nowhere', ws .. '/f.txt') == true,
+      'dangling symlink occupying the paste destination name'
+    )
+    H.assert_false(fs.exists(ws .. '/f.txt'), 'the following check reports the name free')
 
     local prompts = 0
     local restore = H.stub(vim.ui, 'input', function(_, callback)
@@ -568,11 +558,13 @@ H.describe('register', function()
 
     H.assert_eq(prompts, 1, 'the clash loop asks, because the name is taken')
     local st = vim.uv.fs_lstat(ws .. '/f.txt')
-    H.assert_true(st ~= nil and st.type == 'link',
-      'the dangling link is untouched, not replaced or written through')
+    H.assert_true(st ~= nil and st.type == 'link', 'the dangling link is untouched, not replaced or written through')
     H.assert_false(fs.exists(ws .. '/nowhere'), 'nothing was created at the link target')
-    H.assert_eq(vim.fn.readfile(ws .. '/f-copy.txt'), { 'reg-f' },
-      'the copy landed under the fresh name the answer gave')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/f-copy.txt'),
+      { 'reg-f' },
+      'the copy landed under the fresh name the answer gave'
+    )
   end)
 
   H.it('an empty async input answer skips the entry and reports it', function()
@@ -585,17 +577,12 @@ H.describe('register', function()
     H.capture_messages()
     local res = nil
     local restore = H.stub(vim.ui, 'input', function(_, callback) callback('') end)
-    local ok, perr = xpcall(function()
-      res = reg.paste(ws)
-    end, debug.traceback)
+    local ok, perr = xpcall(function() res = reg.paste(ws) end, debug.traceback)
     restore()
-    if not ok then
-      error(perr, 0)
-    end
+    if not ok then error(perr, 0) end
 
     H.assert_nil(res, 'a fully-skipped paste has no result')
-    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'original' },
-      'nothing was pasted')
+    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'original' }, 'nothing was pasted')
     H.assert_notified('Skipped f.txt')
   end)
 
@@ -603,8 +590,7 @@ H.describe('register', function()
     local sb = H.sandbox()
     H.mkfile(sb.root, 'a.txt', { 'reg-a' })
     H.mkfile(sb.root, 'b.txt', { 'reg-b' })
-    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/b.txt' }) == true,
-      'yank two entries')
+    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/b.txt' }) == true, 'yank two entries')
     local ws = H.mkdir(sb.root, 'ws')
     -- a.txt clashes with a pre-existing file the paste must NOT overwrite;
     -- b.txt has no clash and is the entry that is actually copied.
@@ -613,36 +599,35 @@ H.describe('register', function()
     H.capture_messages()
     local last = nil
     local restore = H.stub(vim.ui, 'input', function(_, callback) callback('') end)
-    local ok, perr = xpcall(function()
-      last = reg.paste(ws)
-    end, debug.traceback)
+    local ok, perr = xpcall(function() last = reg.paste(ws) end, debug.traceback)
     restore()
-    if not ok then
-      error(perr, 0)
-    end
+    if not ok then error(perr, 0) end
 
-    H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'IRREPLACEABLE USER DATA' },
-      'the skipped destination keeps its original content')
-    H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'reg-b' },
-      'the non-clashing entry was pasted')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/a.txt'),
+      { 'IRREPLACEABLE USER DATA' },
+      'the skipped destination keeps its original content'
+    )
+    H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'reg-b' }, 'the non-clashing entry was pasted')
     H.assert_eq(last, ws .. '/b.txt', 'the copied entry is the last pasted one')
 
     -- Undo reverses only what was written: b.txt goes, a.txt stays. Before the
     -- prune the skipped a.txt was still in renames, so undo deleted the
     -- untouched original.
     H.assert_true(history.undo() ~= nil, 'undo succeeds')
-    H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'IRREPLACEABLE USER DATA' },
-      'undo leaves the pre-existing destination untouched')
-    H.assert_false(fs.exists(ws .. '/b.txt'),
-      'undo removes the entry that was actually pasted')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/a.txt'),
+      { 'IRREPLACEABLE USER DATA' },
+      'undo leaves the pre-existing destination untouched'
+    )
+    H.assert_false(fs.exists(ws .. '/b.txt'), 'undo removes the entry that was actually pasted')
   end)
 
   H.it('a fully-skipped paste writes no history', function()
     local sb = H.sandbox()
     H.mkfile(sb.root, 'a.txt', { 'reg-a' })
     H.mkfile(sb.root, 'b.txt', { 'reg-b' })
-    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/b.txt' }) == true,
-      'yank two entries')
+    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/b.txt' }) == true, 'yank two entries')
     local ws = H.mkdir(sb.root, 'ws')
     H.mkfile(ws, 'a.txt', { 'orig-a' })
     H.mkfile(ws, 'b.txt', { 'orig-b' })
@@ -650,21 +635,16 @@ H.describe('register', function()
     H.capture_messages()
     local res = nil
     local restore = H.stub(vim.ui, 'input', function(_, callback) callback('') end)
-    local ok, perr = xpcall(function()
-      res = reg.paste(ws)
-    end, debug.traceback)
+    local ok, perr = xpcall(function() res = reg.paste(ws) end, debug.traceback)
     restore()
-    if not ok then
-      error(perr, 0)
-    end
+    if not ok then error(perr, 0) end
 
     H.assert_nil(res, 'all skipped entries produce no result')
     H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'orig-a' }, 'a.txt untouched')
     H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'orig-b' }, 'b.txt untouched')
 
     local undo_path = vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')
-    H.assert_eq(vim.fn.readfile(undo_path), { history.HEADER },
-      'all-skipped paste does not append an action')
+    H.assert_eq(vim.fn.readfile(undo_path), { history.HEADER }, 'all-skipped paste does not append an action')
   end)
 
   H.it('space-named entries round-trip through JSONL without arming unrelated deletes', function()
@@ -673,14 +653,12 @@ H.describe('register', function()
     local ws = H.mkdir(sb.root, 'ws')
     H.mkfile(ws, 'file.txt', { 'UNRELATED' })
 
-    H.assert_true(reg.yank({ sb.root .. '/my file.txt' }) == true,
-      'space-named entry is accepted by the register')
+    H.assert_true(reg.yank({ sb.root .. '/my file.txt' }) == true, 'space-named entry is accepted by the register')
     H.assert_eq(reg.paste(ws), ws .. '/my file.txt', 'the entry pasted under its original name')
     H.assert_eq(vim.fn.readfile(ws .. '/my file.txt'), { 'spacey' }, 'pasted bytes survive')
     H.assert_true(history.undo() ~= nil, 'undo succeeds')
     H.assert_false(fs.exists(ws .. '/my file.txt'), 'undo removes only the pasted entry')
-    H.assert_eq(vim.fn.readfile(ws .. '/file.txt'), { 'UNRELATED' },
-      'the unrelated file.txt survives')
+    H.assert_eq(vim.fn.readfile(ws .. '/file.txt'), { 'UNRELATED' }, 'the unrelated file.txt survives')
   end)
 
   -- The register is persisted and untrusted, but JSON arrays preserve spaces in
@@ -703,24 +681,23 @@ H.describe('register', function()
     H.capture_messages()
     local result = reg.paste(ws)
     H.assert_eq(result, ws .. '/my file.txt', 'the stored entry pastes successfully')
-    H.assert_eq(vim.fn.readfile(ws .. '/my'), { 'UNRELATED-A' },
-      'the unrelated my survives with its content')
-    H.assert_eq(vim.fn.readfile(ws .. '/file.txt'), { 'UNRELATED-B' },
-      'the unrelated file.txt survives with its content')
-    H.assert_eq(vim.fn.readfile(ws .. '/my file.txt'), { 'legacy' },
-      'the legacy space-named entry is preserved')
+    H.assert_eq(vim.fn.readfile(ws .. '/my'), { 'UNRELATED-A' }, 'the unrelated my survives with its content')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/file.txt'),
+      { 'UNRELATED-B' },
+      'the unrelated file.txt survives with its content'
+    )
+    H.assert_eq(vim.fn.readfile(ws .. '/my file.txt'), { 'legacy' }, 'the legacy space-named entry is preserved')
     H.assert_true(history.undo() ~= nil, 'the legacy register paste is undoable')
     H.assert_false(fs.exists(ws .. '/my file.txt'), 'undo removes the pasted copy')
-    H.assert_eq(vim.fn.readfile(ws .. '/file.txt'), { 'UNRELATED-B' },
-      'undo leaves unrelated names untouched')
+    H.assert_eq(vim.fn.readfile(ws .. '/file.txt'), { 'UNRELATED-B' }, 'undo leaves unrelated names untouched')
   end)
 
   H.it('a space-carrying clash answer round-trips and undo preserves originals', function()
     local sb = H.sandbox()
     H.mkfile(sb.root, 'a.txt', { 'reg-a' })
     H.mkfile(sb.root, 'b.txt', { 'reg-b' })
-    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/b.txt' }) == true,
-      'yank two entries')
+    H.assert_true(reg.yank({ sb.root .. '/a.txt', sb.root .. '/b.txt' }) == true, 'yank two entries')
     local ws = H.mkdir(sb.root, 'ws')
     -- Both entries clash with pre-existing files the paste must never touch.
     H.mkfile(ws, 'a.txt', { 'PRECIOUS ORIGINAL' })
@@ -730,40 +707,29 @@ H.describe('register', function()
     local last = nil
     -- Consumed in ascending src order: both names are valid JSON array values.
     local answers = { 'a.txt copy', 'renamed.txt' }
-    local restore = H.stub(vim.ui, 'input', function(_, callback)
-      callback(table.remove(answers, 1))
-    end)
-    local ok, perr = xpcall(function()
-      last = reg.paste(ws)
-    end, debug.traceback)
+    local restore = H.stub(vim.ui, 'input', function(_, callback) callback(table.remove(answers, 1)) end)
+    local ok, perr = xpcall(function() last = reg.paste(ws) end, debug.traceback)
     restore()
-    if not ok then
-      error(perr, 0)
-    end
+    if not ok then error(perr, 0) end
 
-    H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'PRECIOUS ORIGINAL' },
-      'the original clash is never overwritten')
-    H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'orig-b' },
-      'the clashing b.txt is not overwritten either')
-    H.assert_eq(vim.fn.readfile(ws .. '/renamed.txt'), { 'reg-b' },
-      'the valid second answer was pasted')
-    H.assert_eq(vim.fn.readfile(ws .. '/a.txt copy'), { 'reg-a' },
-      'the space-carrying answer was pasted exactly')
+    H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'PRECIOUS ORIGINAL' }, 'the original clash is never overwritten')
+    H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'orig-b' }, 'the clashing b.txt is not overwritten either')
+    H.assert_eq(vim.fn.readfile(ws .. '/renamed.txt'), { 'reg-b' }, 'the valid second answer was pasted')
+    H.assert_eq(vim.fn.readfile(ws .. '/a.txt copy'), { 'reg-a' }, 'the space-carrying answer was pasted exactly')
     H.assert_eq(last, ws .. '/renamed.txt', 'the pasted fragment is the last entry')
 
     -- Undo reverses both pasted names without touching the existing clashes.
     H.assert_true(history.undo() ~= nil, 'undo succeeds')
-    H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'PRECIOUS ORIGINAL' },
-      'undo leaves the pre-existing destination untouched')
-    H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'orig-b' },
-      'undo leaves the other untouched original alone')
-    H.assert_false(fs.exists(ws .. '/renamed.txt'),
-      'undo removes only the actually-pasted fragment')
-    H.assert_false(fs.exists(ws .. '/a.txt copy'),
-      'undo removes the space-named pasted fragment')
+    H.assert_eq(
+      vim.fn.readfile(ws .. '/a.txt'),
+      { 'PRECIOUS ORIGINAL' },
+      'undo leaves the pre-existing destination untouched'
+    )
+    H.assert_eq(vim.fn.readfile(ws .. '/b.txt'), { 'orig-b' }, 'undo leaves the other untouched original alone')
+    H.assert_false(fs.exists(ws .. '/renamed.txt'), 'undo removes only the actually-pasted fragment')
+    H.assert_false(fs.exists(ws .. '/a.txt copy'), 'undo removes the space-named pasted fragment')
 
-    H.assert_false(H.messages():find('Skipped a.txt', 1, true) ~= nil,
-      'a valid space name is not reported as skipped')
+    H.assert_false(H.messages():find('Skipped a.txt', 1, true) ~= nil, 'a valid space name is not reported as skipped')
   end)
 
   -- The FIELD_SEPARATOR ('\t') is as unserializable as the ENTRY_SEPARATOR
@@ -771,9 +737,7 @@ H.describe('register', function()
   -- clash answer. Before the fix a TAB-named entry yanked fine and undid as a
   -- silent no-op (no data loss, but inconsistent).
   H.it('a TAB-named entry is refused at the yank boundary with an error', function()
-    if H.is_windows() then
-      H.skip('Windows filenames cannot contain tab characters')
-    end
+    if H.is_windows() then H.skip('Windows filenames cannot contain tab characters') end
     local sb = H.sandbox()
     H.mkfile(sb.root, 'f\to.txt', { 'tabby' })
 
@@ -783,8 +747,7 @@ H.describe('register', function()
     H.assert_true(type(err) == 'string' and #err > 0, 'yank carries an err')
     H.assert_notified('contains a tab')
     H.assert_nil(reg.content(), 'a refused entry never arms a content pointer')
-    H.assert_eq(H.ls(register_dir(sb)), {},
-      'a refused yank leaves no digest dir entry behind')
+    H.assert_eq(H.ls(register_dir(sb)), {}, 'a refused yank leaves no digest dir entry behind')
   end)
 
   H.it('a TAB-carrying clash answer is refused like an empty answer', function()
@@ -796,34 +759,26 @@ H.describe('register', function()
 
     H.capture_messages()
     local res = nil
-    local restore = H.stub(vim.ui, 'input', function(_, callback)
-      callback('f\tother.txt')
-    end)
-    local ok, perr = xpcall(function()
-      res = reg.paste(ws)
-    end, debug.traceback)
+    local restore = H.stub(vim.ui, 'input', function(_, callback) callback('f\tother.txt') end)
+    local ok, perr = xpcall(function() res = reg.paste(ws) end, debug.traceback)
     restore()
-    if not ok then
-      error(perr, 0)
-    end
+    if not ok then error(perr, 0) end
 
     H.assert_nil(res, 'a fully-skipped paste has no result')
-    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'original' },
-      'the tab-answered clash is skipped, never overwritten')
-    H.assert_false(fs.exists(ws .. '/f\tother.txt'),
-      'no tab-named file is created')
+    H.assert_eq(vim.fn.readfile(ws .. '/f.txt'), { 'original' }, 'the tab-answered clash is skipped, never overwritten')
+    H.assert_false(fs.exists(ws .. '/f\tother.txt'), 'no tab-named file is created')
     H.assert_notified('Skipped f.txt')
 
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log')), { fixtures.header },
-      'all-skipped paste writes no history')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')),
+      { fixtures.header },
+      'all-skipped paste writes no history'
+    )
   end)
 
   -- A destination containing a control byte is refused before copy or history.
   H.it('a control-char destination is refused before any copy and writes no corrupted undo line', function()
-    if H.is_windows() then
-      H.skip('Windows filenames cannot contain control characters')
-    end
+    if H.is_windows() then H.skip('Windows filenames cannot contain control characters') end
     local sb = H.sandbox()
     H.mkfile(sb.root, 'f.txt', { 'f' })
     H.assert_true(reg.yank({ sb.root .. '/f.txt' }) == true, 'yank')
@@ -833,16 +788,20 @@ H.describe('register', function()
     local res, err = reg.paste(dst)
 
     H.assert_nil(res, 'the paste into an unrepresentable destination is refused')
-    H.assert_true(type(err) == 'string' and #err > 0,
-      'the refusal carries a reason')
+    H.assert_true(type(err) == 'string' and #err > 0, 'the refusal carries a reason')
     H.assert_notified('contains a tab')
-    H.assert_false(H.messages():find('Pasted into ', 1, true) ~= nil,
-      'no success summary was emitted for a refused paste')
+    H.assert_false(
+      H.messages():find('Pasted into ', 1, true) ~= nil,
+      'no success summary was emitted for a refused paste'
+    )
     -- The refusal happens BEFORE the copy: the destination is still empty.
     H.assert_eq(H.ls(dst), {}, 'nothing was copied into the destination')
     -- Preflight ran before the path refusal, but no action record was written.
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log')), { fixtures.header }, 'the undo stack stays empty')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')),
+      { fixtures.header },
+      'the undo stack stays empty'
+    )
   end)
 
   H.it('a mixed yank with a space-named entry round-trips both names', function()
@@ -850,8 +809,7 @@ H.describe('register', function()
     H.mkfile(sb.root, 'good.txt', { 'g' })
     H.mkfile(sb.root, 'my file.txt', { 'spacey' })
 
-    H.assert_true(reg.yank({ sb.root .. '/good.txt', sb.root .. '/my file.txt' }) == true,
-      'the mixed yank is accepted')
+    H.assert_true(reg.yank({ sb.root .. '/good.txt', sb.root .. '/my file.txt' }) == true, 'the mixed yank is accepted')
     local ws = H.mkdir(sb.root, 'ws')
     reg.paste(ws)
     H.assert_eq(vim.fn.readfile(ws .. '/good.txt'), { 'g' }, 'ordinary entry pasted')
@@ -869,11 +827,12 @@ H.describe('register', function()
     H.assert_nil(res, 'paste on an empty register returns nil')
     H.assert_nil(err, 'no error is carried for an empty register')
     H.assert_notified('Register is empty')
-    H.assert_false(H.messages():find('Pasted into ', 1, true) ~= nil,
-      'no summary was emitted')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log')), { fixtures.header },
-      'preflight initialized an empty stack without writing an action')
+    H.assert_false(H.messages():find('Pasted into ', 1, true) ~= nil, 'no summary was emitted')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')),
+      { fixtures.header },
+      'preflight initialized an empty stack without writing an action'
+    )
   end)
 
   H.it('paste copies a yanked directory tree', function()
@@ -886,8 +845,7 @@ H.describe('register', function()
 
     local last = reg.paste(ws)
     H.assert_eq(last, ws .. '/tree', 'the directory entry is the last pasted one')
-    H.assert_fs_eq(ws, { 'tree/', 'tree/deep.txt', 'tree/sub.txt' },
-      'the whole tree pasted')
+    H.assert_fs_eq(ws, { 'tree/', 'tree/deep.txt', 'tree/sub.txt' }, 'the whole tree pasted')
   end)
 
   -- The skip report is not yank-only. A paste destroys
@@ -944,9 +902,7 @@ H.describe('register', function()
     H.assert_true(reg.yank({ sb.root .. '/f.txt' }) == true, 'yank')
     local ws = H.mkdir(sb.root, 'ws')
 
-    local restore = H.stub(fs, 'copy_file_exclusive', function()
-      return nil, 'forced failure'
-    end)
+    local restore = H.stub(fs, 'copy_file_exclusive', function() return nil, 'forced failure' end)
     H.capture_messages()
     local res, err = reg.paste(ws)
     restore()
@@ -954,9 +910,11 @@ H.describe('register', function()
     H.assert_nil(res, 'paste reports the failure')
     H.assert_eq(err, 'forced failure', 'execution failure is returned')
     H.assert_notified('Could not paste the entries')
-    H.assert_eq(vim.fn.readfile(vim.fs.joinpath(sb.data_home,
-      'direct/history/undo.log')), { fixtures.header },
-      'a failed paste leaves preflight history header-only')
+    H.assert_eq(
+      vim.fn.readfile(vim.fs.joinpath(sb.data_home, 'direct/history/undo.log')),
+      { fixtures.header },
+      'a failed paste leaves preflight history header-only'
+    )
   end)
 
   H.it('yank and paste report an unavailable data dir instead of raising', function()
@@ -975,7 +933,9 @@ H.describe('register', function()
     H.assert_nil(res, 'paste reports the failure')
     H.assert_true(type(perr) == 'string' and #perr > 0, 'paste carries an err')
     H.assert_notified('history unavailable')
-    H.assert_false(H.messages():find('Register is empty', 1, true) ~= nil,
-      'a data-dir failure is not reported as an empty register')
+    H.assert_false(
+      H.messages():find('Register is empty', 1, true) ~= nil,
+      'a data-dir failure is not reported as an empty register'
+    )
   end)
 end)

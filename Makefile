@@ -49,7 +49,7 @@ lint:
 	  fi
 	$(PYTHON) tests/test_function_length.py
 	$(PYTHON) scripts/check_function_length.py
-	stylua --check lua/direct plugin ftplugin
+	stylua --check lua/direct plugin ftplugin tests
 	@mkdir -p '$(LUALS_LOGPATH)'
 	$(LUALS) --check=lua/direct/init.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'
 	$(LUALS) --check=lua/direct/config.lua --configpath='$(CURDIR)/.luarc.json' --checklevel=Warning --logpath='$(LUALS_LOGPATH)'

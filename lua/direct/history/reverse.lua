@@ -1,21 +1,36 @@
 -- Undo/redo execution and async history reversal orchestration.
--- Shared journal and lock primitives are injected from history.lua.
+-- Leaf modules are loaded directly. History supplies only the coordinator
+-- operations that own journal, recovery, and paired-stack persistence.
 
-return function(context)
-  local M = context.M
-  local file_operations = context.file_operations
-  local rename_files = context.rename_files
-  local preflight_locked = context.preflight_locked
-  local copy_lines = context.copy_lines
-  local commit_stacks = context.commit_stacks
-  local clear_transaction = context.clear_transaction
-  local recovery = context.recovery
-  local write_reverse_intent = context.write_reverse_intent
-  local start_paste_reverse = context.start_paste_reverse
-  local settle_failed_reverse = context.settle_failed_reverse
-  local attach_unpaste_journal = context.attach_unpaste_journal
-  local recoverable_rename_kinds = context.recoverable_rename_kinds
-  local write_paste_journal = context.write_paste_journal
+local module = {}
+
+local action = require('direct.action.action')
+local file_operations = require('direct.file_operations')
+local lock = require('direct.history.lock')
+local pending = require('direct.pending')
+local ui = require('direct.ui')
+
+local function build(history, owner)
+  local leaves = { action = action, lock = lock, pending = pending, ui = ui }
+  local M = setmetatable({}, {
+    __index = function(_, key)
+      local value = history[key]
+      if value ~= nil then return value end
+      return leaves[key]
+    end,
+  })
+  local rename_files = owner.rename_files
+  local preflight_locked = owner.preflight_locked
+  local copy_lines = owner.copy_lines
+  local commit_stacks = owner.commit_stacks
+  local clear_transaction = owner.clear_transaction
+  local recovery = owner.recovery
+  local write_reverse_intent = owner.write_reverse_intent
+  local start_paste_reverse = owner.start_paste_reverse
+  local settle_failed_reverse = owner.settle_failed_reverse
+  local attach_unpaste_journal = owner.attach_unpaste_journal
+  local recoverable_rename_kinds = owner.recoverable_rename_kinds
+  local write_paste_journal = owner.write_paste_journal
   local expand_batch_stack
 
   local function missing_source_hint(which, err)
@@ -663,4 +678,28 @@ return function(context)
     end
     return true
   end
+
+  return {
+    undo = M.undo,
+    redo = M.redo,
+    _reverse = M._reverse,
+    undo_async = M.undo_async,
+    redo_async = M.redo_async,
+    _reverse_async = M._reverse_async,
+  }
 end
+
+module.undo = function(history, owner) return build(history, owner).undo() end
+module.redo = function(history, owner) return build(history, owner).redo() end
+module._reverse = function(history, owner, which) return build(history, owner)._reverse(which) end
+module.undo_async = function(history, owner, callback, options)
+  return build(history, owner).undo_async(callback, options)
+end
+module.redo_async = function(history, owner, callback, options)
+  return build(history, owner).redo_async(callback, options)
+end
+module._reverse_async = function(history, owner, which, callback, options)
+  return build(history, owner)._reverse_async(which, callback, options)
+end
+
+return module

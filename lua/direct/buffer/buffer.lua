@@ -34,8 +34,6 @@ local is_dir_line = rows.is_dir_line
 local refresh_icons = rows.refresh_icons
 local dirs_then_name = rows.dirs_then_name
 local recorded_row_text = rows.recorded_row_text
-local visible_row_for_id = rows.visible_row_for_id
-local record_identity = rows.record_identity
 local remove_expanded_subtree = rows.remove_expanded_subtree
 M._state_for_test = rows.state_for_test
 M.entry_path = listing.entry_path
@@ -883,20 +881,19 @@ end
 
 function M.toggle_git_diff(ref, include_uncommitted) return set_git_diff_only(ref, include_uncommitted) end
 
--- Visible file/Git navigation and folding accessors live in navigation.lua.
-require('direct.buffer.navigation')({
-  M = M,
-  states = states,
-  row_ids_by_row = row_ids_by_row,
-  git = git,
-  is_dir_line = is_dir_line,
-  current_row_record = current_row_record,
-  visible_row_for_id = visible_row_for_id,
-  record_identity = record_identity,
-  pending = pending,
-  folding = folding,
-  ensure_git_snapshot = ensure_git_snapshot,
-})
+-- Attach navigation and folding-adapter methods in one visible place.
+local navigation = require('direct.buffer.navigation')
+M.navigate_git_status = navigation.navigate_git_status
+M.next_change = navigation.next_change
+M.previous_change = navigation.previous_change
+M.navigate_file = navigation.navigate_file
+M.next_file = navigation.next_file
+M.previous_file = navigation.previous_file
+M._folding_context = navigation._folding_context
+M.expand_recursive = navigation.expand_recursive
+M.toggle_recursive = navigation.toggle_recursive
+M.expand_all = navigation.expand_all
+M.collapse_all = navigation.collapse_all
 
 -- Attach sync methods together so Buffer's public implementation is easy to find.
 local sync = require('direct.buffer.sync')

@@ -1,7 +1,29 @@
 {
   "file_floor": 70.0,
-  "baseline_revision": "f40da0a",
-  "provisional": true,
+  "baseline_revision": "f692488",
+  "provisional": false,
+  "measurement": {
+    "source_revision": "f692488638d7086dd56681ed12c60d6a988addbb",
+    "ci_run_id": 44750453963,
+    "ci_run_url": "https://github.com/987poiuytrewq/direct.vim/actions/runs/44750453963",
+    "measured_at": "2026-11-20",
+    "ci_environment": {
+      "runners": [
+        "ubuntu-latest",
+        "macos-latest",
+        "windows-latest"
+      ],
+      "minimum_neovim": "v0.11.7",
+      "stable_neovim": "latest stable"
+    },
+    "local_environment": {
+      "os": "macOS 26.6.2",
+      "hardware": "Apple M4",
+      "filesystem": "APFS",
+      "neovim": "0.12.6",
+      "git": "2.54.0"
+    }
+  },
   "source_roots": [
     "lua/direct",
     "plugin",
@@ -9,8 +31,8 @@
   ],
   "platforms": {
     "local": {
-      "measured_total": 87.94,
-      "total_floor": 87.84,
+      "measured_total": 88.04,
+      "total_floor": 87.94,
       "allowlist": {
         "lua/direct/history/crash_test_hook.lua": 33.33,
         "lua/direct/history/reverse.lua": 61.57,
@@ -18,8 +40,8 @@
       }
     },
     "Linux": {
-      "measured_total": 87.86,
-      "total_floor": 87.76,
+      "measured_total": 87.96,
+      "total_floor": 87.86,
       "allowlist": {
         "lua/direct/history/crash_test_hook.lua": 33.33,
         "lua/direct/history/reverse.lua": 61.57,
@@ -27,8 +49,8 @@
       }
     },
     "macOS": {
-      "measured_total": 87.95,
-      "total_floor": 87.85,
+      "measured_total": 88.05,
+      "total_floor": 87.95,
       "allowlist": {
         "lua/direct/history/crash_test_hook.lua": 33.33,
         "lua/direct/history/reverse.lua": 61.57,
@@ -36,8 +58,8 @@
       }
     },
     "Windows": {
-      "measured_total": 87.81,
-      "total_floor": 87.71,
+      "measured_total": 87.92,
+      "total_floor": 87.82,
       "allowlist": {
         "lua/direct/history/crash_test_hook.lua": 33.33,
         "lua/direct/history/reverse.lua": 61.57,
@@ -45,8 +67,8 @@
       }
     },
     "Linux-stable": {
-      "measured_total": 87.86,
-      "total_floor": 87.76,
+      "measured_total": 87.96,
+      "total_floor": 87.86,
       "allowlist": {
         "lua/direct/history/crash_test_hook.lua": 33.33,
         "lua/direct/history/reverse.lua": 61.57,
@@ -54,8 +76,8 @@
       }
     },
     "macOS-stable": {
-      "measured_total": 87.94,
-      "total_floor": 87.84,
+      "measured_total": 88.04,
+      "total_floor": 87.94,
       "allowlist": {
         "lua/direct/history/crash_test_hook.lua": 33.33,
         "lua/direct/history/reverse.lua": 61.57,
@@ -63,8 +85,8 @@
       }
     },
     "Windows-stable": {
-      "measured_total": 87.81,
-      "total_floor": 87.71,
+      "measured_total": 87.91,
+      "total_floor": 87.81,
       "allowlist": {
         "lua/direct/history/crash_test_hook.lua": 33.33,
         "lua/direct/history/reverse.lua": 61.57,

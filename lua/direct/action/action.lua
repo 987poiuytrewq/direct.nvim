@@ -379,176 +379,186 @@ end
 -- entry, before-prompt releases the history lock, after-prompt resumes it (or
 -- returns 'pending' and calls resume later), and on-copy-conflict clears the
 -- attempted journal entry. Only callback execution uses these hooks.
-local function execute_paste(self, callback)
-  local asynchronous = type(callback) == 'function'
-  local copied, index, last = {}, 1, nil
-  local outcome
-  local process_next
+local process_next_paste_entry
 
-  local function finish(ok, result, err)
-    if outcome then return end
-    outcome = { ok = ok, result = result, err = err }
-    if asynchronous or ok then self.renames = copied end
-    if asynchronous then callback(ok, result, err) end
+local function finish_paste(run, ok, result, err)
+  if run.outcome then return end
+  run.outcome = { ok = ok, result = result, err = err }
+  if run.asynchronous or ok then run.action.renames = run.copied end
+  if run.asynchronous then run.callback(ok, result, err) end
+end
+
+local function fail_paste(run, err) finish_paste(run, false, nil, tostring(err or 'paste failed')) end
+
+local function skip_paste_entry(run, pair, notify)
+  if notify then M.ui.notify('Skipped ' .. pair.src, vim.log.levels.WARN) end
+  run.index = run.index + 1
+  process_next_paste_entry(run)
+end
+
+local function copy_paste_payload(full_src, full_dst, stat)
+  if stat.type == 'file' then return M.fs.copy_file_exclusive(full_src, full_dst) end
+  if stat.type == 'directory' then return M.fs.copy_tree_exclusive(full_src, full_dst) end
+  return true
+end
+
+local function copy_paste_pair(run, pair, full_src, full_dst, stat)
+  local action = run.action
+  if run.asynchronous and type(action._before_copy) == 'function' then
+    local ready, ready_err = action._before_copy(pair, full_src, full_dst)
+    if not ready then
+      fail_paste(run, ready_err or 'could not journal paste entry')
+      return
+    end
   end
 
-  local function fail(err) finish(false, nil, tostring(err or 'paste failed')) end
-
-  local function skip(pair, notify)
-    if notify then M.ui.notify('Skipped ' .. pair.src, vim.log.levels.WARN) end
-    index = index + 1
-    process_next()
+  local called, ok, extra, code
+  if run.asynchronous then
+    called, ok, extra, code = pcall(copy_paste_payload, full_src, full_dst, stat)
+  else
+    ok, extra = copy_paste_payload(full_src, full_dst, stat)
+    called = true
   end
-
-  local function copy_pair(pair, full_src, full_dst, stat)
-    if asynchronous and type(self._before_copy) == 'function' then
-      local ready, ready_err = self._before_copy(pair, full_src, full_dst)
-      if not ready then
-        fail(ready_err or 'could not journal paste entry')
+  if not called then
+    fail_paste(run, ok)
+    return
+  end
+  if not ok then
+    if run.asynchronous and code == 'EEXIST' and type(action._on_copy_conflict) == 'function' then
+      local cleared, clear_err = action._on_copy_conflict(pair)
+      if not cleared then
+        fail_paste(run, clear_err or extra or code or 'destination exists')
         return
       end
     end
-
-    local function copy_entry()
-      if stat.type == 'file' then return M.fs.copy_file_exclusive(full_src, full_dst) end
-      if stat.type == 'directory' then return M.fs.copy_tree_exclusive(full_src, full_dst) end
-      return true
-    end
-    local called, ok, extra, code
-    if asynchronous then
-      called, ok, extra, code = pcall(copy_entry)
-    else
-      ok, extra = copy_entry()
-      called = true
-    end
-    if not called then
-      fail(ok)
-      return
-    end
-    if not ok then
-      if asynchronous and code == 'EEXIST' and type(self._on_copy_conflict) == 'function' then
-        local cleared, clear_err = self._on_copy_conflict(pair)
-        if not cleared then
-          fail(clear_err or extra or code or 'destination exists')
-          return
-        end
-      end
-      fail(extra or code or 'copy failed')
-      return
-    end
-    if stat.type == 'directory' and type(extra) == 'table' and #extra > 0 then
-      M.ui.notify(
-        'Skipped ' .. #extra .. ' ' .. (#extra == 1 and 'entry' or 'entries') .. ' that cannot be copied: ' .. full_src,
-        vim.log.levels.WARN
-      )
-    end
-    last = full_dst
-    copied[#copied + 1] = { src = pair.src, dst = pair.dst }
-    index = index + 1
-    if asynchronous and type(self._after_copy) == 'function' then
-      local recorded, record_err = self._after_copy(pair, full_src, full_dst)
-      if not recorded then
-        fail(record_err or 'could not record pasted entry')
-        return
-      end
-    end
-    process_next()
+    fail_paste(run, extra or code or 'copy failed')
+    return
   end
-
-  local function request_name(pair, full_src, stat, attempts)
-    if attempts >= M.PASTE_CLASH_ATTEMPTS then
-      skip(pair, true)
-      return
-    end
-    local current = M.fs.join(self.dst, pair.dst)
-    local entry_type = M.fs.is_file(current) and 'File' or 'Directory'
-    if type(self._before_prompt) == 'function' then
-      local called, released, release_err = pcall(self._before_prompt, pair, full_src, current)
-      if not called or not released then
-        fail(called and release_err or released or 'could not release the history lock for paste prompt')
-        return
-      end
-    end
-    local called, started, start_err = pcall(
-      M.ui.input,
-      entry_type .. ' already exists. Paste as: ',
-      pair.src,
-      'file',
-      function(answer)
-        if answer == nil or M.entry_name_reason(answer) ~= nil then
-          skip(pair, true)
-          return
-        end
-        pair.dst = answer
-        local resumed = false
-        local function continue_after_prompt(ready, resume_err)
-          if resumed then return end
-          resumed = true
-          if ready == 'clash' then return request_name(pair, full_src, stat, attempts + 1) end
-          if not ready then return fail(resume_err or 'could not reacquire the history lock after paste prompt') end
-          local chosen = M.fs.join(self.dst, pair.dst)
-          if M.fs.taken(chosen) then
-            request_name(pair, full_src, stat, attempts + 1)
-          else
-            copy_pair(pair, full_src, chosen, stat)
-          end
-        end
-        if type(self._after_prompt) == 'function' then
-          local resumed_called, ready, resume_err =
-            pcall(self._after_prompt, pair, full_src, answer, continue_after_prompt)
-          if not resumed_called then return fail(ready) end
-          if ready ~= 'pending' then continue_after_prompt(ready, resume_err) end
-        else
-          continue_after_prompt(true)
-        end
-      end,
-      function(input_err) fail(input_err) end
+  if stat.type == 'directory' and type(extra) == 'table' and #extra > 0 then
+    M.ui.notify(
+      'Skipped ' .. #extra .. ' ' .. (#extra == 1 and 'entry' or 'entries') .. ' that cannot be copied: ' .. full_src,
+      vim.log.levels.WARN
     )
-    if not called then
-      fail(started)
-    elseif started ~= true then
-      fail(start_err or 'could not start paste input')
-    end
   end
-
-  process_next = function()
-    if index > #self.renames then
-      local result = last
-      if not asynchronous and result == nil then result = true end
-      finish(true, result, nil)
+  run.last = full_dst
+  run.copied[#run.copied + 1] = { src = pair.src, dst = pair.dst }
+  run.index = run.index + 1
+  if run.asynchronous and type(action._after_copy) == 'function' then
+    local recorded, record_err = action._after_copy(pair, full_src, full_dst)
+    if not recorded then
+      fail_paste(run, record_err or 'could not record pasted entry')
       return
     end
-    local pair = self.renames[index]
-    local full_src = paste_source(self.src, pair.src)
-    local full_dst = M.fs.join(self.dst, pair.dst)
-    local stat = M.fs.stat(full_src)
-    if not stat then
-      index = index + 1
-      process_next()
-    elseif stat.type ~= 'file' and stat.type ~= 'directory' then
-      if asynchronous then
-        M.ui.notify('Skipped unsupported register entry: ' .. full_src, vim.log.levels.WARN)
-        index = index + 1
-        process_next()
-      else
-        copied[#copied + 1] = { src = pair.src, dst = pair.dst }
-        last = full_dst
-        index = index + 1
-        process_next()
-      end
-    elseif M.fs.taken(full_dst) then
-      if asynchronous then
-        request_name(pair, full_src, stat, 0)
-      else
-        fail('paste requires async execution for a destination clash: ' .. tostring(full_dst))
-      end
-    else
-      copy_pair(pair, full_src, full_dst, stat)
+  end
+  process_next_paste_entry(run)
+end
+
+local function request_paste_name(run, pair, full_src, stat, attempts)
+  local action = run.action
+  if attempts >= M.PASTE_CLASH_ATTEMPTS then
+    skip_paste_entry(run, pair, true)
+    return
+  end
+  local current = M.fs.join(action.dst, pair.dst)
+  local entry_type = M.fs.is_file(current) and 'File' or 'Directory'
+  if type(action._before_prompt) == 'function' then
+    local called, released, release_err = pcall(action._before_prompt, pair, full_src, current)
+    if not called or not released then
+      fail_paste(run, called and release_err or released or 'could not release the history lock for paste prompt')
+      return
     end
   end
+  local called, started, start_err = pcall(
+    M.ui.input,
+    entry_type .. ' already exists. Paste as: ',
+    pair.src,
+    'file',
+    function(answer)
+      if answer == nil or M.entry_name_reason(answer) ~= nil then
+        skip_paste_entry(run, pair, true)
+        return
+      end
+      pair.dst = answer
+      local resumed = false
+      local function continue_after_prompt(ready, resume_err)
+        if resumed then return end
+        resumed = true
+        if ready == 'clash' then return request_paste_name(run, pair, full_src, stat, attempts + 1) end
+        if not ready then
+          return fail_paste(run, resume_err or 'could not reacquire the history lock after paste prompt')
+        end
+        local chosen = M.fs.join(action.dst, pair.dst)
+        if M.fs.taken(chosen) then
+          request_paste_name(run, pair, full_src, stat, attempts + 1)
+        else
+          copy_paste_pair(run, pair, full_src, chosen, stat)
+        end
+      end
+      if type(action._after_prompt) == 'function' then
+        local resumed_called, ready, resume_err =
+          pcall(action._after_prompt, pair, full_src, answer, continue_after_prompt)
+        if not resumed_called then return fail_paste(run, ready) end
+        if ready ~= 'pending' then continue_after_prompt(ready, resume_err) end
+      else
+        continue_after_prompt(true)
+      end
+    end,
+    function(input_err) fail_paste(run, input_err) end
+  )
+  if not called then
+    fail_paste(run, started)
+  elseif started ~= true then
+    fail_paste(run, start_err or 'could not start paste input')
+  end
+end
 
-  process_next()
-  if not asynchronous then return outcome.result, outcome.err end
+process_next_paste_entry = function(run)
+  local action = run.action
+  if run.index > #action.renames then
+    local result = run.last
+    if not run.asynchronous and result == nil then result = true end
+    finish_paste(run, true, result, nil)
+    return
+  end
+  local pair = action.renames[run.index]
+  local full_src = paste_source(action.src, pair.src)
+  local full_dst = M.fs.join(action.dst, pair.dst)
+  local stat = M.fs.stat(full_src)
+  if not stat then
+    run.index = run.index + 1
+    process_next_paste_entry(run)
+  elseif stat.type ~= 'file' and stat.type ~= 'directory' then
+    if run.asynchronous then
+      M.ui.notify('Skipped unsupported register entry: ' .. full_src, vim.log.levels.WARN)
+      run.index = run.index + 1
+      process_next_paste_entry(run)
+    else
+      run.copied[#run.copied + 1] = { src = pair.src, dst = pair.dst }
+      run.last = full_dst
+      run.index = run.index + 1
+      process_next_paste_entry(run)
+    end
+  elseif M.fs.taken(full_dst) then
+    if run.asynchronous then
+      request_paste_name(run, pair, full_src, stat, 0)
+    else
+      fail_paste(run, 'paste requires async execution for a destination clash: ' .. tostring(full_dst))
+    end
+  else
+    copy_paste_pair(run, pair, full_src, full_dst, stat)
+  end
+end
+
+local function execute_paste(action, callback)
+  local run = {
+    action = action,
+    callback = callback,
+    asynchronous = type(callback) == 'function',
+    copied = {},
+    index = 1,
+  }
+  process_next_paste_entry(run)
+  if not run.asynchronous then return run.outcome.result, run.outcome.err end
 end
 
 -- Sync and callback execution share the same paste state machine; only clash

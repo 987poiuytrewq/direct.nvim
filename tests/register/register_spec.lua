@@ -247,6 +247,31 @@ H.describe('register', function()
       'log() reset the redo log to its header')
   end)
 
+  H.it('paste callback receives the final result and pasted-entry context once', function()
+    local sb = H.sandbox()
+    H.mkfile(sb.root, 'f.txt', { 'f' })
+    H.assert_true(reg.yank({ sb.root .. '/f.txt' }) == true, 'yank')
+    local ws = H.mkdir(sb.root, 'ws')
+    local callback_count = 0
+    local callback_result, callback_err, callback_succeeded, callback_changed, callback_entry
+
+    local last = reg.paste(ws, nil, function(result, err, succeeded, changed, pasted_entry)
+      callback_count = callback_count + 1
+      callback_result, callback_err = result, err
+      callback_succeeded, callback_changed, callback_entry = succeeded, changed, pasted_entry
+    end)
+
+    H.assert_true(vim.wait(5000, function() return callback_count == 1 end),
+      'paste callback runs after the operation settles')
+    H.assert_eq(last, ws .. '/f.txt', 'synchronous paste result remains unchanged')
+    H.assert_eq(callback_count, 1, 'the completion callback runs once')
+    H.assert_eq(callback_result, ws .. '/f.txt', 'callback receives the paste result')
+    H.assert_nil(callback_err, 'successful callback has no error')
+    H.assert_true(callback_succeeded, 'callback reports success')
+    H.assert_true(callback_changed, 'callback reports filesystem changes')
+    H.assert_eq(callback_entry, ws .. '/f.txt', 'callback receives the pasted entry path')
+  end)
+
   H.it('file paste refuses an occupant created after the clash check', function()
     local sb = H.sandbox()
     H.mkfile(sb.root, 'f.txt', { 'REGISTER' })

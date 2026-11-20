@@ -412,76 +412,26 @@ function M._yank_one(dst, src)
   return nil, 'cannot yank: unsupported entry type for ' .. tostring(src)
 end
 
--- paste(dst[, name[, callback]]) -> scheduled/result | nil, err.
--- This service owns filesystem and history effects. The facade owns view refresh.
---
--- `name` is the `:DirectPasteAs {name}` extension: when given, the
--- first pasted entry (the smallest source name, matching Paste's sorted
--- `renames`) is pasted as `name` instead. `callback(result, err, succeeded, changed)`
--- runs once the asynchronous operation settles.
-function M.paste(dst, name, callback, internal_options)
-  internal_options = internal_options or {}
-  if M.pending.refuse('paste') then return nil, 'another direct operation is pending' end
-  local valid, path_err = M.paths.validate_path(dst)
-  if not valid then
-    M.ui.notify('direct: cannot paste: ' .. tostring(path_err), vim.log.levels.ERROR)
-    return nil, path_err
-  end
-  if name ~= nil and name ~= '' then
-    local name_err = M.action.entry_name_reason(name)
-    if name_err then
-      local message = 'cannot paste: entry name ' .. name_err .. ': ' .. tostring(name)
-      M.ui.notify('direct: ' .. message, vim.log.levels.ERROR)
-      return nil, message
-    end
-  end
-  dst = M.paths.root(dst)
-  if not internal_options.preflighted then
-    local began, preflight_token = M.pending.begin('paste')
-    if not began then
-      M.ui.notify('direct: cannot paste: ' .. tostring(preflight_token), vim.log.levels.WARN)
-      return nil, preflight_token
-    end
-    local outer_returned, completed = false, false
-    local immediate_result, immediate_err
-    local started, start_err = M.history.preflight_async({ dst }, function(preflight, preflight_err)
-      M.pending.finish(preflight_token)
-      if not preflight then
-        immediate_result, immediate_err = nil, preflight_err
-      else
-        immediate_result, immediate_err = M.paste(dst, name, callback, { preflighted = true })
-      end
-      completed = true
-      if outer_returned and immediate_result ~= true and type(callback) == 'function' then
-        local called, callback_err = pcall(callback, immediate_result, immediate_err, false, false)
-        if not called then M.ui.report_error('refresh after pasting', callback_err) end
-      end
-    end)
-    if not started then
-      M.pending.finish(preflight_token)
-      return nil, start_err
-    end
-    outer_returned = true
-    if completed then return immediate_result, immediate_err end
-    return true
-  end
-  local src, cerr = M.content()
+-- build_paste_plan(dst, name) -> validated paste inputs | nil[, err].
+-- Register data is persisted and untrusted, so validate names and serialize the
+-- exact action before starting the copy or writing history.
+local function build_paste_plan(dst, name)
+  local src, content_err = M.content()
   if src == nil then
-    if cerr ~= nil then
-      M.ui.notify('direct: register unavailable: ' .. tostring(cerr), vim.log.levels.ERROR)
-      return nil, cerr
+    if content_err ~= nil then
+      M.ui.notify('direct: register unavailable: ' .. tostring(content_err), vim.log.levels.ERROR)
+      return nil, content_err
     end
     M.ui.notify('Register is empty', vim.log.levels.WARN)
     return nil
   end
+
   local entries, entries_err = M.entries(src)
   if not entries then
     M.ui.notify('direct: cannot read register: ' .. tostring(entries_err or src), vim.log.levels.ERROR)
     return nil, 'cannot read register'
   end
-  -- The persisted register is untrusted. Validate each entry as one basename
-  -- component before building the JSONL record or copying it. A delete-backed
-  -- entry whose trash payload was restored or removed is reported and skipped.
+
   local names, pasteable = {}, {}
   for _, entry in ipairs(entries) do
     local reason = M.action.entry_name_reason(entry.name)
@@ -505,40 +455,48 @@ function M.paste(dst, name, callback, internal_options)
     M.ui.notify('Nothing to paste', vim.log.levels.WARN)
     return nil
   end
+
   -- `:DirectPasteAs {name}` renames the first pasted entry (the smallest source
   -- name, which is the first pair Paste's sorted `renames` walks).
   local dst_names = vim.deepcopy(pasteable)
   if name ~= nil and name ~= '' then dst_names[1] = name end
   local paste_action = M.action.Paste(src, dst, pasteable, dst_names)
-  -- Validate the exact record before copying; a malformed path must not create
-  -- a destination that cannot be undone.
   local _, unsafe = M.action.serialize(paste_action)
   if unsafe ~= nil then
-    local msg = 'cannot paste: unrepresentable path: ' .. tostring(unsafe)
-    M.ui.notify('direct: ' .. msg, vim.log.levels.ERROR)
-    return nil, msg
+    local message = 'cannot paste: unrepresentable path: ' .. tostring(unsafe)
+    M.ui.notify('direct: ' .. message, vim.log.levels.ERROR)
+    return nil, message
   end
-  local began, begin_err = M.pending.begin('paste')
-  if not began then
-    M.ui.notify('direct: cannot paste: ' .. tostring(begin_err), vim.log.levels.WARN)
-    return nil, begin_err
-  end
-  local operation
-  local paste_base_undo
-  local paste_segment_records = {}
-  local function accept_paste_segment(fresh)
+
+  return {
+    src = src,
+    dst = dst,
+    entries = entries,
+    names = names,
+    pasteable = pasteable,
+    action = paste_action,
+  }
+end
+
+-- new_paste_segments(plan) -> per-paste lock and history segment operations.
+-- A prompt releases the history lock; the segment is finished before prompting
+-- and reacquired only after the user's answer is checked against the register.
+local function new_paste_segments(plan)
+  local operation, base_undo, records = nil, nil, {}
+
+  local function accept(fresh)
     operation = fresh
-    if paste_base_undo == nil then paste_base_undo = vim.deepcopy(fresh.transaction.base_undo) end
+    if base_undo == nil then base_undo = vim.deepcopy(fresh.transaction.base_undo) end
 
     local current_register = M.content()
-    local current_names = current_register == src and M.entry_names(src) or nil
-    local current_entries = current_register == src and M.entries(src) or nil
-    local stable = current_register == src
-      and vim.deep_equal(current_names, names)
-      and vim.deep_equal(current_entries, entries)
+    local current_names = current_register == plan.src and M.entry_names(plan.src) or nil
+    local current_entries = current_register == plan.src and M.entries(plan.src) or nil
+    local stable = current_register == plan.src
+      and vim.deep_equal(current_names, plan.names)
+      and vim.deep_equal(current_entries, plan.entries)
     if stable then
-      for _, entry_name in ipairs(pasteable) do
-        if not M.resolve(src, entry_name) then
+      for _, entry_name in ipairs(plan.pasteable) do
+        if not M.resolve(plan.src, entry_name) then
           stable = false
           break
         end
@@ -551,25 +509,27 @@ function M.paste(dst, name, callback, internal_options)
     end
     return true
   end
-  local function begin_paste_segment()
+
+  local function begin()
     if operation and operation.locked then return true end
-    local fresh, paste_begin_err = M.history.begin_paste(paste_action)
-    if not fresh then return nil, paste_begin_err end
-    return accept_paste_segment(fresh)
+    local fresh, err = M.history.begin_paste(plan.action)
+    if not fresh then return nil, err end
+    return accept(fresh)
   end
-  local function begin_paste_segment_async(on_ready)
+
+  local function begin_async(on_ready)
     if operation and operation.locked then
       on_ready(true)
       return true
     end
-    return M.history.begin_paste_async(paste_action, function(fresh, paste_begin_err)
-      if not fresh then return on_ready(nil, paste_begin_err) end
-      local ready, ready_err = accept_paste_segment(fresh)
+    return M.history.begin_paste_async(plan.action, function(fresh, err)
+      if not fresh then return on_ready(nil, err) end
+      local ready, ready_err = accept(fresh)
       on_ready(ready, ready_err)
     end)
   end
 
-  local function finish_paste_segment()
+  local function finish()
     if not operation or not operation.locked then return true end
     local completed_pairs = operation.transaction.completed or {}
     local segment_record
@@ -579,41 +539,70 @@ function M.paste(dst, name, callback, internal_options)
         sources[#sources + 1] = pair.src
         destinations[#destinations + 1] = pair.dst
       end
-      local action = M.action.Paste(src, dst, sources, destinations)
       local serialize_err
-      segment_record, serialize_err = M.action.serialize(action)
+      segment_record, serialize_err = M.action.serialize(M.action.Paste(plan.src, plan.dst, sources, destinations))
       if not segment_record then return nil, serialize_err end
     end
-    local finished, finish_err = M.history.finish_paste(operation)
+    local finished, err = M.history.finish_paste(operation)
     operation = nil
-    if not finished then return nil, finish_err end
-    if segment_record then paste_segment_records[#paste_segment_records + 1] = segment_record end
+    if not finished then return nil, err end
+    if segment_record then records[#records + 1] = segment_record end
     return true
   end
 
-  local function coalesce_paste_segments()
-    if #paste_segment_records < 2 then return true end
+  local function coalesce()
+    if #records < 2 then return true end
     local sources, destinations = {}, {}
-    for _, pair in ipairs(paste_action.renames or {}) do
+    for _, pair in ipairs(plan.action.renames or {}) do
       sources[#sources + 1] = pair.src
       destinations[#destinations + 1] = pair.dst
     end
-    local merged = M.action.Paste(src, dst, sources, destinations)
-    local coalesced, err = M.history.coalesce_paste_segments(paste_base_undo, paste_segment_records, merged)
-    if not coalesced then
+    local merged = M.action.Paste(plan.src, plan.dst, sources, destinations)
+    local ok, err = M.history.coalesce_paste_segments(base_undo, records, merged)
+    if not ok then
       M.ui.notify('direct: pasted entries remain in separate undo steps: ' .. tostring(err), vim.log.levels.WARN)
       return nil, err
     end
     return true
   end
 
-  paste_action._before_prompt = function() return finish_paste_segment() end
+  local function note_pending(pair, source, destination)
+    return M.history.note_paste_pending(operation, pair, source, destination)
+  end
+
+  local function note_complete(pair)
+    if not operation or not operation.locked then return nil, 'paste history operation is not active' end
+    return M.history.note_paste_complete(operation, pair)
+  end
+
+  local function cancel_pending(pair)
+    if not operation or not operation.locked then return nil, 'paste history operation is not active' end
+    return M.history.cancel_paste_pending(operation, pair)
+  end
+
+  return {
+    begin = begin,
+    begin_async = begin_async,
+    finish = finish,
+    coalesce = coalesce,
+    note_pending = note_pending,
+    note_complete = note_complete,
+    cancel_pending = cancel_pending,
+    locked = function() return operation ~= nil and operation.locked end,
+    count = function() return #records end,
+  }
+end
+
+-- attach_paste_history_hooks(action, plan, segments) -> action.
+-- The Paste executor calls these hooks around prompts and filesystem copies.
+local function attach_paste_history_hooks(paste_action, plan, segments)
+  paste_action._before_prompt = function() return segments.finish() end
   paste_action._after_prompt = function(pair, _source, answer, resumed)
     pair.dst = answer
-    local started, start_err = begin_paste_segment_async(function(ready, ready_err)
+    local started, start_err = segments.begin_async(function(ready, ready_err)
       if not ready then return resumed(nil, ready_err) end
-      if M.fs.taken(M.paths.join(dst, answer)) then
-        local finished, finish_err = finish_paste_segment()
+      if M.fs.taken(M.paths.join(plan.dst, answer)) then
+        local finished, finish_err = segments.finish()
         if not finished then return resumed(nil, finish_err) end
         return resumed('clash')
       end
@@ -623,76 +612,84 @@ function M.paste(dst, name, callback, internal_options)
     return 'pending'
   end
   paste_action._before_copy = function(pair, source, destination)
-    local ready, ready_err = begin_paste_segment()
+    local ready, ready_err = segments.begin()
     if not ready then return nil, ready_err end
-    return M.history.note_paste_pending(operation, pair, source, destination)
+    return segments.note_pending(pair, source, destination)
   end
-  paste_action._after_copy = function(pair)
-    if not operation or not operation.locked then return nil, 'paste history operation is not active' end
-    return M.history.note_paste_complete(operation, pair)
-  end
-  paste_action._on_copy_conflict = function(pair)
-    if not operation or not operation.locked then return nil, 'paste history operation is not active' end
-    return M.history.cancel_paste_pending(operation, pair)
-  end
-  local completed, immediate_result, immediate_err = false, nil, nil
-  local function finish(ok, result, execution_err)
-    if completed then return end
-    completed = true
-    local changed = false
-    local pasted_entry
-    local final_ok, final_err = xpcall(function()
-      local copied = #(paste_action.renames or {})
-      changed = copied > 0
-      if copied > 0 then
-        file_operations.emit_actions({ paste_action })
-        pasted_entry = type(result) == 'string' and result or nil
-        if pasted_entry == nil then
-          local last = paste_action.renames[copied]
-          if last then pasted_entry = M.paths.join(dst, last.dst) end
-        end
-        if operation and operation.locked then
-          local committed, commit_err = finish_paste_segment()
-          if not committed then M.ui.report_error('save paste history', commit_err) end
-        end
-        if ok then
-          M.ui.notify(M.action.summarize({ paste_action }), vim.log.levels.INFO)
-        else
-          M.ui.report_error('finish pasting; completed entries were kept', execution_err)
-        end
-      elseif not ok then
-        M.ui.report_error('paste the entries', execution_err)
-      else
-        if operation and operation.locked then
-          local committed, commit_err = finish_paste_segment()
-          if not committed then M.ui.report_error('finish the paste operation', commit_err) end
-        end
+  paste_action._after_copy = function(pair) return segments.note_complete(pair) end
+  paste_action._on_copy_conflict = function(pair) return segments.cancel_pending(pair) end
+  return paste_action
+end
+
+-- finish_paste(plan, segments, state, ...) -> settles callbacks, history and events.
+local function finish_paste(plan, callback, segments, state, ok, result, execution_err)
+  if state.completed then return end
+  state.completed = true
+  local changed, pasted_entry = false, nil
+  local paste_action = plan.action
+  local final_ok, final_err = xpcall(function()
+    local copied = #(paste_action.renames or {})
+    changed = copied > 0
+    if copied > 0 then
+      file_operations.emit_actions({ paste_action })
+      pasted_entry = type(result) == 'string' and result or nil
+      if pasted_entry == nil then
+        local last = paste_action.renames[copied]
+        if last then pasted_entry = M.paths.join(plan.dst, last.dst) end
       end
-      if #paste_segment_records > 1 then coalesce_paste_segments() end
-    end, debug.traceback)
-    if operation and operation.locked then finish_paste_segment() end
-    M.pending.finish()
-    if not final_ok then
-      M.ui.report_error('finish the paste operation', final_err)
-      ok, result, execution_err = false, nil, final_err
+      if segments.locked() then
+        local committed, commit_err = segments.finish()
+        if not committed then M.ui.report_error('save paste history', commit_err) end
+      end
+      if ok then
+        M.ui.notify(M.action.summarize({ paste_action }), vim.log.levels.INFO)
+      else
+        M.ui.report_error('finish pasting; completed entries were kept', execution_err)
+      end
+    elseif not ok then
+      M.ui.report_error('paste the entries', execution_err)
+    elseif segments.locked() then
+      local committed, commit_err = segments.finish()
+      if not committed then M.ui.report_error('finish the paste operation', commit_err) end
     end
-    immediate_result = result
-    immediate_err = execution_err
-    if type(callback) == 'function' then
-      local called, callback_err = pcall(callback, result, execution_err, ok, changed, pasted_entry)
-      if not called then M.ui.report_error('refresh after pasting', callback_err) end
-      execution_err = execution_err or (not called and callback_err or nil)
-    end
-    events.emit('DirectPastePost', {
-      root = dst,
-      actions = changed and { paste_action } or {},
-      success = ok and final_ok,
-      changed = changed,
-      error = execution_err or final_err,
-      entry = pasted_entry,
-    })
+    if segments.count() > 1 then segments.coalesce() end
+  end, debug.traceback)
+  if segments.locked() then segments.finish() end
+  M.pending.finish()
+  if not final_ok then
+    M.ui.report_error('finish the paste operation', final_err)
+    ok, result, execution_err = false, nil, final_err
   end
-  local started, start_err = begin_paste_segment_async(function(ready, ready_err)
+  state.result, state.err = result, execution_err
+  if type(callback) == 'function' then
+    local called, callback_err = pcall(callback, result, execution_err, ok, changed, pasted_entry)
+    if not called then M.ui.report_error('refresh after pasting', callback_err) end
+    execution_err = execution_err or (not called and callback_err or nil)
+  end
+  events.emit('DirectPastePost', {
+    root = plan.dst,
+    actions = changed and { paste_action } or {},
+    success = ok and final_ok,
+    changed = changed,
+    error = execution_err or final_err,
+    entry = pasted_entry,
+  })
+end
+
+-- start_paste(plan, callback) -> scheduled/result | nil, err.
+local function start_paste(plan, callback)
+  local began, begin_err = M.pending.begin('paste')
+  if not began then
+    M.ui.notify('direct: cannot paste: ' .. tostring(begin_err), vim.log.levels.WARN)
+    return nil, begin_err
+  end
+
+  local segments = new_paste_segments(plan)
+  local paste_action = attach_paste_history_hooks(plan.action, plan, segments)
+  local state = { completed = false }
+  local function finish(ok, result, err) finish_paste(plan, callback, segments, state, ok, result, err) end
+
+  local started, start_err = segments.begin_async(function(ready, ready_err)
     if not ready then
       M.ui.notify('direct: cannot paste: ' .. tostring(ready_err), vim.log.levels.ERROR)
       return finish(false, nil, ready_err)
@@ -709,8 +706,69 @@ function M.paste(dst, name, callback, internal_options)
     M.ui.notify('direct: cannot paste: ' .. tostring(start_err), vim.log.levels.ERROR)
     return nil, start_err
   end
+  if state.completed then return state.result, state.err end
+  return true
+end
+
+-- start_paste_after_preflight(dst, name, callback) -> scheduled/result | nil, err.
+local function start_paste_after_preflight(dst, name, callback)
+  local began, token = M.pending.begin('paste')
+  if not began then
+    M.ui.notify('direct: cannot paste: ' .. tostring(token), vim.log.levels.WARN)
+    return nil, token
+  end
+  local outer_returned, completed = false, false
+  local immediate_result, immediate_err
+  local started, start_err = M.history.preflight_async({ dst }, function(preflight, preflight_err)
+    M.pending.finish(token)
+    if not preflight then
+      immediate_result, immediate_err = nil, preflight_err
+    else
+      immediate_result, immediate_err = M.paste(dst, name, callback, { preflighted = true })
+    end
+    completed = true
+    if outer_returned and immediate_result ~= true and type(callback) == 'function' then
+      local called, callback_err = pcall(callback, immediate_result, immediate_err, false, false)
+      if not called then M.ui.report_error('refresh after pasting', callback_err) end
+    end
+  end)
+  if not started then
+    M.pending.finish(token)
+    return nil, start_err
+  end
+  outer_returned = true
   if completed then return immediate_result, immediate_err end
   return true
+end
+
+-- paste(dst[, name[, callback]]) -> scheduled/result | nil, err.
+-- This service owns filesystem and history effects. The facade owns view refresh.
+--
+-- `name` is the `:DirectPasteAs {name}` extension: when given, the first pasted
+-- entry (the smallest source name, matching Paste's sorted `renames`) is pasted
+-- as `name`. `callback(result, err, succeeded, changed, pasted_entry)` runs once
+-- the operation settles.
+function M.paste(dst, name, callback, internal_options)
+  internal_options = internal_options or {}
+  if M.pending.refuse('paste') then return nil, 'another direct operation is pending' end
+  local valid, path_err = M.paths.validate_path(dst)
+  if not valid then
+    M.ui.notify('direct: cannot paste: ' .. tostring(path_err), vim.log.levels.ERROR)
+    return nil, path_err
+  end
+  if name ~= nil and name ~= '' then
+    local name_err = M.action.entry_name_reason(name)
+    if name_err then
+      local message = 'cannot paste: entry name ' .. name_err .. ': ' .. tostring(name)
+      M.ui.notify('direct: ' .. message, vim.log.levels.ERROR)
+      return nil, message
+    end
+  end
+  dst = M.paths.root(dst)
+  if not internal_options.preflighted then return start_paste_after_preflight(dst, name, callback) end
+  local plan, plan_err = build_paste_plan(dst, name)
+  if not plan then return nil, plan_err end
+  return start_paste(plan, callback)
 end
 
 return M

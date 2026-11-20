@@ -626,6 +626,7 @@ H.describe('config', function()
     config.clear_mappings()
     config.setup({
       map_default_keys = false,
+      directory_separator = '/',
       mappings = {
         list_buffer = '<leader>d',
         undo = '<leader>u',

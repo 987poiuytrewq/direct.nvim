@@ -1,6 +1,24 @@
 -- Action-kind dispatch, async execution, and canonical history record encoding.
--- The action facade is injected to keep factories and record handling acyclic.
-return function(M)
+-- Leaf dependencies are direct; action factories are resolved only when a
+-- registry operation needs them so requiring this module stays acyclic.
+local M = {}
+
+local paths = require('direct.paths')
+local ui = require('direct.ui')
+
+local action_facade
+
+local function action_module()
+  assert(type(action_facade) == 'table', 'action registry parent is not attached')
+  return action_facade
+end
+
+do
+  function M.attach(parent)
+    assert(type(parent) == 'table', 'action registry parent must be a table')
+    action_facade = parent
+  end
+
   -- Serialization
   -- ---------------------------------------------------------------------------
 
@@ -30,7 +48,7 @@ return function(M)
   local function group_is_connected(moves)
     if type(moves) ~= 'table' or #moves < 2 then return false end
     local endpoints, visited = {}, { [1] = true }
-    local function key(path) return M.paths.canonical(path) end
+    local function key(path) return paths.canonical(path) end
     for i, move in ipairs(moves) do
       endpoints[i] = { key(move.src), key(move.dst) }
     end
@@ -61,15 +79,15 @@ return function(M)
   end
 
   local function checked_string(value, what)
-    local reason = M.path_reason(value)
+    local reason = action_module().path_reason(value)
     if not reason then
-      local valid, path_err = M.paths.validate_canonical_path(value)
+      local valid, path_err = paths.validate_canonical_path(value)
       if not valid then reason = path_err end
     end
     if reason then
       return nil, 'cannot serialize action ' .. tostring(what) .. ': ' .. reason .. ': ' .. tostring(value)
     end
-    return encode_string(M.paths.record_path(value))
+    return encode_string(paths.record_path(value))
   end
 
   local function encoded_move(src, dst)
@@ -158,63 +176,67 @@ return function(M)
     mv = {
       fields = { 'src', 'dst' },
       record_fields = { 'op', 'src', 'dst' },
-      deserialize = function(record) return M.Move(record.src, record.dst) end,
-      reverse = function(action) return M.Move(action.dst, action.src) end,
+      deserialize = function(record) return action_module().Move(record.src, record.dst) end,
+      reverse = function(action) return action_module().Move(action.dst, action.src) end,
     },
     rm = {
       fields = { 'src', 'dst' },
       record_fields = { 'op', 'src', 'dst' },
-      deserialize = function(record) return M.Remove(record.src, record.dst) end,
-      reverse = function(action) return M.Restore(action.dst, action.src) end,
+      deserialize = function(record) return action_module().Remove(record.src, record.dst) end,
+      reverse = function(action) return action_module().Restore(action.dst, action.src) end,
     },
     rmdir = {
       fields = { 'src', 'dst' },
       record_fields = { 'op', 'src', 'dst' },
-      deserialize = function(record) return M.RemoveDirectory(record.src, record.dst) end,
-      reverse = function(action) return M.RestoreDirectory(action.dst, action.src) end,
+      deserialize = function(record) return action_module().RemoveDirectory(record.src, record.dst) end,
+      reverse = function(action) return action_module().RestoreDirectory(action.dst, action.src) end,
     },
     rs = {
       fields = { 'src', 'dst' },
       record_fields = { 'op', 'src', 'dst' },
-      deserialize = function(record) return M.Restore(record.src, record.dst) end,
-      reverse = function(action) return M.Remove(action.dst) end,
+      deserialize = function(record) return action_module().Restore(record.src, record.dst) end,
+      reverse = function(action) return action_module().Remove(action.dst) end,
     },
     rsdir = {
       fields = { 'src', 'dst' },
       record_fields = { 'op', 'src', 'dst' },
-      deserialize = function(record) return M.RestoreDirectory(record.src, record.dst) end,
-      reverse = function(action) return M.RemoveDirectory(action.dst) end,
+      deserialize = function(record) return action_module().RestoreDirectory(record.src, record.dst) end,
+      reverse = function(action) return action_module().RemoveDirectory(action.dst) end,
     },
     touch = {
       fields = { 'dst' },
       record_fields = { 'op', 'dst' },
-      deserialize = function(record) return M.Touch(record.dst) end,
-      reverse = function(action) return M.Remove(action.dst) end,
+      deserialize = function(record) return action_module().Touch(record.dst) end,
+      reverse = function(action) return action_module().Remove(action.dst) end,
     },
     mkdir = {
       fields = { 'dst' },
       record_fields = { 'op', 'dst' },
-      deserialize = function(record) return M.MakeDirectory(record.dst) end,
-      reverse = function(action) return M.RemoveDirectory(action.dst) end,
+      deserialize = function(record) return action_module().MakeDirectory(record.dst) end,
+      reverse = function(action) return action_module().RemoveDirectory(action.dst) end,
     },
     p = {
       fields = { 'src', 'dst' },
       name_lists = true,
       record_fields = { 'op', 'src', 'dst', 'src_names', 'dst_names' },
-      deserialize = function(record) return M.Paste(record.src, record.dst, record.src_names, record.dst_names) end,
+      deserialize = function(record)
+        return action_module().Paste(record.src, record.dst, record.src_names, record.dst_names)
+      end,
       reverse = function(action)
-        local src_names, dst_names = M.split_pairs(action.renames)
-        return M.Unpaste(action.dst, action.src, dst_names, src_names)
+        local src_names, dst_names = action_module().split_pairs(action.renames)
+        return action_module().Unpaste(action.dst, action.src, dst_names, src_names)
       end,
     },
     up = {
       fields = { 'src', 'dst' },
       name_lists = true,
       record_fields = { 'op', 'src', 'dst', 'src_names', 'dst_names' },
-      deserialize = function(record) return M.Unpaste(record.src, record.dst, record.src_names, record.dst_names) end,
+      deserialize = function(record)
+        return action_module().Unpaste(record.src, record.dst, record.src_names, record.dst_names)
+      end,
       reverse = function(action)
-        local src_names, dst_names = M.split_pairs(action.renames)
-        return M.Paste(action.dst, action.src, dst_names, src_names)
+        local src_names, dst_names = action_module().split_pairs(action.renames)
+        return action_module().Paste(action.dst, action.src, dst_names, src_names)
       end,
     },
     g = {
@@ -234,9 +256,9 @@ return function(M)
           then
             return nil, 'invalid group record: each move needs src and dst strings'
           end
-          members[#members + 1] = M.Move(move.src, move.dst)
+          members[#members + 1] = action_module().Move(move.src, move.dst)
         end
-        return M.Group(members)
+        return action_module().Group(members)
       end,
       reverse = function(action)
         local members = {}
@@ -246,7 +268,7 @@ return function(M)
           members[#members + 1] = rev
         end
         if #members < 2 then return nil, 'no reversal for group: fewer than two actions' end
-        return M.Group(members)
+        return action_module().Group(members)
       end,
     },
     batch = {
@@ -302,7 +324,7 @@ return function(M)
       if completed then return end
       completed = true
       local called, callback_err = pcall(callback, ok, result, err)
-      if not called then M.ui.report_error('finish the filesystem action', callback_err) end
+      if not called then ui.report_error('finish the filesystem action', callback_err) end
     end
     if type(action) == 'table' and type(action._execute_async) == 'function' then
       local ok, err = pcall(action._execute_async, finish)
@@ -320,7 +342,7 @@ return function(M)
 
   function M.Batch(actions)
     local self = { name = 'batch', _kind = 'batch', actions = actions or {} }
-    function self.describe() return M.summarize(self.actions) end
+    function self.describe() return action_module().summarize(self.actions) end
     self._execute = function()
       local completed = {}
       for _, member in ipairs(self.actions) do
@@ -417,7 +439,7 @@ return function(M)
     function self.describe()
       local descriptions = {}
       for _, member in ipairs(self.actions) do
-        descriptions[#descriptions + 1] = M.describe_action(member)
+        descriptions[#descriptions + 1] = action_module().describe_action(member)
       end
       return table.concat(descriptions, ', ')
     end
@@ -438,14 +460,14 @@ return function(M)
       fields[#fields + 1] = { field, encoded }
     end
     if kind.name_lists then
-      local src_names, dst_names = M.split_pairs(action.renames)
+      local src_names, dst_names = action_module().split_pairs(action.renames)
       if #src_names ~= #dst_names then return nil, 'cannot serialize action: name arrays must have equal lengths' end
       for _, name in ipairs(src_names) do
-        local reason = M.entry_name_reason(name)
+        local reason = action_module().entry_name_reason(name)
         if reason then return nil, 'cannot serialize action: ' .. reason .. ': ' .. tostring(name) end
       end
       for _, name in ipairs(dst_names) do
-        local reason = M.entry_name_reason(name)
+        local reason = action_module().entry_name_reason(name)
         if reason then return nil, 'cannot serialize action: ' .. reason .. ': ' .. tostring(name) end
       end
       fields[#fields + 1] = { 'src_names', encode_array(src_names) }
@@ -570,8 +592,8 @@ return function(M)
     if not exact_fields(record, kind.record_fields) then return nil, 'action record has unknown or missing keys' end
     if record.op ~= 'g' then
       for _, field in ipairs(kind.fields) do
-        local valid, reason = M.paths.validate_canonical_path(record[field])
-        if valid and M.paths.record_path(record[field]) ~= record[field] then
+        local valid, reason = paths.validate_canonical_path(record[field])
+        if valid and paths.record_path(record[field]) ~= record[field] then
           reason = 'path must be absolute and canonical'
         end
         if reason then return nil, reason .. ': ' .. tostring(record[field]) end
@@ -583,7 +605,7 @@ return function(M)
       end
       for _, names in ipairs({ record.src_names, record.dst_names }) do
         for _, name in ipairs(names) do
-          local reason = M.entry_name_reason(name)
+          local reason = action_module().entry_name_reason(name)
           if reason then return nil, reason .. ': ' .. tostring(name) end
         end
       end
@@ -592,8 +614,8 @@ return function(M)
       for _, move in ipairs(record.moves) do
         if not exact_fields(move, { 'src', 'dst' }) then return nil, 'a group move requires exactly src and dst' end
         for _, field in ipairs({ 'src', 'dst' }) do
-          local valid, reason = M.paths.validate_canonical_path(move[field])
-          if valid and M.paths.record_path(move[field]) ~= move[field] then
+          local valid, reason = paths.validate_canonical_path(move[field])
+          if valid and paths.record_path(move[field]) ~= move[field] then
             reason = 'path must be absolute and canonical'
           end
           if reason then return nil, reason .. ': ' .. tostring(move[field]) end
@@ -617,7 +639,7 @@ return function(M)
   -- comparing bytes enforces canonical key order, escaping, and whitespace.
   function M.deserialize(line)
     if type(line) ~= 'string' or line == '' then return nil, 'invalid action line' end
-    if not M.paths.valid_utf8(line) then return nil, 'invalid action line: invalid UTF-8' end
+    if not paths.valid_utf8(line) then return nil, 'invalid action line: invalid UTF-8' end
     local scan_ok, scan_err = duplicate_object_keys(line)
     if not scan_ok then return nil, 'invalid action line: ' .. tostring(scan_err) end
     local decoded_ok, record = pcall(vim.json.decode, line)
@@ -672,3 +694,5 @@ return function(M)
 
   -- ---------------------------------------------------------------------------
 end
+
+return M

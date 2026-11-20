@@ -844,6 +844,15 @@ M.stage_moves = moves.stage_moves
 M.plan_move_steps = moves.plan_move_steps
 M.move_groups = moves.move_groups
 M.Group = function(actions) return moves.make_group(M, actions) end
-require('direct.action.registry')(M)
+local registry = require('direct.action.registry')
+registry.attach(M)
+M.serialize_group = registry.serialize_group
+M.execute = registry.execute
+M.execute_async = registry.execute_async
+M.Batch = registry.Batch
+M.serialize = registry.serialize
+M.deserialize = registry.deserialize
+M.reverse_action = registry.reverse_action
+M.reverse = registry.reverse
 
 return M

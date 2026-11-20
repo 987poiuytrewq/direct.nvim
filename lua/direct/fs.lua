@@ -66,7 +66,11 @@ local function remove_dir_if_same(path, identity)
 end
 
 -- ---------------------------------------------------------------------------
-require('direct.fs.path_ops')({ M = M, platform = platform, identity_key = identity_key })
+local path_ops = require('direct.fs.path_ops')
+path_ops._set_dependencies(M)
+for name, operation in pairs(path_ops) do
+  if name ~= '_set_dependencies' then M[name] = operation end
+end
 
 -- Mutation
 -- ---------------------------------------------------------------------------

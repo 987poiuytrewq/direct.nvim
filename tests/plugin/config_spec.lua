@@ -13,9 +13,7 @@ local function fresh_config(use_platform_default)
   package.loaded['direct.config.options'] = nil
   package.loaded['direct.config.mappings'] = nil
   local config = require('direct.config')
-  if not use_platform_default then
-    config.options.directory_separator = '/'
-  end
+  if not use_platform_default then config.options.directory_separator = '/' end
   return config
 end
 
@@ -437,16 +435,20 @@ H.describe('config', function()
     local config = fresh_config()
     config.clear_mappings()
     local notifications = {}
-    local restore = H.stub(require('direct.ui'), 'notify', function(message, level)
-      notifications[#notifications + 1] = { message = message, level = level }
-    end)
+    local restore = H.stub(
+      require('direct.ui'),
+      'notify',
+      function(message, level) notifications[#notifications + 1] = { message = message, level = level } end
+    )
 
     config.setup({ indent_size = 1, history_limit = 0, unknown_setting = true })
 
     restore()
     H.assert_eq(#notifications, 1, 'one setup call emits one combined validation report')
     H.assert_eq(notifications[1].level, vim.log.levels.ERROR, 'validation report uses ERROR level')
-    H.assert_true(notifications[1].message:find('direct: indent_size must be an integer greater than 1', 1, true) ~= nil)
+    H.assert_true(
+      notifications[1].message:find('direct: indent_size must be an integer greater than 1', 1, true) ~= nil
+    )
     H.assert_true(notifications[1].message:find('direct: history_limit must be a positive integer', 1, true) ~= nil)
     H.assert_true(notifications[1].message:find("direct: unknown option 'unknown_setting'", 1, true) ~= nil)
     config.clear_mappings()

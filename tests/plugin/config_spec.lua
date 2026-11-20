@@ -13,10 +13,7 @@ local function fresh_config(use_platform_default)
   package.loaded['direct.config.options'] = nil
   package.loaded['direct.config.mappings'] = nil
   local config = require('direct.config')
-  if not use_platform_default then
-    config.defaults.directory_separator = '/'
-    config.options.directory_separator = '/'
-  end
+  if not use_platform_default then config.options.directory_separator = '/' end
   return config
 end
 
@@ -631,6 +628,7 @@ H.describe('config', function()
     config.clear_mappings()
     config.setup({
       map_default_keys = false,
+      directory_separator = '/',
       mappings = {
         list_buffer = '<leader>d',
         undo = '<leader>u',

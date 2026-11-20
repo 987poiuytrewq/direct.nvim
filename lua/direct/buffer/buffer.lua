@@ -63,7 +63,6 @@ end
 
 local set_directory_snapshot = listing.set_directory_snapshot
 local get_directory_snapshot = listing.get_directory_snapshot
-local apply_snapshot = listing.apply_snapshot
 local path_without_marker = listing.path_without_marker
 local lstat = listing.lstat
 
@@ -547,20 +546,8 @@ function M.Buffer(path, options)
 end
 
 -- Buffer attach/list behavior is isolated from row expansion and sync.
-local collapse_single_entry_paths = require('direct.buffer.collapse')({
-  paths = paths,
-  fs = fs,
-  entry_path = M.entry_path,
-  path_identity = path_identity,
-  list_with_snapshot = list_with_snapshot,
-  filter_git_status_lines = filter_git_status_lines,
-  filter_git_diff_lines = filter_git_diff_lines,
-  get_directory_snapshot = get_directory_snapshot,
-  apply_snapshot = apply_snapshot,
-  is_dir_line = is_dir_line,
-  dirs_then_name = dirs_then_name,
-})
-buffer_state.collapse_single_entry_paths = collapse_single_entry_paths
+local collapse = require('direct.buffer.collapse')
+buffer_state.collapse_single_entry_paths = collapse.collapse_single_entry_paths
 
 buffer_state.list_hooks = {
   merge_deleted_entries = merge_deleted_entries,

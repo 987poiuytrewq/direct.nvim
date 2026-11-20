@@ -19,20 +19,15 @@ local listing = require('direct.buffer.listing')
 local rows = require('direct.buffer.rows')
 local buffer_state = require('direct.buffer.state')
 local states = buffer_state.states
-local namespace = buffer_state.namespace
 local deleted_guards = buffer_state.deleted_guards
 local state_generations = {}
 local next_state_generation = 0
 local git_status_timeout_notified = {}
-local set_row_mark = rows.set_row_mark
 local row_ids_by_row = rows.row_ids_by_row
-local refresh_display_ids = rows.refresh_display_ids
 local current_row_record = rows.current_row_record
 local is_dir_line = rows.is_dir_line
 local refresh_icons = rows.refresh_icons
 local dirs_then_name = rows.dirs_then_name
-local recorded_row_text = rows.recorded_row_text
-local remove_expanded_subtree = rows.remove_expanded_subtree
 M._state_for_test = rows.state_for_test
 M.entry_path = listing.entry_path
 M.ignore_set = listing.ignore_set
@@ -171,8 +166,6 @@ buffer_state.Buffer = Buffer
 
 -- Display rows are identified by extmarks rather than their spelling.  In
 -- particular, child rows are never interpreted as root-relative filenames.
-local function path_identity(path) return fs.path_identity(path, fs.stat(path)) end
-
 -- ---------------------------------------------------------------------------
 -- Small helpers
 -- ---------------------------------------------------------------------------
@@ -196,40 +189,11 @@ end
 -- invalid UTF-8 and controls before any sync side effect. This boundary keeps
 -- its early, user-facing refusal; action serialization applies the same guard
 -- to every emitted record.
-local function same_lines(actual, expected)
-  if #actual ~= #expected then return false end
-  for index, line in ipairs(expected) do
-    if actual[index] ~= line then return false end
-  end
-  return true
-end
-
-local function indent_size() return require('direct.config').options.indent_size end
-
 -- Attach tree-integrity and edited-subtree planning methods.
 local tree_plan = require('direct.buffer.tree')
 buffer_state.tree_plan = tree_plan
-reconcile_undone_materialization = require('direct.buffer.undo_state')({
-  states = states,
-  namespace = namespace,
-  fs = fs,
-  path_identity = path_identity,
-  same_lines = same_lines,
-  row_ids_by_row = row_ids_by_row,
-  set_row_mark = set_row_mark,
-  refresh_display_ids = refresh_display_ids,
-  is_dir_line = is_dir_line,
-  recorded_row_text = recorded_row_text,
-  indent_size = indent_size,
-  ignore_set = M.ignore_set,
-  read = M.read,
-  read_with_snapshot = listing.read_with_snapshot,
-  entry_path = M.entry_path,
-  highlight = highlight,
-  refresh_highlights = refresh_highlights,
-  refresh_icons = refresh_icons,
-  remove_expanded_subtree = remove_expanded_subtree,
-})
+local undo_state = require('direct.buffer.undo_state')
+reconcile_undone_materialization = undo_state.reconcile_undone_materialization
 buffer_state.reconcile_undone_materialization = reconcile_undone_materialization
 
 -- ---------------------------------------------------------------------------

@@ -138,7 +138,7 @@ def run_stale_listing_case(env: dict[str, str], root: Path, tmp: Path) -> None:
             stale_process.communicate()
 
     notifications = notification_log.read_text(encoding="utf-8") if notification_log.exists() else ""
-    if "directory changed on disk since it was listed" not in notifications:
+    if "E-DIRECT-ROW-STALE" not in notifications:
         raise AssertionError(
             "the second live process did not report the stale-listing refusal; "
             f"notifications were: {notifications!r}"

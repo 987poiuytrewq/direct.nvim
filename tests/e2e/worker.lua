@@ -96,7 +96,7 @@ local function run_stale_wait(api)
   wait_for_path(assert(vim.env.DIRECT_E2E_PROCEED), 'the second process save')
   local wrote, write_err = pcall(vim.cmd, 'write')
   assert_true(
-    not wrote and tostring(write_err):find('directory changed on disk since it was listed', 1, true) ~= nil,
+    not wrote and tostring(write_err):find('E-DIRECT-ROW-STALE', 1, true) ~= nil,
     'stale :write did not refuse the outdated listing: ' .. tostring(write_err)
   )
   wait_for_idle()

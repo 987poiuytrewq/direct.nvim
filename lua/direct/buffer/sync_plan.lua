@@ -1,16 +1,19 @@
 -- Pure classification and validation for converting edited listing rows to actions.
-return function(deps)
-  local paths = require('direct.paths')
-  local platform = require('direct.platform')
-  local action_mod = deps.action_mod
-  local entry_path = deps.entry_path
-  local is_dir_line = deps.is_dir_line
-  local directory_separator = deps.directory_separator
-  local dirs_then_name = deps.dirs_then_name
-  local lstat = deps.lstat
-  local path_without_marker = deps.path_without_marker
-  local fs = deps.fs
+local paths = require('direct.paths')
+local platform = require('direct.platform')
+local action_mod = require('direct.action.action')
+local fs = require('direct.fs')
+local listing = require('direct.buffer.listing')
+local rows = require('direct.buffer.rows')
 
+local entry_path = listing.entry_path
+local is_dir_line = rows.is_dir_line
+local directory_separator = paths.directory_separator
+local dirs_then_name = rows.dirs_then_name
+local lstat = listing.lstat
+local path_without_marker = listing.path_without_marker
+
+do
   -- Use extmark identities, not row position or set cardinality, to classify a
   -- root-level edit. `original_rows` are the rows captured at listing time;
   -- `current_rows` contains their surviving marks plus unmarked creates.

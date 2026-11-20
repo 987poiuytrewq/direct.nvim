@@ -9,7 +9,6 @@ local M = {}
 -- code below resolves through.
 local fs = require('direct.fs')
 local paths = require('direct.paths')
-local action_mod = require('direct.action.action')
 local ui = require('direct.ui')
 local highlight = require('direct.highlight')
 local git = require('direct.git')
@@ -25,15 +24,11 @@ local next_state_generation = 0
 local git_status_timeout_notified = {}
 local row_ids_by_row = rows.row_ids_by_row
 local current_row_record = rows.current_row_record
-local is_dir_line = rows.is_dir_line
 local refresh_icons = rows.refresh_icons
-local dirs_then_name = rows.dirs_then_name
 M._state_for_test = rows.state_for_test
 M.entry_path = listing.entry_path
 M.ignore_set = listing.ignore_set
 M.read = listing.read
-local path_without_marker = listing.path_without_marker
-local lstat = listing.lstat
 
 local function ensure_git_snapshot(state) return state.git_status end
 
@@ -142,16 +137,7 @@ end
 local merge_deleted_entries, hide_deleted_expansions
 local capture_deleted_guard_snapshot, restore_deleted_rows, attach_deleted_guard
 
-local sync_plan = require('direct.buffer.sync_plan')({
-  action_mod = action_mod,
-  entry_path = M.entry_path,
-  is_dir_line = is_dir_line,
-  directory_separator = paths.directory_separator,
-  dirs_then_name = dirs_then_name,
-  lstat = lstat,
-  path_without_marker = path_without_marker,
-  fs = fs,
-})
+local sync_plan = require('direct.buffer.sync_plan')
 buffer_state.sync_plan = sync_plan
 M._component_reason = sync_plan.component_reason
 M._nested_path_reason = sync_plan.nested_path_reason

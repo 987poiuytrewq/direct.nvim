@@ -121,8 +121,8 @@ H.describe('command workflows: filesystem and listing stay in sync', function()
 
     H.assert_false(write_ok, 'the ambiguous edit is refused by :write')
     H.assert_true(
-      tostring(write_err):find('Ambiguous buffer content (duplicate)', 1, true) ~= nil,
-      'the write reports the duplicate-row reason: ' .. tostring(write_err)
+      tostring(write_err):find('E-DIRECT-ROW-AMBIGUOUS', 1, true) ~= nil,
+      'the write reports a stable duplicate-row refusal: ' .. tostring(write_err)
     )
     H.assert_fs_eq(ws, { 'a.txt', 'b.txt' }, 'the refused edit changes no files')
     H.assert_eq(vim.fn.readfile(ws .. '/a.txt'), { 'A' }, 'a.txt remains unchanged')
@@ -130,7 +130,7 @@ H.describe('command workflows: filesystem and listing stay in sync', function()
     H.assert_buf_eq({ 'a.txt', 'a.txt' }, bufnr, 'the unsynced edit remains visible')
     H.assert_true(vim.bo[bufnr].modified, 'the refused edit remains modified')
     H.assert_eq(history_state(), before_history, 'the refusal writes no history')
-    H.assert_notified('Ambiguous buffer content (duplicate)')
+    H.assert_notified('E-DIRECT-ROW-AMBIGUOUS')
 
     set_listing({ 'a.txt', 'renamed-b.txt' }, bufnr)
     local retry_ok, retry_err = pcall(vim.cmd, 'write')

@@ -56,4 +56,25 @@ H.describe('documentation synchronization', function()
       H.assert_true(defaults[key] ~= nil, 'README has no undocumented default option ' .. tostring(key))
     end
   end)
+
+  H.it('documents every refusal code and save limitation', function()
+    local codes = require('direct.buffer.sync_refusals').codes()
+    local help = read_file('doc/direct.txt')
+    local readme = read_file('README.md')
+    local changelog = read_file('CHANGELOG.md')
+
+    H.assert_true(help:find('*direct-refusals*', 1, true) ~= nil, 'help exposes :help direct-refusals')
+    for _, code in ipairs(codes) do
+      H.assert_true(help:find(code, 1, true) ~= nil, code .. ' has a documented cause and fix')
+    end
+    H.assert_true(help:find('E-DIRECT-TREE-LIMITATION', 1, true) ~= nil, 'help documents the tree edit limitation')
+    H.assert_true(help:find('separate save', 1, true) ~= nil, 'help explains how to work around the limitation')
+    H.assert_true(
+      help:find('partial result with a refusal code', 1, true) ~= nil,
+      'help distinguishes partial failures'
+    )
+    H.assert_true(readme:find(':help direct-refusals', 1, true) ~= nil, 'README links to the full refusal catalog')
+    H.assert_true(changelog:find('E-DIRECT-*', 1, true) ~= nil, 'Unreleased notes stable refusal codes')
+    H.assert_true(changelog:find('partial action failures remain distinct', 1, true) ~= nil)
+  end)
 end)

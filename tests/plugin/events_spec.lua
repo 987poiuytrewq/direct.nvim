@@ -186,7 +186,10 @@ H.describe('plugin User events', function()
     local synced, sync_err = api.sync()
 
     H.assert_nil(synced, 'the stale action plan is refused')
-    H.assert_true(tostring(sync_err):find('DirectSyncPre', 1, true) ~= nil, 'the error identifies the listing edit')
+    H.assert_true(
+      tostring(sync_err):find('E-DIRECT-SYNC-LISTING-CHANGED', 1, true) ~= nil,
+      'the refusal uses the stable listing-changed code'
+    )
     H.assert_true(vim.uv.fs_stat(vim.fs.joinpath(ws, 'old.txt')) ~= nil, 'the original file remains in place')
     H.assert_nil(vim.uv.fs_stat(vim.fs.joinpath(ws, 'new.txt')), 'no stale rename is applied')
     H.assert_buf_eq({ 'callback-edit.txt' }, bufnr, 'the callback edit remains visible for review')
@@ -222,7 +225,10 @@ H.describe('plugin User events', function()
     local synced, sync_err = api.sync()
 
     H.assert_nil(synced, 'the handler can refuse the save')
-    H.assert_true(tostring(sync_err):find('DirectSyncPre', 1, true) ~= nil, 'the refusal identifies the event')
+    H.assert_true(
+      tostring(sync_err):find('E-DIRECT-SYNC-CANCELLED', 1, true) ~= nil,
+      'the refusal uses the stable cancellation code'
+    )
     H.assert_true(tostring(sync_err):find('test veto', 1, true) ~= nil, 'the refusal includes the handler reason')
     H.assert_true(H.exists(ws, 'old.txt'), 'cancellation preserves the original file')
     H.assert_false(H.exists(ws, 'new.txt'), 'cancellation applies no filesystem actions')

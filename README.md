@@ -190,10 +190,13 @@ See `:help direct.vim-write` for save, quit, and interrupted-operation behavior.
 - **Unclear edits change nothing.** If direct.vim can't tell what you meant, or
   an edited source changed on disk or a destination is occupied, the save is
   refused, the filesystem is left alone, and your edits stay in the buffer.
-  The refusal names the conflicting path and suggests restoring it or choosing
-  another destination. If text undo/redo lost a row identity, use `:DirectList!`
-  to deliberately discard those edits, then redo them; a normal re-list cannot
-  preserve ambiguous edits.
+  Refusals use stable `E-DIRECT-*` codes; when a row is known, the cursor and a
+  diagnostic point to it and clear on the next text change. Global checks don't
+  invent a row. Partial action failures are reported separately because some
+  actions may already have succeeded. See `:help direct-refusals` for every
+  code, its fix, and documented save limitations. If text undo/redo lost a row
+  identity, use `:DirectList!` to deliberately discard those edits, then redo
+  them; a normal re-list cannot preserve ambiguous edits.
 
 When a listing has unsaved edits, `u` / `<C-r>` (and `:DirectUndo` /
 `:DirectRedo`) undo or redo buffer text only. Once the listing is clean, they

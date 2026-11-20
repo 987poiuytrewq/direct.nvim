@@ -452,7 +452,10 @@ H.describe('sync with expanded children', function()
     local ok, reason = listing:sync()
 
     H.assert_nil(ok, 'an indented unmarked row is not accepted as a root')
-    H.assert_true(tostring(reason):find('child', 1, true) ~= nil, 'refusal reports child contamination')
+    H.assert_true(
+      tostring(reason):find('E-DIRECT-TREE-', 1, true) ~= nil,
+      'refusal reports child contamination with a stable tree code'
+    )
     H.assert_eq(H.fs_snapshot(ws), before_fs, 'the filesystem is unchanged')
   end)
 
@@ -1294,10 +1297,7 @@ H.describe('sync with expanded children', function()
       local ok, reason = listing:sync()
 
       H.assert_nil(ok, hostile .. ' child baseline is refused')
-      H.assert_true(
-        tostring(reason):find('child', 1, true) ~= nil or tostring(reason):find('identity', 1, true) ~= nil,
-        tostring(reason)
-      )
+      H.assert_true(tostring(reason):find('E-DIRECT-TREE-', 1, true) ~= nil, tostring(reason))
       H.assert_true(vim.bo.modified, hostile .. ' refusal keeps the buffer modified')
       H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' }, hostile .. ' damage has no filesystem effects')
     end
@@ -1586,10 +1586,7 @@ H.describe('sync with expanded children', function()
       register.yank = yank
       register.yank_deleted = yank_deleted
       H.assert_nil(ok, case.name .. ' was refused')
-      H.assert_true(
-        tostring(reason):find('child', 1, true) ~= nil or tostring(reason):find('identity', 1, true) ~= nil,
-        case.name .. ': ' .. tostring(reason)
-      )
+      H.assert_true(tostring(reason):find('E-DIRECT-TREE-', 1, true) ~= nil, case.name .. ': ' .. tostring(reason))
       H.assert_eq(yanked, 0, case.name .. ' stops before auto-yank')
       H.assert_true(vim.bo.modified, case.name .. ' remains modified')
       H.assert_fs_eq(ws, { 'root.txt', 'sub/', 'sub/inside.txt' }, case.name .. ' has no filesystem effects')
@@ -1693,9 +1690,10 @@ H.describe('sync with expanded children', function()
     local ok, reason = listing:sync()
 
     H.assert_nil(ok, 'missing identity is not guessed from row position or spelling')
-    H.assert_true(tostring(reason):find('identity', 1, true) ~= nil, tostring(reason))
+    H.assert_true(reason:find('E-DIRECT-ROW-IDENTITY', 1, true) ~= nil, tostring(reason))
     H.assert_true(
-      tostring(reason):find(':DirectList!', 1, true) ~= nil and tostring(reason):find('redo the change', 1, true) ~= nil,
+      tostring(reason):find(':DirectList!', 1, true) ~= nil
+        and tostring(reason):find('normal filename change', 1, true) ~= nil,
       'the refusal gives a clear recovery path'
     )
     H.assert_false(
@@ -1746,7 +1744,7 @@ H.describe('sync with expanded children', function()
     vim.api.nvim_buf_set_lines(0, 0, -1, false, { ' spaced.txt' })
     local ok, reason = listing:sync()
     H.assert_nil(ok, 'leading whitespace cannot be confused with child indentation')
-    H.assert_true(tostring(reason):find('whitespace', 1, true) ~= nil, tostring(reason))
+    H.assert_true(reason:find('E-DIRECT-ROW-UNSAFE', 1, true) ~= nil, tostring(reason))
     H.assert_false(fs.exists(ws .. '/ spaced.txt'), 'no leading-space path is created')
   end)
 

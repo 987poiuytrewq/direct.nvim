@@ -268,11 +268,11 @@ H.describe('sync: safety guards', function()
     local ok, reason = listing:sync()
 
     H.assert_nil(ok, 'a buffer without a snapshot must be re-listed')
-    H.assert_true(tostring(reason):find('snapshot', 1, true) ~= nil, tostring(reason))
+    H.assert_true(tostring(reason):find('E-DIRECT-SYNC-FILTER-SNAPSHOT', 1, true) ~= nil, tostring(reason))
     H.assert_eq(H.fs_snapshot(ws), before, 'no filesystem changes occur')
     H.assert_eq(history_lines('undo.log'), {}, 'no history is written')
     H.assert_true(vim.bo.modified, 'the buffer remains modified')
-    H.assert_notified('re-list', vim.log.levels.ERROR)
+    H.assert_notified('Re-list', vim.log.levels.ERROR)
   end)
 
   H.it('captures hidden entries in expanded directories without changing their bytes', function()
@@ -851,7 +851,8 @@ H.describe('sync: safety guards', function()
     local ok, reason = buf:sync()
 
     H.assert_false(ok == true, 'nothing was applied')
-    H.assert_eq(reason, 'contains a tab')
+    H.assert_true(reason:find('E-DIRECT-ROW-UNSAFE', 1, true) ~= nil, reason)
+    H.assert_true(reason:find('Line 2:', 1, true) ~= nil, 'the unsafe row is identified')
     H.assert_fs_eq(ws, { 'a.txt' }, 'no filesystem change')
     H.assert_eq(history_lines('undo.log'), {}, 'no history was written')
     H.assert_true(vim.bo.modified, 'the buffer stays modified')
@@ -872,7 +873,8 @@ H.describe('sync: safety guards', function()
     local ok, reason = buf:sync()
 
     H.assert_false(ok == true, 'nothing was applied')
-    H.assert_eq(reason, 'contains a tab')
+    H.assert_true(reason:find('E-DIRECT-ROW-UNSAFE', 1, true) ~= nil, reason)
+    H.assert_true(reason:find('Line ', 1, true) == nil, 'disk-only unsafe names do not invent a buffer row')
     H.assert_notified('Unsafe entry', vim.log.levels.ERROR)
   end)
 
@@ -903,6 +905,12 @@ H.describe('sync: safety guards', function()
     H.assert_buf_eq({ 'a.txt', 'b.txt' }, 0, 'the buffer matches reality after partial failure')
     H.assert_notified('Action failed - Created c.txt', vim.log.levels.ERROR)
     H.assert_notified('1 action(s) failed', vim.log.levels.ERROR)
+    H.assert_true(not reason:find('E-DIRECT-', 1, true), 'post-action failures are not mislabeled as refusals')
+    H.assert_eq(
+      #vim.diagnostic.get(0, { namespace = require('direct.buffer.sync_refusals').namespace }),
+      0,
+      'partial action failure does not leave a preflight refusal diagnostic'
+    )
     H.assert_eq(
       history_lines('undo.log'),
       { HEADER, fixtures.touch(ws .. '/b.txt') },

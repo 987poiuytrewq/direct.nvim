@@ -9,6 +9,10 @@ Notable changes to direct.vim are documented here. Versions follow
 
 - Report all invalid options from one `setup()` call together in a single error
   notification.
+- Give save preflight refusals stable `E-DIRECT-*` codes, plain-language fixes,
+  and row diagnostics when the offending listing row is known. Document every
+  refusal and intentional expanded-tree save limitation in
+  `:help direct-refusals`; partial action failures remain distinct.
 
 ### Fixed
 

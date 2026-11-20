@@ -61,6 +61,11 @@ function M.setup(opts)
   M._base = opts.base
   M._verbose = opts.verbose or false
 
+  -- vim.diagnostic lazily creates this runtime augroup when its API is first
+  -- used. Load it before capturing the boot baseline so per-test cleanup does
+  -- not delete the group while the runtime module still retains its numeric id.
+  pcall(vim.diagnostic.get, vim.api.nvim_get_current_buf())
+
   -- Option baseline: every global option. Any option a spec mutates is restored
   -- at the next boundary, so no option can leak.
   M._option_snapshot = {}

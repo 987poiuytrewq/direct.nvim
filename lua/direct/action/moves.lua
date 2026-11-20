@@ -1,6 +1,13 @@
 -- Move-group planning and execution for interdependent filesystem renames.
--- The action facade is injected to keep action factories acyclic.
-return function(M)
+-- Filesystem dependencies are leaf modules; only group construction receives
+-- the action facade explicitly to keep the action module acyclic.
+local M = {}
+
+M.fs = require('direct.fs')
+M.paths = require('direct.paths')
+M.ui = require('direct.ui')
+
+do
   -- ---------------------------------------------------------------------------
   -- Interlinked moves: staging, grouping, group reversal
   -- ---------------------------------------------------------------------------
@@ -234,7 +241,7 @@ return function(M)
   -- The name `g` never collides with an action name: every other serialized line
   -- starts with the name of a single-entry action. `describe` joins the member
   -- descriptions, so `summarize` still emits ONE summary per undo press.
-  function M.Group(actions)
+  local function make_group(action, actions)
     local self = { name = 'g', _kind = 'g', actions = actions }
     local function report_temps(staging)
       for _, tmp in ipairs(staging ~= nil and staging.temps or {}) do
@@ -286,9 +293,9 @@ return function(M)
       for _, act in ipairs(members) do
         local exec = act
         if staging ~= nil and act.name == 'mv' and staging.overrides[act.src] ~= nil then
-          exec = M.Move(staging.overrides[act.src], act.dst)
+          exec = action.Move(staging.overrides[act.src], act.dst)
         end
-        local ok, res, err = pcall(M.execute, exec)
+        local ok, res, err = pcall(action.execute, exec)
         if not ok then
           report_temps(staging)
           return nil, tostring(res)
@@ -301,11 +308,11 @@ return function(M)
       end
       return true
     end
-    self['do'] = function() return M.execute(self) end
+    self['do'] = function() return action.execute(self) end
     function self.describe()
       local parts = {}
       for _, member in ipairs(self.actions or {}) do
-        parts[#parts + 1] = M.describe_action(member)
+        parts[#parts + 1] = action.describe_action(member)
       end
       return table.concat(parts, ', ')
     end
@@ -313,4 +320,7 @@ return function(M)
   end
 
   -- ---------------------------------------------------------------------------
+  M.make_group = make_group
 end
+
+return M

@@ -31,6 +31,24 @@ jobs:
           git fetch --depth=1 origin "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
           python3 scripts/check_changelog_released.py "origin/${GITHUB_BASE_REF}" HEAD
 
+      - name: Check coverage baseline only improves
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+          if git cat-file -e "origin/${GITHUB_BASE_REF}:scripts/coverage-baseline.json" 2>/dev/null; then
+            mkdir -p .cache
+            git show "origin/${GITHUB_BASE_REF}:scripts/coverage-baseline.json" > .cache/coverage-baseline-base.json
+            python3 scripts/check_coverage.py \
+              --baseline scripts/coverage-baseline.json \
+              --previous-baseline .cache/coverage-baseline-base.json \
+              --check-baseline-only
+          else
+            echo 'Initializing the first per-file coverage baseline.'
+          fi
+
+      - name: Test per-file coverage policy
+        run: python3 tests/test_coverage_policy.py
+
       - name: Install Lua and LuaRocks
         run: |
           sudo apt-get update
@@ -92,6 +110,9 @@ jobs:
         env:
           COVERAGE_PLATFORM: ${{ runner.os }}
 
+      - name: Enforce per-file coverage policy
+        run: python3 scripts/check_coverage.py --platform "${{ runner.os }}"
+
       - name: Publish coverage report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -137,6 +158,9 @@ jobs:
         env:
           COVERAGE_PLATFORM: ${{ runner.os }}-stable
 
+      - name: Enforce per-file coverage policy
+        run: python3 scripts/check_coverage.py --platform "${{ runner.os }}-stable"
+
       - name: Publish coverage report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -173,6 +197,16 @@ jobs:
         run: make ci
         env:
           COVERAGE_PLATFORM: Linux-nightly
+
+      - name: Publish per-file coverage table
+        if: always()
+        continue-on-error: true
+        run: |
+          if test -s coverage/summary.out; then
+            python3 scripts/check_coverage.py --report-only --platform Linux-nightly
+          else
+            echo '::warning::No coverage summary was generated for nightly.'
+          fi
 
       - name: Report nightly failures without blocking
         if: ${{ steps.setup_nightly.outcome == 'failure' || steps.test_nightly.outcome == 'failure' }}

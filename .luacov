@@ -1,5 +1,13 @@
 include = {
   "lua/direct/",
+  "plugin/",
+  "ftplugin/",
+}
+
+-- Match the repository's plugin paths without counting specs or Neovim runtime files.
+exclude = {
+  "/tests/plugin/",
+  "/runtime/.*ftplugin/",
 }
 
 statsfile = "coverage/luacov.stats.out"

@@ -31,6 +31,24 @@ jobs:
           git fetch --depth=1 origin "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
           python3 scripts/check_changelog_released.py "origin/${GITHUB_BASE_REF}" HEAD
 
+      - name: Check coverage baseline only improves
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+          if git cat-file -e "origin/${GITHUB_BASE_REF}:scripts/coverage-baseline.json" 2>/dev/null; then
+            mkdir -p .cache
+            git show "origin/${GITHUB_BASE_REF}:scripts/coverage-baseline.json" > .cache/coverage-baseline-base.json
+            python3 scripts/check_coverage.py \
+              --baseline scripts/coverage-baseline.json \
+              --previous-baseline .cache/coverage-baseline-base.json \
+              --check-baseline-only
+          else
+            echo 'Initializing the first per-file coverage baseline.'
+          fi
+
+      - name: Test per-file coverage policy
+        run: python3 tests/test_coverage_policy.py
+
       - name: Install Lua and LuaRocks
         run: |
           sudo apt-get update
@@ -91,6 +109,9 @@ jobs:
         run: make ci
         env:
           COVERAGE_PLATFORM: ${{ runner.os }}
+
+      - name: Enforce per-file coverage policy
+        run: python3 scripts/check_coverage.py --platform "${{ runner.os }}"
 
       - name: Publish coverage report
         if: always()

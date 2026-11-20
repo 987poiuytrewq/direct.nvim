@@ -95,9 +95,10 @@ local function run_stale_wait(api)
   write_marker(assert(vim.env.DIRECT_E2E_READY))
   wait_for_path(assert(vim.env.DIRECT_E2E_PROCEED), 'the second process save')
   local wrote, write_err = pcall(vim.cmd, 'write')
+  local refusal = tostring(write_err)
   assert_true(
-    not wrote and tostring(write_err):find('E-DIRECT-ROW-STALE', 1, true) ~= nil,
-    'stale :write did not refuse the outdated listing: ' .. tostring(write_err)
+    not wrote and refusal:find('E-DIRECT-ROW-STALE', 1, true) ~= nil and refusal:find('Line 5:', 1, true) ~= nil,
+    'stale :write did not identify the outdated row: ' .. refusal
   )
   wait_for_idle()
   vim.notify = original_notify

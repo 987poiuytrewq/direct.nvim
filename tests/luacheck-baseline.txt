@@ -1,0 +1,72 @@
+tests/action/action_spec.lua:701:8: (W311) value assigned to variable 'e' is overwritten on line 703 before use
+tests/action/action_spec.lua:703:8: (W311) value assigned to variable 'e' is overwritten on line 705 before use
+tests/action/action_spec.lua:705:8: (W311) value assigned to variable 'e' is unused
+tests/action/grouped_undo_spec.lua:282:23: (W211) unused variable 'fs'
+tests/action/unpaste_spec.lua:9:7: (W211) unused variable 'ui'
+tests/buffer/buffer_expansion_spec.lua:476:11: (W431) shadowing upvalue 'paths' on line 5
+tests/buffer/buffer_expansion_spec.lua:4:7: (W211) unused variable 'fs'
+tests/buffer/buffer_expansion_spec.lua:5:7: (W211) unused variable 'paths'
+tests/buffer/buffer_listing_spec.lua:152:11: (W211) unused variable 'listing'
+tests/buffer/buffer_listing_spec.lua:5:7: (W211) unused variable 'paths'
+tests/buffer/buffer_navigation_spec.lua:235:11: (W211) unused variable 'first'
+tests/buffer/buffer_navigation_spec.lua:237:11: (W211) unused variable 'second'
+tests/buffer/buffer_navigation_spec.lua:432:72: (W212) unused argument 'choices'
+tests/buffer/buffer_navigation_spec.lua:432:81: (W212) unused argument 'default'
+tests/buffer/hidden_gitignore_spec.lua:1174:11: (W431) shadowing upvalue 'git' on line 4
+tests/filesystem/fs_spec.lua:311:69: (W212) unused argument 'from'
+tests/filesystem/fs_spec.lua:484:69: (W212) unused variable length argument
+tests/filesystem/fs_spec.lua:86:26: (W212) unused argument 'copied'
+tests/git/git_restore_spec.lua:237:11: (W211) unused variable 'listing'
+tests/history/history_preflight_spec.lua:7:7: (W211) unused variable 'paths'
+tests/history/history_preflight_spec.lua:8:7: (W211) unused variable 'fs'
+tests/history/history_spec.lua:335:11: (W211) unused variable 'sb'
+tests/history/history_spec.lua:436:11: (W211) unused variable 'hist'
+tests/plugin/direct_run_spec.lua:231:15: (W431) shadowing upvalue 'state' on line 223
+tests/plugin/direct_run_spec.lua:245:15: (W431) shadowing upvalue 'state' on line 223
+tests/plugin/direct_run_spec.lua:257:15: (W431) shadowing upvalue 'state' on line 223
+tests/plugin/entry_spec.lua:106:3: (W314) value assigned to field 'DirectGitRestore' is overwritten on line 107 before use
+tests/plugin/highlight_spec.lua:5:7: (W211) unused variable 'highlight'
+tests/register/async_paste_spec.lua:4:7: (W211) unused variable 'buffer'
+tests/register/async_paste_spec.lua:5:7: (W211) unused variable 'direct'
+tests/register/async_paste_spec.lua:8:7: (W211) unused variable 'log'
+tests/register/async_paste_spec.lua:9:7: (W211) unused variable 'paths'
+tests/sync/sync_actions_spec.lua:8:7: (W211) unused variable 'paths'
+tests/sync/sync_plan_spec.lua:11:7: (W211) unused variable 'fixtures'
+tests/sync/sync_plan_spec.lua:12:7: (W211) unused variable 'HEADER'
+tests/sync/sync_plan_spec.lua:13:7: (W211) unused variable 'decode_record'
+tests/sync/sync_plan_spec.lua:15:7: (W211) unused variable 'route_write_to_test_buffer'
+tests/sync/sync_plan_spec.lua:17:7: (W211) unused variable 'list_edit_and_sync'
+tests/sync/sync_plan_spec.lua:7:7: (W211) unused variable 'fs'
+tests/sync/sync_plan_spec.lua:8:7: (W211) unused variable 'paths'
+tests/sync/sync_plan_spec.lua:9:7: (W211) unused variable 'history'
+tests/sync/sync_safety_spec.lua:10:7: (W211) unused variable 'register'
+tests/sync/sync_safety_spec.lua:13:7: (W211) unused variable 'decode_record'
+tests/sync/sync_safety_spec.lua:15:7: (W211) unused variable 'route_write_to_test_buffer'
+tests/sync/sync_safety_spec.lua:17:7: (W211) unused variable 'list_edit_and_sync'
+tests/sync/sync_safety_spec.lua:294:17: (W211) unused variable 'err'
+tests/sync/sync_safety_spec.lua:401:15: (W411) variable 'reason' was previously defined on line 391
+tests/sync/sync_safety_spec.lua:460:15: (W411) variable 'reason' was previously defined on line 450
+tests/sync/sync_safety_spec.lua:484:15: (W411) variable 'reason' was previously defined on line 479
+tests/sync/sync_safety_spec.lua:8:7: (W211) unused variable 'paths'
+tests/sync/sync_tree_edit_spec.lua:11:7: (W211) unused variable 'fixtures'
+tests/sync/sync_tree_edit_spec.lua:12:7: (W211) unused variable 'HEADER'
+tests/sync/sync_tree_edit_spec.lua:13:7: (W211) unused variable 'decode_record'
+tests/sync/sync_tree_edit_spec.lua:15:7: (W211) unused variable 'route_write_to_test_buffer'
+tests/sync/sync_tree_edit_spec.lua:17:7: (W211) unused variable 'list_edit_and_sync'
+tests/sync/sync_tree_edit_spec.lua:8:7: (W211) unused variable 'paths'
+tests/sync/sync_tree_edit_spec.lua:9:7: (W211) unused variable 'history'
+tests/sync/sync_undo_spec.lua:11:7: (W211) unused variable 'fixtures'
+tests/sync/sync_undo_spec.lua:12:7: (W211) unused variable 'HEADER'
+tests/sync/sync_undo_spec.lua:17:7: (W211) unused variable 'list_edit_and_sync'
+tests/sync/sync_undo_spec.lua:593:11: (W431) shadowing upvalue 'register' on line 10
+tests/sync/sync_undo_spec.lua:654:11: (W431) shadowing upvalue 'register' on line 10
+tests/sync/sync_undo_spec.lua:760:11: (W431) shadowing upvalue 'paths' on line 8
+tests/sync/sync_undo_spec.lua:780:11: (W431) shadowing upvalue 'register' on line 10
+tests/sync/sync_undo_spec.lua:841:11: (W431) shadowing upvalue 'register' on line 10
+tests/sync/sync_undo_spec.lua:853:11: (W431) shadowing upvalue 'paths' on line 8
+tests/sync/sync_undo_spec.lua:885:11: (W431) shadowing upvalue 'register' on line 10
+tests/sync/sync_undo_spec.lua:8:7: (W211) unused variable 'paths'
+tests/sync/sync_undo_spec.lua:997:11: (W211) unused variable 'a_id'
+tests/trash/trash_spec.lua:131:72: (W212) unused argument 'choices'
+tests/trash/trash_spec.lua:131:81: (W212) unused argument 'default'
+tests/trash/trash_spec.lua:5:7: (W211) unused variable 'fs'

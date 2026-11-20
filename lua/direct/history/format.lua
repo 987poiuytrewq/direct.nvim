@@ -82,7 +82,7 @@ local function valid_legacy_record(line, version, python)
   if verb == 'touch' or verb == 'mkdir' then return valid_path_field(fields[2]) end
   if not valid_path_field(fields[2]) or not valid_path_field(fields[3]) then return false end
   if verb == 'p' or verb == 'up' then
-    if python then return true end -- old Python names remain opaque
+    if python then return true end -- legacy name fields are not interpreted
     return equal_legacy_names(fields[4], fields[5])
   end
   return true
@@ -125,7 +125,8 @@ function M.classify(bytes, exists)
     return preserve('known legacy history is malformed')
   end
 
-  -- Markerless tab-framed Python history is recognized by its verb and arity.
+  -- Markerless tab-delimited history is recognized by each record's verb and
+  -- field count.
   if valid_legacy_body(lines, 1, nil, true) then return { state = 'legacy', lines = {}, legacy = true } end
   return preserve('unknown or malformed history format')
 end

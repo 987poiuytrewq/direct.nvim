@@ -244,14 +244,14 @@ end
 
 -- Refresh the listing and restore cursor/options; mark unmodified after refresh.
 --
--- (hardening): a directory can hold an entry whose NAME carries a
--- newline (or another control character / a tab). Such a name can never be a
--- buffer line -- `nvim_buf_set_lines` raises "'replacement string' item contains
--- newlines" -- so listing that directory used to abort the whole listing. The
--- representability guard (`action.path_reason`, the same one the history framing
--- uses) drops every unrepresentable line BEFORE the set, notifies per dropped
--- entry, and lists the survivors. A ' ' (space) name is NOT dropped: a space is
--- representable and must still list.
+-- A directory may contain an entry whose name has a newline or another control
+-- character. Buffer lines cannot represent such names, and `nvim_buf_set_lines`
+-- rejects newlines in replacement strings. `action.path_reason` filters
+-- unrepresentable entries before the API call, reports each skipped entry, and
+-- keeps listing the rest. This shared guard also protects history framing, which
+-- uses the same representability rules. A space is representable, so it is
+-- retained, as are other printable characters.
+-- One invalid name therefore does not block the remaining rows.
 function M.list_buffer(self, options)
   options = options or {}
   local bufnr = vim.api.nvim_get_current_buf()

@@ -201,11 +201,11 @@ local function ignored(path, st, index)
 end
 
 -- read_dir_lines(root, ignore_set) -> the listing pipeline as a string array
--- directories first (each with the configured trailing marker), then files, each group sorted
--- ascending. Symlinks are resolved with a following stat; entries whose
--- stat fails (broken symlink) or whose target is neither a file nor a directory
--- (fifo, socket, device) are omitted, matching Python where isdir and isfile are
--- both false. `ignore_set` is a list of paths (the glob results of &wildignore);
+-- directories first (each with the configured trailing marker), then files, each
+-- group sorted ascending. Symlinks are resolved with a following stat; entries
+-- whose stat fails (broken symlink) or whose target is neither a file nor a
+-- directory (fifo, socket, device) are omitted. `ignore_set` is a list of paths
+-- (the glob results of &wildignore);
 -- entries are compared to its stat-indexed filesystem identities. Callers that
 -- already scanned the directory may pass those `{ name, type }` records as
 -- `entries` to avoid reopening and walking it a second time.

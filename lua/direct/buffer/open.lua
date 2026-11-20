@@ -127,8 +127,9 @@ do
     return true
   end
 
-  -- Buffer:get_paths(firstline, lastline) -> the absolute path of every line in
-  -- the inclusive 1-based range (Python's buffer slice). Used by `:DirectYank`.
+  -- Buffer:get_paths(firstline, lastline) -> the absolute path of each line in
+  -- the inclusive 1-based range; convert it to the buffer API's 0-based,
+  -- end-exclusive range. Used by `:DirectYank`.
   function M.get_paths(self, firstline, lastline)
     local bufnr = vim.api.nvim_get_current_buf()
     restore_deleted_rows(bufnr)

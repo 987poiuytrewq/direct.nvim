@@ -27,13 +27,11 @@ M.PASTE_CLASH_ATTEMPTS = 10
 -- Helpers
 -- ---------------------------------------------------------------------------
 
--- rel(path) -> the CWD-relative spelling of a path, the Lua
--- equivalent of Python's os.path.relpath. `:p:.` resolves the path first so a
--- lexical mismatch (e.g. /tmp vs /private/tmp) cannot suppress the relative
--- form; a path equal to the cwd yields '.', matching Python's relpath(cwd).
--- `:p` appends a trailing filesystem separator to directories, which Python's relpath never
--- does, so it is stripped: a directory description is 'Removed tree', never
--- 'Removed tree/' (Paste's describe adds its own separator).
+-- rel(path) -> the CWD-relative spelling of a path. `:p:.` resolves the path
+-- first so a lexical mismatch (e.g. /tmp vs /private/tmp) cannot suppress the
+-- relative form; a path equal to the cwd yields '.'. Strip the trailing
+-- filesystem separator from directories so their descriptions do not add `/`
+-- (Paste's describe adds its own separator).
 function M.rel(path)
   if type(path) ~= 'string' then return tostring(path) end
   local rel = vim.fn.fnamemodify(path, ':p:.')
@@ -47,8 +45,8 @@ end
 -- use inode identity: that would also close buffers for distinct hard links.
 -- realpath normalizes symlink prefixes, `..`, and trailing separators while keeping
 -- different hard-link names distinct.
--- Pure defence and parity: nothing here may raise, so every buffer API call is
--- pcall-guarded.
+-- Guard buffer API work so an unavailable buffer cannot interrupt a destructive
+-- action; report failures through the return value rather than raising.
 function M.close_src_buffer(src)
   if type(src) ~= 'string' then return true end
   local target = M.fs.realpath(src)
@@ -63,8 +61,8 @@ function M.close_src_buffer(src)
 end
 
 -- split_names(str) -> the entry-name list of a serialized `p`/`up` field.
--- Empty fields deserialize to an empty list (Python `''.split(' ')` yields
--- ['']); an empty name can never be a real entry, so it is dropped here.
+-- Empty fields and repeated spaces deserialize to an empty list or omit empty
+-- names; an empty name can never be a real entry.
 function M.split_names(str)
   if type(str) ~= 'string' then return {} end
   return vim.split(str, ' ', { plain = true, trimempty = true })
@@ -175,12 +173,10 @@ function M.Move(src, dst)
   return self
 end
 
--- Remove(src, [dst]) -- the trash destination is resolved eagerly when `dst`
--- is nil (parity: the Python `__init__` computed it), so a freshly built
--- action is immediately serializable; an explicit `dst` (used by deserialize)
--- is kept verbatim so `Restore` reverses to the exact entry. A
--- resolution failure is deferred to `do`, which returns nil, err (
--- consumers branch, nothing raises).
+-- Remove(src, [dst]) -- resolve an omitted trash destination at construction so
+-- the action is immediately serializable. Keep an explicit `dst` (used by
+-- deserialize) verbatim so `Restore` reverses to the exact entry. Defer
+-- resolution failures to `do`, which returns nil, err for callers to handle.
 local function warn_cross_device_trash(src, trash)
   local source_stat, trash_stat = lstat(src), M.fs.stat(trash)
   if

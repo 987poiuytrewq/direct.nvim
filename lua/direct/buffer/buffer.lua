@@ -20,15 +20,13 @@ local rows = require('direct.buffer.rows')
 local buffer_state = require('direct.buffer.state')
 local states = buffer_state.states
 local namespace = buffer_state.namespace
-local deleted_guards = {}
+local deleted_guards = buffer_state.deleted_guards
 local state_generations = {}
 local next_state_generation = 0
 local git_status_timeout_notified = {}
-local next_id = rows.next_id
 local set_row_mark = rows.set_row_mark
 local row_ids_by_row = rows.row_ids_by_row
 local refresh_display_ids = rows.refresh_display_ids
-local row_path = rows.row_path
 local current_row_record = rows.current_row_record
 local is_dir_line = rows.is_dir_line
 local refresh_icons = rows.refresh_icons
@@ -39,30 +37,6 @@ M._state_for_test = rows.state_for_test
 M.entry_path = listing.entry_path
 M.ignore_set = listing.ignore_set
 M.read = listing.read
-local function list_with_snapshot(root, show_hidden, respect_gitignore)
-  return listing.list_with_snapshot(root, M.read, show_hidden, respect_gitignore)
-end
-
--- Keep only entries represented by the list-time Git status snapshot. Directory
--- statuses are already aggregated from changed descendants by direct.git.
-local function filter_git_status_lines(root, lines, snapshot)
-  local filtered = {}
-  for _, line in ipairs(lines or {}) do
-    if git.status_for(snapshot, M.entry_path(root, line)) then filtered[#filtered + 1] = line end
-  end
-  return filtered
-end
-
-local function filter_git_diff_lines(root, lines, snapshot)
-  local filtered = {}
-  for _, line in ipairs(lines or {}) do
-    if git.status_for(snapshot, M.entry_path(root, line)) then filtered[#filtered + 1] = line end
-  end
-  return filtered
-end
-
-local set_directory_snapshot = listing.set_directory_snapshot
-local get_directory_snapshot = listing.get_directory_snapshot
 local path_without_marker = listing.path_without_marker
 local lstat = listing.lstat
 
@@ -259,40 +233,9 @@ reconcile_undone_materialization = require('direct.buffer.undo_state')({
 buffer_state.reconcile_undone_materialization = reconcile_undone_materialization
 
 -- ---------------------------------------------------------------------------
-local row_state = require('direct.buffer.row_state')({
-  M = M,
-  Buffer = Buffer,
-  fs = fs,
-  paths = paths,
-  git = git,
-  ui = ui,
-  states = states,
-  deleted_guards = deleted_guards,
-  namespace = namespace,
-  set_row_mark = set_row_mark,
-  refresh_display_ids = refresh_display_ids,
-  refresh_highlights = refresh_highlights,
-  refresh_icons = refresh_icons,
-  row_ids_by_row = row_ids_by_row,
-  current_row_record = current_row_record,
-  is_dir_line = is_dir_line,
-  dirs_then_name = dirs_then_name,
-  next_id = next_id,
-  row_path = row_path,
-  recorded_row_text = recorded_row_text,
-  set_directory_snapshot = set_directory_snapshot,
-  set_git_timeout_indicator = listing.set_git_timeout_indicator,
-  get_directory_snapshot = get_directory_snapshot,
-  list_with_snapshot = list_with_snapshot,
-  filter_git_status_lines = filter_git_status_lines,
-  filter_git_diff_lines = filter_git_diff_lines,
-  ensure_git_snapshot = ensure_git_snapshot,
-  indent_size = indent_size,
-  path_identity = path_identity,
-  remove_expanded_subtree = remove_expanded_subtree,
-  reconcile_undone_materialization = reconcile_undone_materialization,
-  action_mod = action_mod,
-})
+local row_state = require('direct.buffer.row_state')
+Buffer.expand = row_state.expand
+Buffer.collapse = row_state.collapse
 local merge_status_deleted_entries = row_state.merge_deleted_entries
 merge_deleted_entries = function(directory, lines, git_snapshot, show_hidden, diff_snapshot)
   local result, deleted = merge_status_deleted_entries(directory, lines, git_snapshot, show_hidden)

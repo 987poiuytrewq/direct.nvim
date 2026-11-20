@@ -15,7 +15,6 @@ ALLOWLIST = {
     "lua/direct/history/reverse.lua:local build@13": 678,
     "lua/direct/buffer/tree.lua:local edited_subtrees@268": 605,
     "lua/direct/history/reverse.lua:M._reverse_async@220": 461,
-    "lua/direct/history/recovery.lua:M.new@5": 341,
     "lua/direct/buffer/list.lua:M.list_buffer@255": 321,
     "lua/direct/buffer/sync_plan.lua:local classify_identity@20": 270,
     "lua/direct/history/trash_refs.lua:<anonymous>@4": 267,

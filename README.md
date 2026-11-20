@@ -262,7 +262,7 @@ require('direct').setup({
   undo_confirm = 'elsewhere',        -- true, false, or confirm only outside this listing
   history_limit = 1000,              -- undo and redo steps per stack
   trash_retention = { max_age_days = 90 }, -- or false, or add max_size_bytes
-  directory_separator = package.config:sub(1, 1), -- '/' or '\\'
+  directory_separator = package.config:sub(1, 1), -- native platform separator
   max_recursive_expand_depth = false, -- limit for zO/zR; false = unlimited
   buffers = {
     reuse = true,        -- reuse an existing Direct listing for the same directory

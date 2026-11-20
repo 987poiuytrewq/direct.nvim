@@ -34,6 +34,11 @@ H.describe('documentation synchronization', function()
     local documented = readme_defaults(read_file('README.md'))
     local help = read_file('doc/direct.txt')
 
+    H.assert_eq(
+      documented.directory_separator,
+      require('direct.platform').separator,
+      'README evaluates the directory separator for the current platform'
+    )
     for key, value in pairs(defaults) do
       H.assert_true(documented[key] ~= nil, 'README defaults include option ' .. tostring(key))
       H.assert_eq(documented[key], value, 'README default matches config.defaults for ' .. tostring(key))

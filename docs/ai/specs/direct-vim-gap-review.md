@@ -1,7 +1,7 @@
 # Spec: direct.vim improvements, fourth review
 
-**Status:** A33, A34, A41–A43, A45, A47, A49, A50, A57 and A58 are complete.
-A48 is partially complete; A35–A40, A44, A46 and A51–A56 remain open.
+**Status:** A33–A37, A41–A43, A45–A47, A49–A50 and A57–A58 are complete.
+A48 is partially complete; A38–A40, A44 and A51–A56 remain open.
 
 **Source:** a fourth static review of `origin/master` at `1af1402`
 (17 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -19,7 +19,7 @@ them as a guide to where to look, not as exact counts.
 
 **Last checked:** `origin/master` at `1af1402` (17 November 2026).
 
-**Backlog status checked:** `origin/master` at `a1c6ca0` (19 November 2026).
+**Backlog status checked:** `origin/master` at `6d4073c` (20 November 2026).
 The review findings and suggested order below describe the original review
 baseline; task statuses reflect the merged work through this commit. A42's
 v0.4.0 beta is tagged and published. A48's stability guidance, beta notice and
@@ -118,9 +118,9 @@ into each task below:
 |----|----------|--------|------|
 | A33 | P2 | Done | Stop `--ref` Tab completion from waiting on Git on the main thread |
 | A34 | P2 | Done | Stop the history lock's retry from blocking and re-entering the editor |
-| A35 | P3 | Open | Write each filesystem action once, not as sync and async copies |
-| A36 | P3 | Open | Move trash, Git-restore and LSP code out of modules that don't own it |
-| A37 | P3 | Open | Turn the context-injection "splits" into real modules |
+| A35 | P3 | Done | Write each filesystem action once, not as sync and async copies |
+| A36 | P3 | Done | Move trash, Git-restore and LSP code out of modules that don't own it |
+| A37 | P3 | Done | Turn the context-injection "splits" into real modules |
 | A38 | P3 | Open | Break up the longest functions and stop new ones appearing |
 | A39 | P3 | Open | Split `config.lua` and check the README and help against the defaults |
 | A40 | P4 | Open | Lint all Lua, not only `lua/direct`, and clear stale comments |
@@ -129,7 +129,7 @@ into each task below:
 | A43 | P2 | Done | Test crashes by killing a real process at each journal step |
 | A44 | P3 | Open | Enforce coverage per file, not only in total |
 | A45 | P3 | Done | Test a save, a restart and an undo across real Neovim processes |
-| A46 | P3 | Open | Check undo and sync against a model with generated edit sequences |
+| A46 | P3 | Done | Check undo and sync against a model with generated edit sequences |
 | A47 | P2 | Done | Keep golden fixtures for every on-disk format and test them |
 | A48 | P4 | Partial | State what is stable before 1.0 and gather real-world use |
 | A49 | P2 | Done | Make `:wq`, `:x`, `:wa` and quitting work with background saves |
@@ -216,6 +216,9 @@ message.
 
 ### A35 — Every filesystem action is written twice (P3)
 
+**Progress.** Completed in PR #161, which consolidated synchronous and
+asynchronous filesystem action execution.
+
 **Problem.** In `lua/direct/action/action.lua`, each action factory defines
 both `_execute` and `_execute_async` by hand:
 
@@ -256,6 +259,10 @@ failure path: a failed move leaves no stale trash metadata, and a failed
 metadata cleanup warns once.
 
 ### A36 — Several modules do jobs they don't own (P3)
+
+**Progress.** Completed across PRs #165, #167–#169: trash metadata, Git
+worktree restore, history LSP/trash-reference helpers, and register storage
+were moved to their owning modules.
 
 **Problem.** The headers describe each module's job, and several don't match
 the contents.
@@ -301,6 +308,10 @@ the contents.
 module field, move the stub to the new owner; list each one in the PR.
 
 ### A37 — The "splits" are separate files, not separate modules (P3)
+
+**Progress.** The fourteen listed splits were converted in separate
+module-by-module PRs #171–#185 (excluding unrelated A46 PR #174). PR #186
+added cleanup coverage for the action-registry reattachment test.
 
 **Problem.** Fourteen modules are written as `return function(context)` or
 `return function(M)`: `buffer/{list,sync,open,navigation,collapse,tree,
@@ -615,6 +626,11 @@ drives them with `--cmd`/`-c` scripts or `--listen` plus `nvim_input`:
 quick, and run them in the existing Linux, macOS and Windows jobs.
 
 ### A46 — Undo and sync are checked by examples, not by generated sequences (P3)
+
+**Progress.** PR #162 fixed undo for a grouped rename permutation with a
+companion move; PR #166 fixed a larger permutation/move/delete case. PR #170
+added generated model tests, and PR #174 extended the pure cases to exercise
+the production planner and move grouping.
 
 **Problem.** The tests describe many specific cases, and the earlier reviews
 found real bugs by thinking of more. The central promise is general: whatever
@@ -1039,16 +1055,14 @@ benchmark in CI, so a slowdown can land unnoticed.
 
 ## Suggested order
 
-1. Complete the A48 pre-release soak and record the result; the documentation
-   and v0.4.0 beta feedback path are already in place.
-2. Do A35–A39 sequentially, one behavior-preserving change per PR, because
-   they touch overlapping action, module and configuration boundaries.
-3. Do A40 and A44 after the refactors, sequentially, because they overlap in
-   lint, coverage and CI configuration.
-4. Do A46 as a separate testing task. A43, A45 and A47 already provide the
-   real-process crash, restart/undo and persisted-format foundations.
-5. Establish the A58 performance baseline before optimizing listing behavior;
-   keep its benchmark work separate from CI configuration changes.
-6. Do A52 before A51, so the plan preview can use the improved refusal
-   messages. Do A53 before A56, then handle A54–A56 sequentially because they
-   share listing, configuration and mapping code.
+1. Complete the A48 pre-release soak and record its result. The stability
+   guidance and v0.4.0 beta feedback path are already in place; the soak can
+   proceed independently of the remaining engineering work.
+2. Continue A38 as separate one-function PRs, and do A39 as its own config
+   split. These can proceed independently; A39 should land before A53 and A56,
+   which depend on the established configuration and mapping shape.
+3. Do A40 before A44 because the lint, coverage and CI changes overlap.
+4. Do A52 and A53 before A51, which depends on the refusal and help work.
+5. Do A54 after A51. A58's performance baseline is complete; keep A55-icons
+   and the optional A55-columns work in separate PRs, then do A56 after A55 is
+   resolved.

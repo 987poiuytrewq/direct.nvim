@@ -229,51 +229,106 @@ function M.stack_bytes(undo_lines, redo_lines)
   }) .. '\n'
 end
 
-function M.parse(bytes)
-  local ok, value = pcall(vim.json.decode, bytes)
-  if not ok or type(value) ~= 'table' or value.format ~= M.FORMAT or value.version ~= M.VERSION then return nil end
-  if value.kind == 'stacks' then
+local function parse_stacks(value)
+  if
+    not exact_keys(value, {
+      format = true,
+      version = true,
+      kind = true,
+      undo = true,
+      redo = true,
+    })
+    or not valid_stack(value.undo)
+    or not valid_stack(value.redo)
+  then
+    return nil
+  end
+  return value
+end
+
+local function parse_reverse(value)
+  if
+    (value.direction ~= 'undo' and value.direction ~= 'redo')
+    or not valid_stack(value.undo)
+    or not valid_stack(value.redo)
+  then
+    return nil
+  end
+  local reversal = action.deserialize(value.action)
+  if not reversal then return nil end
+  if reversal.name == 'g' then
     if
       not exact_keys(value, {
         format = true,
         version = true,
         kind = true,
+        direction = true,
         undo = true,
         redo = true,
-      })
-      or not valid_stack(value.undo)
-      or not valid_stack(value.redo)
+        action = true,
+        steps = true,
+        staging_count = true,
+        next_step = true,
+      }) or not valid_move_steps(value.steps, value.next_step, value.staging_count)
     then
       return nil
     end
-  elseif value.kind == 'reverse' then
+  elseif
+    not exact_keys(value, {
+      format = true,
+      version = true,
+      kind = true,
+      direction = true,
+      undo = true,
+      redo = true,
+      action = true,
+      source = true,
+      destination = true,
+      source_identity = true,
+      destination_identity = true,
+    })
+    or not reversible_rename_kinds[reversal.name]
+    or type(value.source) ~= 'string'
+    or type(value.destination) ~= 'string'
+    or not valid_identity(value.source_identity)
+    or not valid_identity(value.destination_identity)
+    or type(value.source_identity) ~= 'table'
+    or type(value.source_identity.inode) ~= 'string'
+    or not identity_path_matches(value.source_identity, value.source)
+    or not identity_path_matches(value.destination_identity, value.destination)
+    or not canonical_paths_match(reversal.src, value.source)
+    or not canonical_paths_match(reversal.dst, value.destination)
+  then
+    return nil
+  end
+  return value
+end
+
+local function parse_apply(value)
+  if value.direction ~= 'apply' or not valid_stack(value.undo) or not valid_stack(value.redo) then return nil end
+  local filesystem_action = action.deserialize(value.action)
+  if not filesystem_action then return nil end
+  if filesystem_action.name == 'g' then
     if
-      (value.direction ~= 'undo' and value.direction ~= 'redo')
-      or not valid_stack(value.undo)
-      or not valid_stack(value.redo)
+      not exact_keys(value, {
+        format = true,
+        version = true,
+        kind = true,
+        direction = true,
+        undo = true,
+        redo = true,
+        action = true,
+        steps = true,
+        staging_count = true,
+        next_step = true,
+      }) or not valid_move_steps(value.steps, value.next_step, value.staging_count)
     then
       return nil
     end
-    local reversal = action.deserialize(value.action)
-    if not reversal then return nil end
-    if reversal.name == 'g' then
-      if
-        not exact_keys(value, {
-          format = true,
-          version = true,
-          kind = true,
-          direction = true,
-          undo = true,
-          redo = true,
-          action = true,
-          steps = true,
-          staging_count = true,
-          next_step = true,
-        }) or not valid_move_steps(value.steps, value.next_step, value.staging_count)
-      then
-        return nil
-      end
-    elseif
+  else
+    local source = value.source
+    if source == vim.NIL then source = nil end
+    if
       not exact_keys(value, {
         format = true,
         version = true,
@@ -287,141 +342,109 @@ function M.parse(bytes)
         source_identity = true,
         destination_identity = true,
       })
-      or not reversible_rename_kinds[reversal.name]
-      or type(value.source) ~= 'string'
+      or not recoverable_apply_kinds[filesystem_action.name]
+      or (value.source ~= vim.NIL and type(value.source) ~= 'string')
       or type(value.destination) ~= 'string'
       or not valid_identity(value.source_identity)
       or not valid_identity(value.destination_identity)
-      or type(value.source_identity) ~= 'table'
-      or type(value.source_identity.inode) ~= 'string'
-      or not identity_path_matches(value.source_identity, value.source)
+      or not identity_path_matches(value.source_identity, source)
       or not identity_path_matches(value.destination_identity, value.destination)
-      or not canonical_paths_match(reversal.src, value.source)
-      or not canonical_paths_match(reversal.dst, value.destination)
+      or not canonical_optional_paths_match(filesystem_action.src, source)
+      or not canonical_paths_match(filesystem_action.dst, value.destination)
     then
       return nil
     end
-  elseif value.kind == 'apply' then
-    if value.direction ~= 'apply' or not valid_stack(value.undo) or not valid_stack(value.redo) then return nil end
-    local filesystem_action = action.deserialize(value.action)
-    if not filesystem_action then return nil end
-    if filesystem_action.name == 'g' then
-      if
-        not exact_keys(value, {
-          format = true,
-          version = true,
-          kind = true,
-          direction = true,
-          undo = true,
-          redo = true,
-          action = true,
-          steps = true,
-          staging_count = true,
-          next_step = true,
-        }) or not valid_move_steps(value.steps, value.next_step, value.staging_count)
-      then
-        return nil
-      end
-    else
-      local source = value.source
-      if source == vim.NIL then source = nil end
-      if
-        not exact_keys(value, {
-          format = true,
-          version = true,
-          kind = true,
-          direction = true,
-          undo = true,
-          redo = true,
-          action = true,
-          source = true,
-          destination = true,
-          source_identity = true,
-          destination_identity = true,
-        })
-        or not recoverable_apply_kinds[filesystem_action.name]
-        or (value.source ~= vim.NIL and type(value.source) ~= 'string')
-        or type(value.destination) ~= 'string'
-        or not valid_identity(value.source_identity)
-        or not valid_identity(value.destination_identity)
-        or not identity_path_matches(value.source_identity, source)
-        or not identity_path_matches(value.destination_identity, value.destination)
-        or not canonical_optional_paths_match(filesystem_action.src, source)
-        or not canonical_paths_match(filesystem_action.dst, value.destination)
-      then
-        return nil
-      end
-    end
-  elseif value.kind == 'paste' then
-    local paste_action = action.deserialize(value.action)
-    if
-      not exact_keys(value, {
-        format = true,
-        version = true,
-        kind = true,
-        direction = true,
-        action = true,
-        source_action = true,
-        base_undo = true,
-        base_redo = true,
-        completed = true,
-        pending = true,
-      })
-      or (value.direction ~= 'apply' and value.direction ~= 'undo' and value.direction ~= 'redo')
-      or not paste_action
-      or paste_action.name ~= 'p'
-      or not valid_stack(value.base_undo)
-      or not valid_stack(value.base_redo)
-      or not valid_name_pairs(value.completed, paste_action)
-      or not valid_paste_pending(value.pending, paste_action)
-    then
-      return nil
-    end
-    if value.direction == 'apply' then
-      if value.source_action ~= vim.NIL then return nil end
-    else
-      if type(value.source_action) ~= 'string' then return nil end
-      local source_action = action.deserialize(value.source_action)
-      local source_stack = value.direction == 'undo' and value.base_undo or value.base_redo
-      local inverse = source_action and action.reverse(value.source_action)
-      local inverse_record = inverse and action.serialize(inverse)
-      if
-        not source_action
-        or source_action.name ~= 'up'
-        or source_stack[#source_stack] ~= value.source_action
-        or inverse_record ~= value.action
-      then
-        return nil
-      end
-    end
-  elseif value.kind == 'unpaste' then
-    local unpaste_action = action.deserialize(value.action)
-    if
-      not exact_keys(value, {
-        format = true,
-        version = true,
-        kind = true,
-        direction = true,
-        action = true,
-        undo = true,
-        redo = true,
-        items = true,
-        phase = true,
-        next_item = true,
-      })
-      or (value.direction ~= 'undo' and value.direction ~= 'redo')
-      or not unpaste_action
-      or unpaste_action.name ~= 'up'
-      or not valid_stack(value.undo)
-      or not valid_stack(value.redo)
-      or not valid_unpaste_items(value.items, value.next_item, value.phase, unpaste_action)
-    then
-      return nil
-    end
+  end
+  return value
+end
+
+local function parse_paste(value)
+  local paste_action = action.deserialize(value.action)
+  if
+    not exact_keys(value, {
+      format = true,
+      version = true,
+      kind = true,
+      direction = true,
+      action = true,
+      source_action = true,
+      base_undo = true,
+      base_redo = true,
+      completed = true,
+      pending = true,
+    })
+    or (value.direction ~= 'apply' and value.direction ~= 'undo' and value.direction ~= 'redo')
+    or not paste_action
+    or paste_action.name ~= 'p'
+    or not valid_stack(value.base_undo)
+    or not valid_stack(value.base_redo)
+    or not valid_name_pairs(value.completed, paste_action)
+    or not valid_paste_pending(value.pending, paste_action)
+  then
+    return nil
+  end
+  if value.direction == 'apply' then
+    if value.source_action ~= vim.NIL then return nil end
   else
+    if type(value.source_action) ~= 'string' then return nil end
+    local source_action = action.deserialize(value.source_action)
+    local source_stack = value.direction == 'undo' and value.base_undo or value.base_redo
+    local inverse = source_action and action.reverse(value.source_action)
+    local inverse_record = inverse and action.serialize(inverse)
+    if
+      not source_action
+      or source_action.name ~= 'up'
+      or source_stack[#source_stack] ~= value.source_action
+      or inverse_record ~= value.action
+    then
+      return nil
+    end
+  end
+  return value
+end
+
+local function parse_unpaste(value)
+  local unpaste_action = action.deserialize(value.action)
+  if
+    not exact_keys(value, {
+      format = true,
+      version = true,
+      kind = true,
+      direction = true,
+      action = true,
+      undo = true,
+      redo = true,
+      items = true,
+      phase = true,
+      next_item = true,
+    })
+    or (value.direction ~= 'undo' and value.direction ~= 'redo')
+    or not unpaste_action
+    or unpaste_action.name ~= 'up'
+    or not valid_stack(value.undo)
+    or not valid_stack(value.redo)
+    or not valid_unpaste_items(value.items, value.next_item, value.phase, unpaste_action)
+  then
     return nil
   end
   return value
+end
+
+local function decode_transaction(bytes)
+  local ok, value = pcall(vim.json.decode, bytes)
+  if not ok or type(value) ~= 'table' or value.format ~= M.FORMAT or value.version ~= M.VERSION then return nil end
+  return value
+end
+
+function M.parse(bytes)
+  local value = decode_transaction(bytes)
+  if not value then return nil end
+  if value.kind == 'stacks' then return parse_stacks(value) end
+  if value.kind == 'reverse' then return parse_reverse(value) end
+  if value.kind == 'apply' then return parse_apply(value) end
+  if value.kind == 'paste' then return parse_paste(value) end
+  if value.kind == 'unpaste' then return parse_unpaste(value) end
+  return nil
 end
 
 return M

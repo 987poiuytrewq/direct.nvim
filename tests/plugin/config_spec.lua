@@ -14,7 +14,6 @@ local function fresh_config(use_platform_default)
   package.loaded['direct.config.mappings'] = nil
   local config = require('direct.config')
   if not use_platform_default then
-    config.defaults.directory_separator = '/'
     config.options.directory_separator = '/'
   end
   return config

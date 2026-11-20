@@ -5,6 +5,11 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- Report all invalid options from one `setup()` call together in a single error
+  notification.
+
 ### Fixed
 
 - Keep a grouped rename permutation with the other recorded actions from the

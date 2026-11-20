@@ -254,11 +254,7 @@ These are the defaults:
 ```lua
 require('direct').setup({
   map_default_keys = true,           -- install the mappings above
-  mappings = {                       -- per-action key override or false to disable
-    expand = 'o',
-    undo = '<leader>u',
-    toggle_hidden = false,
-  },
+  mappings = {},                      -- per-action key override or false to disable
   show_hidden = true,                -- show dotfiles (toggle with `gh`)
   respect_gitignore = true,          -- hide Git-ignored entries (toggle with `gi`)
   collapse_single_entry_directories = true, -- show `a/b/c/` chains as one row (toggle with `gC`)
@@ -266,7 +262,7 @@ require('direct').setup({
   undo_confirm = 'elsewhere',        -- true, false, or confirm only outside this listing
   history_limit = 1000,              -- undo and redo steps per stack
   trash_retention = { max_age_days = 90 }, -- or false, or add max_size_bytes
-  directory_separator = package.config:sub(1, 1), -- '/' or '\\'
+  directory_separator = package.config:sub(1, 1), -- native platform separator
   max_recursive_expand_depth = false, -- limit for zO/zR; false = unlimited
   buffers = {
     reuse = true,        -- reuse an existing Direct listing for the same directory

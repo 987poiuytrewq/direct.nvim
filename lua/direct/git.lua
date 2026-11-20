@@ -142,16 +142,17 @@ end
 -- compare_snapshot(root[, ref]) returns the committed paths changed between
 -- the target ref's merge base with HEAD and HEAD. Working-tree/index changes
 -- are deliberately excluded, matching a pull-request file list.
-function M.compare_snapshot(root, ref, options)
+local function validate_compare_snapshot_args(root, ref, options)
   if type(root) ~= 'string' or root == '' then return nil, 'repository path is required' end
   if vim.fn.executable('git') ~= 1 then return nil, 'Git executable is unavailable' end
   if options ~= nil and type(options) ~= 'table' then return nil, 'Git diff options must be a table' end
-  options = options or {}
-  local include_uncommitted = options.include_uncommitted == true
   if ref ~= nil and (type(ref) ~= 'string' or ref:find('\0', 1, true)) then
     return nil, 'Git ref must be a non-empty string'
   end
+  return options and options.include_uncommitted == true or false
+end
 
+local function resolve_compare_snapshot_context(root, ref)
   local repo_output, repo_err = command({ '-C', root, 'rev-parse', '--show-toplevel' })
   if not repo_output then return nil, repo_err end
   local repo_root = normalize(trimmed_output(repo_output))
@@ -172,7 +173,17 @@ function M.compare_snapshot(root, ref, options)
   local output, diff_err =
     command({ '-C', repo_root, 'diff', '--no-ext-diff', '--name-status', '-z', '-M', base, head, '--' })
   if not output then return nil, 'cannot diff against ' .. ref .. ': ' .. tostring(diff_err) end
+  return {
+    root = repo_root,
+    ref = ref,
+    target = target,
+    head = head,
+    base = base,
+    diff_output = output,
+  }
+end
 
+local function parse_committed_entries(output)
   local fields, entries, index = nul_fields(output), {}, 1
   while index <= #fields do
     local status = fields[index]
@@ -194,71 +205,77 @@ function M.compare_snapshot(root, ref, options)
       }
     end
   end
+  return entries
+end
 
-  local uncommitted_deleted = {}
-  if include_uncommitted then
-    local status_output, status_err =
-      command({ '--no-optional-locks', '-C', repo_root, 'status', '--porcelain=v1', '-z', '--untracked-files=all' })
-    if not status_output then return nil, 'cannot read uncommitted Git changes: ' .. tostring(status_err) end
-    local committed_paths = {}
-    for _, entry in ipairs(entries) do
-      committed_paths[entry.path] = true
-    end
-    local function add_uncommitted_deleted(relative)
-      local path = normalize(vim.fs.joinpath(repo_root, relative))
-      uncommitted_deleted[path] = { kind = 'file' }
-      local parent = path:match('^(.*)/[^/]+$')
-      while parent do
-        uncommitted_deleted[parent] = { kind = 'directory' }
-        if parent == repo_root or parent == '/' then break end
-        parent = parent:match('^(.*)/[^/]+$')
+local function add_uncommitted_deleted(repo_root, deleted, relative)
+  local path = normalize(vim.fs.joinpath(repo_root, relative))
+  deleted[path] = { kind = 'file' }
+  local parent = path:match('^(.*)/[^/]+$')
+  while parent do
+    deleted[parent] = { kind = 'directory' }
+    if parent == repo_root or parent == '/' then break end
+    parent = parent:match('^(.*)/[^/]+$')
+  end
+end
+
+local function merge_uncommitted_entries(repo_root, entries)
+  local status_output, status_err =
+    command({ '--no-optional-locks', '-C', repo_root, 'status', '--porcelain=v1', '-z', '--untracked-files=all' })
+  if not status_output then return nil, 'cannot read uncommitted Git changes: ' .. tostring(status_err) end
+  local committed_paths, uncommitted_deleted = {}, {}
+  for _, entry in ipairs(entries) do
+    committed_paths[entry.path] = true
+  end
+
+  local fields, index = nul_fields(status_output), 1
+  while index <= #fields do
+    local record = fields[index]
+    index = index + 1
+    if #record >= 4 then
+      local xy, relative = record:sub(1, 2), record:sub(4)
+      local old_path
+      local code
+      if xy == '??' then
+        code = 'A'
+      elseif xy:find('R', 1, true) then
+        code = 'R'
+        old_path = fields[index]
+        index = index + 1
+      elseif xy:find('C', 1, true) then
+        code = 'C'
+        old_path = fields[index]
+        index = index + 1
+      elseif xy:find('A', 1, true) then
+        code = 'A'
+      elseif xy:find('D', 1, true) then
+        code = 'D'
+      elseif xy:find('T', 1, true) then
+        code = 'T'
+      elseif xy:find('M', 1, true) then
+        code = 'M'
+      elseif xy:find('U', 1, true) then
+        code = 'U'
       end
-    end
-    local status_fields, status_index = nul_fields(status_output), 1
-    while status_index <= #status_fields do
-      local record = status_fields[status_index]
-      status_index = status_index + 1
-      if #record >= 4 then
-        local xy, relative = record:sub(1, 2), record:sub(4)
-        local old_path
-        local code
-        if xy == '??' then
-          code = 'A'
-        elseif xy:find('R', 1, true) then
-          code = 'R'
-          old_path = status_fields[status_index]
-          status_index = status_index + 1
-        elseif xy:find('C', 1, true) then
-          code = 'C'
-          old_path = status_fields[status_index]
-          status_index = status_index + 1
-        elseif xy:find('A', 1, true) then
-          code = 'A'
-        elseif xy:find('D', 1, true) then
-          code = 'D'
-        elseif xy:find('T', 1, true) then
-          code = 'T'
-        elseif xy:find('M', 1, true) then
-          code = 'M'
-        elseif xy:find('U', 1, true) then
-          code = 'U'
+      if code and relative ~= '' then
+        if not committed_paths[relative] then
+          entries[#entries + 1] = {
+            path = relative,
+            old_path = old_path,
+            status = code,
+            uncommitted = true,
+          }
+          committed_paths[relative] = true
         end
-        if code and relative ~= '' then
-          if not committed_paths[relative] then
-            entries[#entries + 1] = {
-              path = relative,
-              old_path = old_path,
-              status = code,
-              uncommitted = true,
-            }
-            committed_paths[relative] = true
-          end
-          if code == 'D' then add_uncommitted_deleted(relative) end
-          if code == 'R' and old_path then add_uncommitted_deleted(old_path) end
-        end
+        if code == 'D' then add_uncommitted_deleted(repo_root, uncommitted_deleted, relative) end
+        if code == 'R' and old_path then add_uncommitted_deleted(repo_root, uncommitted_deleted, old_path) end
       end
     end
   end
+  return uncommitted_deleted
+end
+
+local function aggregate_snapshot_paths(repo_root, entries, uncommitted_deleted)
   table.sort(entries, function(a, b)
     if a.path == b.path then return a.status < b.status end
     return a.path < b.path
@@ -290,16 +307,35 @@ function M.compare_snapshot(root, ref, options)
   end
   return {
     root = repo_root,
-    ref = ref,
-    target = target,
-    base = base,
-    head = head,
     entries = entries,
     paths = diff_paths,
     deleted = deleted,
     force_deleted = true,
-    include_uncommitted = include_uncommitted,
   }
+end
+
+function M.compare_snapshot(root, ref, options)
+  local include_uncommitted, validation_err = validate_compare_snapshot_args(root, ref, options)
+  if include_uncommitted == nil then return nil, validation_err end
+
+  local context, context_err = resolve_compare_snapshot_context(root, ref)
+  if not context then return nil, context_err end
+
+  local entries = parse_committed_entries(context.diff_output)
+  local uncommitted_deleted = {}
+  if include_uncommitted then
+    local deleted, status_err = merge_uncommitted_entries(context.root, entries)
+    if not deleted then return nil, status_err end
+    uncommitted_deleted = deleted
+  end
+
+  local snapshot = aggregate_snapshot_paths(context.root, entries, uncommitted_deleted)
+  snapshot.ref = context.ref
+  snapshot.target = context.target
+  snapshot.base = context.base
+  snapshot.head = context.head
+  snapshot.include_uncommitted = include_uncommitted
+  return snapshot
 end
 
 local function normalize_status(xy)

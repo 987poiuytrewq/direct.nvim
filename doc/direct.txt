@@ -11,6 +11,7 @@ CONTENTS                                                 *direct.vim-contents*
      3. Quick start .................................. |direct.vim-quickstart|
      4. Navigating ..................................... |direct.vim-navigate|
      5. Editing ............................................ |direct.vim-edit|
+        Save refusal codes ............................... |direct-refusals|
      6. Undo and redo ...................................... |direct.vim-undo|
      7. Yank and paste ..................................... |direct.vim-yank|
      8. Git ................................................. |direct.vim-git|
@@ -285,6 +286,128 @@ a save, including inside expanded directories. A successful save re-lists and
 displays the current contents. Refusals name the conflicting source or
 destination and say whether to restore the source, choose another destination,
 or use |:DirectList| with `!` to discard an unidentifiable edit.
+
+Save refusal codes ~
+                                                          *direct-refusals*
+
+Every save refusal starts with a stable `E-DIRECT-...` code. When direct.vim
+can identify an offending buffer row, it moves the cursor there and adds a
+diagnostic. The diagnostic clears on the next text change. Global checks have
+no row diagnostic when there is no honest row to point to.
+
+These codes describe checks made before direct.vim changes the filesystem:
+
+    E-DIRECT-SYNC-BUSY
+        Another Direct operation is running. Wait for it to finish, then save.
+    E-DIRECT-SYNC-FILTER-SNAPSHOT
+        The listing's filter settings are missing or changed. Re-list and
+        review the edits.
+    E-DIRECT-SYNC-GIT
+        Git could not verify ignore rules or repository context. Re-list after
+        changing rules, retry when Git is available, or use `gi` to disable
+        Git-ignore filtering.
+    E-DIRECT-SYNC-GIT-IGNORED
+        The save would change a Git-ignored entry. Re-list or use `gi` to
+        disable Git-ignore filtering.
+    E-DIRECT-SYNC-DIRECTORY-READ
+        The directory could not be checked safely. Check its path and
+        permissions, then re-list.
+    E-DIRECT-SYNC-COLLAPSED-VIEW
+        A collapsed-folder view could not be verified. Re-list, or expand the
+        directory before editing it.
+    E-DIRECT-SYNC-HISTORY
+        History or its lock could not be checked. Resolve the history problem
+        and try again.
+    E-DIRECT-SYNC-PLAN-STALE
+        The plan changed while waiting for a language-server rename response.
+        Review the listing and save again.
+    E-DIRECT-SYNC-CANCELLED
+        A `DirectSyncPre` handler cancelled the save. Check the handler reason
+        and save again when ready.
+    E-DIRECT-SYNC-LISTING-CHANGED
+        A `DirectSyncPre` handler changed the listing. Review it and save
+        again.
+    E-DIRECT-SYNC-UNCLASSIFIED
+        A safety check could not be classified. Re-list and report this code
+        if it persists; current refusal sites should use a specific code.
+
+Row identity and entry names ~
+
+    E-DIRECT-ROW-IDENTITY
+        The row could not be identified safely. Undo the row edit and make it
+        again as a filename change, or use |:DirectList| with `!`.
+    E-DIRECT-ROW-AMBIGUOUS
+        The buffer does not identify which entry a row represents, often
+        after duplicate rows. Separate the edits or use |:DirectList| with
+        `!`.
+    E-DIRECT-ROW-STALE
+        The edited source changed or disappeared after listing. Restore it or
+        use |:DirectList| with `!` before editing again.
+    E-DIRECT-ROW-UNSAFE
+        The name or path component is not supported. Use a valid single
+        filename component.
+    E-DIRECT-ROW-CONFLICT
+        Rows resolve to the same destination. Give them distinct names or
+        remove the conflicting row.
+
+Expanded-tree edits ~
+
+    E-DIRECT-TREE-IDENTITY
+        An expanded-folder row identity is missing or duplicated. Restore the
+        row structure, or use |:DirectList| with `!`.
+    E-DIRECT-TREE-BASELINE
+        A child row no longer matches the captured folder listing. Restore it
+        or re-list before editing again.
+    E-DIRECT-TREE-STRUCTURE
+        The child order or nesting is invalid. Restore the parent and child
+        row order, then save.
+    E-DIRECT-TREE-INDENT
+        Indentation does not use groups of |direct-indent_size| spaces.
+    E-DIRECT-TREE-EMPTY
+        A child row has no name. Restore the name or remove the empty row.
+    E-DIRECT-TREE-PARENT
+        A child has no valid directory parent. Restore its parent row and
+        nesting.
+    E-DIRECT-TREE-COLLAPSED
+        Child rows under a collapsed directory cannot be edited. Expand it
+        first.
+    E-DIRECT-TREE-DUPLICATE
+        Two siblings have the same name. Give each entry in that folder a
+        unique name.
+    E-DIRECT-TREE-AMBIGUOUS
+        Child rows cannot be paired with their original entries. Restore the
+        marked rows or make rename and create/delete edits separately.
+    E-DIRECT-TREE-TYPE
+        An expanded directory cannot change to a file or another entry type.
+        Undo the type change or collapse the directory first.
+    E-DIRECT-TREE-DESTINATION
+        A child has no valid destination directory. Restore a directory parent
+        row and save again.
+    E-DIRECT-TREE-LIMITATION
+        Moving a directory and editing its descendants cannot be combined
+        safely in one save. Move it first, then edit its children in a
+        separate save.
+
+Destinations and hidden entries ~
+
+    E-DIRECT-PATH-PARENT
+        A path component used as a parent is not a directory. Choose a valid
+        parent folder.
+    E-DIRECT-PATH-OCCUPIED
+        The destination already exists. Choose another name or use
+        |:DirectList| with `!` to discard the edit.
+    E-DIRECT-PATH-CONFLICT
+        Multiple actions target the same path. Choose distinct destinations.
+    E-DIRECT-DIRECTORY-HIDDEN
+        Moving or deleting this directory would affect a hidden, ignored, or
+        otherwise unlisted entry. Show or preserve that entry, or change the
+        filters before retrying.
+
+A refusal is different from an action failure. If some filesystem actions have
+already run, direct.vim reports the applied and failed actions and re-lists
+the filesystem; it does not label that partial result with a refusal code. A
+workspace-edit failure may also follow edits already applied by a language
+server.
 
 Text undo of expansions ~
 

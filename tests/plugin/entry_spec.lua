@@ -311,6 +311,7 @@ H.describe('entry: direct-buffer guard', function()
       'list_cwd',
       'open',
       'open_parent_expanded',
+      'show_help',
       'expand',
       'collapse',
       'toggle',
@@ -412,6 +413,7 @@ H.describe('entry: direct-buffer guard', function()
     local cases = {
       { name = 'DirectUndo', call = function(api) return api.undo() end },
       { name = 'DirectRedo', call = function(api) return api.redo() end },
+      { name = 'show key help', call = function(api) return api.show_help() end },
       { name = 'DirectGitRestore', call = function(api) return api.restore_git() end },
       { name = 'DirectFoldAll', call = function(api) return api.fold_all() end },
       { name = 'DirectUnfoldAll', call = function(api) return api.unfold_all() end },

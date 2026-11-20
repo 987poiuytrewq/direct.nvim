@@ -5,6 +5,11 @@ Notable changes to direct.vim are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Show active, overridden Direct listing mappings in a floating help window with
+  `g?`; disabled mappings are omitted.
+
 ### Changed
 
 - Report all invalid options from one `setup()` call together in a single error

@@ -104,6 +104,11 @@ function M.open_parent_expanded()
   return buffer.expand()
 end
 
+function M.show_help()
+  if not guard('show key help') then return nil end
+  return require('direct.key_help').show()
+end
+
 function M.expand()
   if not guard('expand') then return nil end
   return require('direct.buffer.buffer').expand()

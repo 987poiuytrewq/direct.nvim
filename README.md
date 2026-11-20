@@ -215,6 +215,7 @@ Mappings are buffer-local to direct listings, except the global `-`.
 | `z-`             | Go to the parent and expand the directory you left  |
 | `<CR>`, double-click | Open the file or directory                      |
 | `<C-s>` `<C-v>` `<C-t>` | Open in a horizontal split, vertical split, or tab |
+| `g?`             | Show the active mappings for this listing           |
 | `zo` `zc` `za`   | Expand, collapse or toggle one directory            |
 | `zO` `zC` `zA`   | The same, recursively                               |
 | `zR` `zM`        | Expand or collapse everything                       |
@@ -337,8 +338,9 @@ Explicit split options continue to preserve the source.
 `mappings` accepts action names such as `open`, `undo`, `redo`, `yank`,
 `paste`, `toggle_hidden`, `toggle_gitignore`, `git_add`, `git_diff`, `next_change`,
 `open_horizontal`, `open_vertical`, `open_tab`, `expand`, `collapse`, `toggle`,
-and their recursive variants. A non-empty key string overrides that action's
-default; `false` disables its physical default.
+`show_help`, and their recursive variants. A non-empty key string overrides
+that action's default; `false` disables its physical default. `g?` displays the
+currently active buffer-local mappings; disabled mappings are omitted.
 Every action also has a `<Plug>(direct-...)` mapping for composing your own
 bindings. For example:
 

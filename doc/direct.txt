@@ -841,7 +841,7 @@ mappings                table (default: `{}`)
     Action names include `open`, `open_horizontal`, `open_vertical`, `open_tab`,
     `undo`, `redo`, `yank`, `paste`, `toggle_hidden`, `toggle_gitignore`,
     `toggle_directory_collapse`, `git_add`, `git_unstage`, `git_restore`,
-    `git_diff`, `next_change`, `expand`, `collapse`, `toggle`, and the recursive
+    `git_diff`, `next_change`, `show_help`, `expand`, `collapse`, `toggle`, and the recursive
     folder actions. Each action has a `<Plug>(direct-...)` mapping.
     `map_default_keys = false` suppresses defaults but not explicit overrides
     or `<Plug>` mappings.
@@ -1274,6 +1274,7 @@ In a listing (buffer-local):
     n       <C-s>           open in a horizontal split
     n       <C-v>           open in a vertical split
     n       <C-t>           open in a new tab
+    n       g?              show active mappings for this listing
     n       <2-LeftMouse>   open the entry under the cursor
     n       <LeftMouse>     on a folder icon, expand or collapse it
     n       -               go to the parent directory
@@ -1330,6 +1331,7 @@ The functions in `require('direct')` mirror the commands:
 
     Function                    Equivalent ~
     `setup(opts)`                 |direct.setup()|
+    `show_help()`                  `g?` in a Direct listing
     `list(path)`                  |:DirectList|
     `list_buffer()`               |:DirectListBuffer|
     `list_cwd()`                  |:DirectListCwd|

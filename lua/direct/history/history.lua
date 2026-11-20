@@ -40,10 +40,14 @@ local function notify_unavailable(err)
   M.ui.notify('direct: history unavailable: ' .. tostring(err), vim.log.levels.ERROR)
 end
 
-function M.with_lock(callback)
+function M.with_lock(callback, on_acquire_failure)
   local acquired, acquire_err = M.lock.acquire()
   if not acquired then
-    notify_unavailable(acquire_err)
+    if on_acquire_failure then
+      on_acquire_failure(acquire_err)
+    else
+      notify_unavailable(acquire_err)
+    end
     return nil, acquire_err
   end
   local ok, first, second = xpcall(callback, debug.traceback)

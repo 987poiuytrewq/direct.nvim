@@ -11,21 +11,21 @@ LIMIT = 120
 # Current >120-line inventory on the A38 guard branch. Remove an entry when its
 # function is refactored; do not add new entries to make a failing function pass.
 ALLOWLIST = {
-    "lua/direct/buffer/sync.lua:local sync_locked@226": 927,
+    "lua/direct/buffer/sync.lua:local sync_locked@287": 910,
     "lua/direct/history/reverse.lua:local build@13": 678,
-    "lua/direct/buffer/tree.lua:local edited_subtrees@268": 605,
+    "lua/direct/buffer/tree.lua:local edited_subtrees@365": 580,
     "lua/direct/history/reverse.lua:M._reverse_async@220": 461,
     "lua/direct/buffer/list.lua:M.list_buffer@255": 321,
-    "lua/direct/buffer/sync_plan.lua:local classify_identity@20": 270,
+    "lua/direct/buffer/sync_plan.lua:local classify_identity@92": 228,
     "lua/direct/history/trash_refs.lua:<anonymous>@4": 267,
     "lua/direct/history/reverse.lua:<anonymous>@450": 223,
-    "lua/direct/buffer/tree.lua:local children_integrity@41": 222,
+    "lua/direct/buffer/tree.lua:local children_integrity@163": 138,
     "lua/direct/buffer/undo_state.lua:local reconcile_undone_materialization@323": 190,
-    "lua/direct/buffer/sync_plan.lua:local build_actions@376": 179,
+    "lua/direct/buffer/sync_plan.lua:local build_actions@408": 177,
     "lua/direct/buffer/undo_state.lua:local restore_undone_collapse@151": 161,
     "lua/direct/buffer/row_state.lua:M.expand@255": 144,
     "lua/direct/buffer/buffer.lua:local set_options@224": 137,
-    "lua/direct/history/history.lua:M.apply_async@1080": 132,
+    "lua/direct/history/history.lua:M.apply_async@1084": 132,
     "lua/direct/file_operations.lua:local resource_expectations@272": 126,
     "lua/direct/buffer/listing.lua:local hidden_descendant@355": 124,
 }

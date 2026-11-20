@@ -13,6 +13,78 @@ local dirs_then_name = rows.dirs_then_name
 local lstat = listing.lstat
 local path_without_marker = listing.path_without_marker
 
+local function planner_refusal(reason, line, path) return nil, reason, { line = line, path = path } end
+
+local function current_line_for_id(current_rows, id)
+  for _, row in ipairs(current_rows or {}) do
+    if row.id == id then return row.row end
+  end
+end
+
+local function action_build_refusal(reason, path, line) return nil, nil, reason, { path = path, line = line } end
+
+local function recover_invalid_root_ids(original_rows, current_rows, invalid_root_ids)
+  local old_roots, current_roots, current_by_id = {}, {}, {}
+  for _, row in ipairs(original_rows or {}) do
+    if not row.deleted_kind then old_roots[#old_roots + 1] = row end
+  end
+  for _, row in ipairs(current_rows or {}) do
+    current_roots[#current_roots + 1] = row
+    if row.id ~= nil then current_by_id[row.id] = true end
+  end
+  local current_index = {}
+  for index, row in ipairs(current_roots) do
+    if row.id ~= nil then current_index[row.id] = index end
+  end
+  local anchors = {}
+  for old_index, row in ipairs(old_roots) do
+    local new_index = current_index[row.id]
+    if new_index then anchors[#anchors + 1] = { old = old_index, new = new_index } end
+  end
+  local reordered = false
+  for index = 2, #anchors do
+    if anchors[index].new <= anchors[index - 1].new then
+      reordered = true
+      break
+    end
+  end
+  if reordered then return end
+
+  local old_after, new_after = 0, 0
+  local function pair_interval(old_before, new_before)
+    local removed, inserted = {}, {}
+    for index = old_after + 1, old_before - 1 do
+      local row = old_roots[index]
+      if invalid_root_ids[row.id] and not current_by_id[row.id] then removed[#removed + 1] = row end
+    end
+    for index = new_after + 1, new_before - 1 do
+      local row = current_roots[index]
+      if row.id == nil then inserted[#inserted + 1] = row end
+    end
+    if #removed == 0 or #removed ~= #inserted then return end
+    for index = 1, #removed do
+      local old_name, new_name = removed[index].name, inserted[index].line
+      local relative = paths.strip_directory_marker(new_name)
+      if
+        old_name == new_name
+        or is_dir_line(old_name) ~= is_dir_line(new_name)
+        or relative:find(directory_separator(), 1, true)
+        or (directory_separator() == '\\' and relative:find('/', 1, true))
+      then
+        return
+      end
+    end
+    for index, row in ipairs(inserted) do
+      row.id = removed[index].id
+    end
+  end
+  for _, anchor in ipairs(anchors) do
+    pair_interval(anchor.old, anchor.new)
+    old_after, new_after = anchor.old, anchor.new
+  end
+  pair_interval(#old_roots + 1, #current_roots + 1)
+end
+
 do
   -- Use extmark identities, not row position or set cardinality, to classify a
   -- root-level edit. `original_rows` are the rows captured at listing time;
@@ -29,7 +101,9 @@ do
     for _, line in ipairs(expected or {}) do
       local path = entry_path(root, line)
       local key = paths.canonical(path)
-      if expected_by_path[key] then return nil, 'directory changed on disk since it was listed' end
+      if expected_by_path[key] then
+        return planner_refusal('directory changed on disk since it was listed', nil, path)
+      end
       local entry = {
         path = path,
         line = line,
@@ -88,66 +162,7 @@ do
     end
 
     if not text_undo_mode and invalid_root_ids then
-      local old_roots, current_roots, current_by_id = {}, {}, {}
-      for _, row in ipairs(original_rows or {}) do
-        if not row.deleted_kind then old_roots[#old_roots + 1] = row end
-      end
-      for _, row in ipairs(current_rows or {}) do
-        current_roots[#current_roots + 1] = row
-        if row.id ~= nil then current_by_id[row.id] = true end
-      end
-      local current_index = {}
-      for index, row in ipairs(current_roots) do
-        if row.id ~= nil then current_index[row.id] = index end
-      end
-      local anchors = {}
-      for old_index, row in ipairs(old_roots) do
-        local new_index = current_index[row.id]
-        if new_index then anchors[#anchors + 1] = { old = old_index, new = new_index } end
-      end
-      local reordered = false
-      for index = 2, #anchors do
-        if anchors[index].new <= anchors[index - 1].new then
-          reordered = true
-          break
-        end
-      end
-      if not reordered then
-        local old_after, new_after = 0, 0
-        local function pair_interval(old_before, new_before)
-          local removed, inserted = {}, {}
-          for index = old_after + 1, old_before - 1 do
-            local row = old_roots[index]
-            if invalid_root_ids[row.id] and not current_by_id[row.id] then removed[#removed + 1] = row end
-          end
-          for index = new_after + 1, new_before - 1 do
-            local row = current_roots[index]
-            if row.id == nil then inserted[#inserted + 1] = row end
-          end
-          if #removed == 0 or #removed ~= #inserted then return end
-          for index = 1, #removed do
-            local old_name = removed[index].name
-            local new_name = inserted[index].line
-            local relative = paths.strip_directory_marker(new_name)
-            if
-              old_name == new_name
-              or is_dir_line(old_name) ~= is_dir_line(new_name)
-              or relative:find(directory_separator(), 1, true)
-              or (directory_separator() == '\\' and relative:find('/', 1, true))
-            then
-              return
-            end
-          end
-          for index, row in ipairs(inserted) do
-            row.id = removed[index].id
-          end
-        end
-        for _, anchor in ipairs(anchors) do
-          pair_interval(anchor.old, anchor.new)
-          old_after, new_after = anchor.old, anchor.new
-        end
-        pair_interval(#old_roots + 1, #current_roots + 1)
-      end
+      recover_invalid_root_ids(original_rows, current_rows, invalid_root_ids)
     end
 
     local current_by_id = {}
@@ -157,9 +172,17 @@ do
 
     for _, row in ipairs(original_rows or {}) do
       if not row.deleted_kind then
-        if row.id == nil or original_by_id[row.id] then return nil, 'root row identities are invalid or duplicated' end
+        if row.id == nil or original_by_id[row.id] then
+          return planner_refusal(
+            'root row identities are invalid or duplicated',
+            current_line_for_id(current_rows, row.id),
+            row.path
+          )
+        end
         local key = paths.canonical(row.path)
-        if original_at(row.path) then return nil, 'root row paths are ambiguous' end
+        if original_at(row.path) then
+          return planner_refusal('root row paths are ambiguous', current_line_for_id(current_rows, row.id), row.path)
+        end
         original_by_id[row.id] = row
         original_by_path[key] = row
         local name = basename(row.path)
@@ -197,10 +220,11 @@ do
             or not on_disk.identity
             or not fs.path_identities_match(original.identity, on_disk.identity)
           then
-            return nil,
-              'directory changed on disk since it was listed: '
-                .. tostring(original.path)
-                .. '; restore the entry or use :DirectList! to discard the edit and redo it'
+            return planner_refusal(
+              'directory changed on disk since it was listed',
+              current_row and current_row.row or nil,
+              original.path
+            )
           end
         end
       end
@@ -209,17 +233,25 @@ do
     local moves, removed, collapsed_removals, added, seen_ids, seen_lines = {}, {}, {}, {}, {}, {}
     for _, row in ipairs(current_rows or {}) do
       local line = row.line
-      if type(line) ~= 'string' then return nil, 'root row identity is unavailable' end
+      if type(line) ~= 'string' then return planner_refusal('root row identity is unavailable', row.row) end
       if seen_lines[line] then return { kind = 'AMBIGUOUS', reason = 'duplicate' } end
       seen_lines[line] = true
       if row.id ~= nil then
         local original = original_by_id[row.id]
-        if not original then return nil, 'root row identity is unavailable; re-list this directory' end
-        if seen_ids[row.id] then return nil, 'root row identities are invalid or duplicated' end
+        if not original then
+          return planner_refusal(
+            'root row identity is unavailable; re-list this directory',
+            row.row,
+            entry_path(root, line)
+          )
+        end
+        if seen_ids[row.id] then
+          return planner_refusal('root row identities are invalid or duplicated', row.row, entry_path(root, line))
+        end
         seen_ids[row.id] = true
         if line ~= original.name then
           local component_moves, component_err = collapsed_component_moves(original, line)
-          if component_err then return nil, component_err end
+          if component_err then return planner_refusal(component_err, row.row, entry_path(root, line)) end
           if component_moves then
             for _, move in ipairs(component_moves) do
               moves[#moves + 1] = move
@@ -233,10 +265,7 @@ do
         local original, on_disk = original_at(path), expected_at(path)
         if original and on_disk and on_disk.line == line then
           if text_undo_mode then
-            return nil,
-              'root row identity is unavailable after text undo or redo; '
-                .. 'Direct cannot safely identify this edit; restore the marked listing state '
-                .. 'or use :DirectList! to discard it and redo the change'
+            return planner_refusal('root row identity is unavailable after text undo or redo', row.row, path)
           end
           -- A same-text replacement can invalidate a root extmark. When the
           -- exact original path is still present, this is a no-op, not a
@@ -250,7 +279,7 @@ do
               and is_dir_line(candidate.name) == is_dir_line(line)
               and fs.same_entry(path, candidate.path)
             then
-              if alias then return nil, 'root row identity is ambiguous' end
+              if alias then return planner_refusal('root row identity is ambiguous', row.row, path) end
               alias = candidate
             end
           end
@@ -266,10 +295,11 @@ do
     if text_undo_mode and #added > 0 then
       for _, original in ipairs(original_rows or {}) do
         if not original.deleted_kind and not seen_ids[original.id] then
-          return nil,
-            'root row identity is unavailable after text undo or redo; '
-              .. 'Direct cannot safely identify this edit; restore the marked listing state '
-              .. 'or use :DirectList! to discard it and redo the change'
+          return planner_refusal(
+            'root row identity is unavailable after text undo or redo',
+            current_line_for_id(current_rows, original.id),
+            original.path
+          )
         end
       end
     end
@@ -337,21 +367,23 @@ do
   end
 
   -- Kept visible for platform-independent unit coverage of Win32 component rules.
-  -- first_unsafe(root, lines) -> { path, reason } for the first line whose path
-  -- is unrepresentable, else nil. Both the edited lines and the on-disk listing
-  -- are checked: either side can be an OS-chosen name.
-  local function first_unsafe(root, lines, nested_allowed)
-    for _, line in ipairs(lines) do
+  -- first_unsafe(root, lines) -> { path, reason, line } for the first line whose
+  -- path is unrepresentable, else nil. Only edited buffer rows have a trustworthy
+  -- line number; the on-disk listing is also checked for OS-chosen names.
+  local function first_unsafe(root, lines, nested_allowed, buffer_rows)
+    for row, line in ipairs(lines) do
       local component_error
       if nested_allowed and nested_allowed[line] then
         component_error = nested_path_reason(line)
       else
         component_error = component_reason(line)
       end
-      if component_error then return { path = line, reason = component_error } end
+      if component_error then
+        return { path = line, reason = component_error, line = buffer_rows and row - 1 or nil }
+      end
       local path = entry_path(root, line)
       local reason = unsafe_path_reason(path)
-      if reason ~= nil then return { path = path, reason = reason } end
+      if reason ~= nil then return { path = path, reason = reason, line = buffer_rows and row - 1 or nil } end
     end
     return nil
   end
@@ -397,7 +429,7 @@ do
         local key = normalized(entry_path(root, line))
         local kind = is_dir_line(line) and 'directory' or 'file'
         if planned[key] ~= nil and planned[key] ~= kind then
-          return nil, nil, 'conflicting entries target the same path: ' .. key
+          return action_build_refusal('conflicting entries target the same path: ' .. key, key)
         end
         planned[key] = kind
       end
@@ -411,13 +443,15 @@ do
         for i = 1, parent_count do
           parent = fs.join(parent, parts[i])
           local key = normalized(parent)
-          if planned[key] == 'file' then return nil, nil, 'path parent is not a directory: ' .. parent end
+          if planned[key] == 'file' then
+            return action_build_refusal('path parent is not a directory: ' .. parent, parent)
+          end
           if fs.taken(parent) then
             if not fs.is_dir(parent) then
               if plan.vacated and plan.vacated[key] then
                 create_dirs[key] = parent
               else
-                return nil, nil, 'path parent is not a directory: ' .. parent
+                return action_build_refusal('path parent is not a directory: ' .. parent, parent)
               end
             elseif plan.vacated and plan.vacated[key] then
               create_dirs[key] = parent
@@ -428,11 +462,7 @@ do
         end
         local target_key = normalized(path)
         if fs.taken(path) and not (plan.vacated and plan.vacated[target_key]) then
-          return nil,
-            nil,
-            'destination already exists: '
-              .. path
-              .. '; choose another name or use :DirectList! to discard and redo the edit'
+          return action_build_refusal('destination already exists: ' .. path, path)
         end
         if is_directory then
           create_dirs[target_key] = path
@@ -472,9 +502,9 @@ do
           local removals = { action_mod.RemoveDirectory(component_paths[#component_paths]) }
           for index = #component_paths - 1, 1, -1 do
             local directory = paths.strip_trailing_separator(component_paths[index])
-            local scan, scan_err = vim.uv.fs_scandir(directory)
+            local scan = vim.uv.fs_scandir(directory)
             if not scan then
-              return nil, nil, 'cannot inspect collapsed parent directory: ' .. directory .. ': ' .. tostring(scan_err)
+              return action_build_refusal('cannot inspect collapsed parent directory: ' .. directory, directory)
             end
             local only_child = false
             local other_child = false
@@ -512,17 +542,17 @@ do
         actions[#actions + 1] = action_mod.Move(src, dst)
       end
     elseif plan.kind == 'IDENTITY' then
-      local removals, deleted_paths, remove_err = build_actions(root, {
+      local removals, deleted_paths, remove_err, remove_refusal = build_actions(root, {
         kind = 'DELETE',
         removed = plan.removed or {},
         collapsed_removals = plan.collapsed_removals,
       })
-      if not removals then return nil, nil, remove_err end
-      local moves, _, move_err = build_actions(root, {
+      if not removals then return nil, nil, remove_err, remove_refusal end
+      local moves, _, move_err, move_refusal = build_actions(root, {
         kind = 'RENAME',
         moves = plan.moves or {},
       })
-      if not moves then return nil, nil, move_err end
+      if not moves then return nil, nil, move_err, move_refusal end
       local vacated = {}
       local function add_vacated_sources(action)
         if action.name == 'g' or action.name == 'batch' then
@@ -539,12 +569,12 @@ do
       for _, act in ipairs(moves) do
         if act.src then vacated[paths.canonical(act.src)] = true end
       end
-      local creates, _, create_err = build_actions(root, {
+      local creates, _, create_err, create_refusal = build_actions(root, {
         kind = 'ADD',
         added = plan.added or {},
         vacated = vacated,
       })
-      if not creates then return nil, nil, create_err end
+      if not creates then return nil, nil, create_err, create_refusal end
       vim.list_extend(actions, removals)
       vim.list_extend(actions, moves)
       vim.list_extend(actions, creates)

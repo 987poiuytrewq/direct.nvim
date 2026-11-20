@@ -341,9 +341,10 @@ H.describe('sync: mixed root edits', function()
     local ok, reason = listing:sync()
 
     H.assert_nil(ok, 'a newly occupied rename destination is refused')
-    H.assert_true(tostring(reason):find('destination already exists', 1, true) ~= nil, tostring(reason))
+    H.assert_true(tostring(reason):find('E-DIRECT-PATH-OCCUPIED', 1, true) ~= nil, tostring(reason))
+    H.assert_true(tostring(reason):find('Line 1:', 1, true) ~= nil, tostring(reason))
     H.assert_true(
-      tostring(reason):find('choose another name', 1, true) ~= nil,
+      tostring(reason):find('Choose another name', 1, true) ~= nil,
       'the refusal offers a safe next step: ' .. tostring(reason)
     )
     H.assert_eq(vim.fn.readfile(vim.fs.joinpath(ws, 'old.txt')), { 'original' }, 'the rename source remains untouched')
@@ -543,10 +544,11 @@ H.describe('sync: mixed root edits', function()
     local ok, reason = buf:sync()
 
     H.assert_false(ok == true, 'nothing was applied')
-    H.assert_eq(reason, 'duplicate', 'the reason')
+    H.assert_true(reason:find('E-DIRECT-ROW-AMBIGUOUS', 1, true) ~= nil, 'the reason has a stable code')
+    H.assert_true(reason:find('Line 2:', 1, true) ~= nil, 'the second duplicate is identified')
     H.assert_fs_eq(ws, { 'a.txt', 'b.txt' }, 'no filesystem change')
     H.assert_eq(history_lines('undo.log'), {}, 'no history was written')
     H.assert_true(vim.bo.modified, 'the buffer stays modified')
-    H.assert_notified('Ambiguous buffer content (duplicate)', vim.log.levels.ERROR)
+    H.assert_notified('E-DIRECT-ROW-AMBIGUOUS', vim.log.levels.ERROR)
   end)
 end)

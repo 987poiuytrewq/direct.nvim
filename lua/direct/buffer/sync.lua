@@ -15,6 +15,7 @@ local ui = require('direct.ui')
 local rows = require('direct.buffer.rows')
 local listing = require('direct.buffer.listing')
 local buffer_state = require('direct.buffer.state')
+local sync_refusals = require('direct.buffer.sync_refusals')
 
 local states = buffer_state.states
 local namespace = buffer_state.namespace
@@ -66,6 +67,62 @@ local function children_integrity(...) return tree_plan_call('children_integrity
 local function edited_subtrees(...) return tree_plan_call('edited_subtrees', ...) end
 
 local function collapse_single_entry_paths(...) return buffer_state.collapse_single_entry_paths(...) end
+
+local function refuse_sync(bufnr, reason, context, level)
+  context = context or {}
+  local code = context.code or sync_refusals.code_for_reason(reason)
+  local message = sync_refusals.report(bufnr, code, context, level)
+  return nil, message
+end
+
+local function line_for_path(root, lines, path)
+  if type(path) ~= 'string' then return nil end
+  local target = paths.canonical(path)
+  for row, line in ipairs(lines or {}) do
+    local entries = { line }
+    local unindented = line:match('^ +(.+)$')
+    if unindented then entries[#entries + 1] = unindented end
+    for _, entry_line in ipairs(entries) do
+      local entry = listing.entry_path(root, entry_line)
+      if type(entry) == 'string' and paths.canonical(entry) == target then return row - 1 end
+    end
+  end
+  return nil
+end
+
+local function line_for_visible_name(lines, name, occurrence)
+  local matches = 0
+  for row, line in ipairs(lines or {}) do
+    if line == name then
+      matches = matches + 1
+      if matches == occurrence then return row - 1 end
+    end
+  end
+end
+
+local function refuse_busy(bufnr)
+  return refuse_sync(bufnr, 'another direct operation is pending', { code = 'E-DIRECT-SYNC-BUSY' }, vim.log.levels.WARN)
+end
+
+local function refuse_with_path(bufnr, reason, root, lines, context)
+  context = context or {}
+  if context.line == nil then context.line = line_for_path(root, lines, context.path) end
+  return refuse_sync(bufnr, reason, context)
+end
+
+local function ambiguous_refusal_context(plan, actual, visible)
+  local context = { code = 'E-DIRECT-ROW-AMBIGUOUS' }
+  if plan.reason ~= 'duplicate' then return context end
+  local seen = {}
+  for _, text in ipairs(actual) do
+    seen[text] = (seen[text] or 0) + 1
+    if seen[text] > 1 then
+      context.line = line_for_visible_name(visible, text, seen[text])
+      break
+    end
+  end
+  return context
+end
 
 do
   -- ---------------------------------------------------------------------------
@@ -209,14 +266,18 @@ do
 
   local function refuse_git_query(bufnr, err)
     vim.bo[bufnr].modified = true
-    local reason
+    local message = tostring(err)
+    local detail
     if git.is_timeout(err) then
-      reason = tostring(err) .. '; retry after Git recovers, or use gi to disable Git-ignore filtering'
-    else
-      reason = 'Git ignore query failed: ' .. tostring(err)
+      detail = 'Git timed out while checking ignore rules.'
+    elseif message:find('ignore rules changed', 1, true) then
+      detail = 'Git ignore rules changed; re-list the directory.'
+    elseif message:find('repository context changed', 1, true) then
+      detail = 'The Git repository context changed; re-list the directory.'
+    elseif message ~= '' then
+      detail = message
     end
-    ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
-    return nil, reason
+    return refuse_sync(bufnr, tostring(err), { code = 'E-DIRECT-SYNC-GIT', detail = detail })
   end
 
   -- Buffer:sync -> true when all classified actions succeeded (the buffer was
@@ -225,8 +286,8 @@ do
   -- buffer reflects any independent actions that did succeed.
   local function sync_locked(self, options)
     options = options or {}
-    if not options.bypass_pending and pending.refuse('sync') then return nil, 'another direct operation is pending' end
     local bufnr = vim.api.nvim_get_current_buf()
+    if not options.bypass_pending and pending.refuse('sync') then return refuse_busy(bufnr) end
     restore_deleted_rows(bufnr)
     reconcile_undone_materialization(bufnr)
     local state = states[bufnr]
@@ -234,8 +295,7 @@ do
     if not snapshot then
       vim.bo[bufnr].modified = true
       local reason = 'list-time filter snapshot is unavailable; re-list this directory'
-      ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
-      return nil, reason
+      return refuse_sync(bufnr, reason)
     end
     local checked_git = {}
     local timed_out_snapshots = {}
@@ -268,7 +328,7 @@ do
     end
     local visible = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local actual = children_integrity(bufnr, visible)
-    local child_err
+    local child_err, child_refusal
     local subtree_edit
     if actual then
       local has_materialized_children = false
@@ -324,25 +384,25 @@ do
       if has_tree_edit or (not has_materialized_children and has_indented) then actual = nil end
     end
     if not actual then
-      subtree_edit, child_err = edited_subtrees(bufnr, visible)
+      subtree_edit, child_err, child_refusal = edited_subtrees(bufnr, visible)
       if not subtree_edit then
         vim.bo[bufnr].modified = true
-        ui.notify('Refusing to sync: ' .. tostring(child_err) .. '; nothing was changed.', vim.log.levels.ERROR)
-        return nil, child_err
+        return refuse_sync(bufnr, child_err, child_refusal)
       end
       actual = subtree_edit.root_lines
     end
     local expected, read_err = fs.read_dir_lines(self.root)
     if not expected then
-      ui.notify('direct: cannot read ' .. tostring(self.root) .. ': ' .. tostring(read_err), vim.log.levels.ERROR)
-      return nil, read_err
+      return refuse_sync(bufnr, 'cannot read ' .. tostring(self.root) .. ': ' .. tostring(read_err), {
+        code = 'E-DIRECT-SYNC-DIRECTORY-READ',
+        path = self.root,
+      })
     end
     local filtered_expected, filter_err = apply_snapshot(self.root, expected, snapshot)
     if not filtered_expected then
       vim.bo[bufnr].modified = true
       local reason = 'Git ignore query failed: ' .. tostring(filter_err)
-      ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
-      return nil, reason
+      return refuse_sync(bufnr, reason)
     end
     expected = filtered_expected
     if state.view_git_status_only then expected = filter_git_status_lines(self.root, expected, state.git_status) end
@@ -360,8 +420,7 @@ do
       if not projected then
         vim.bo[bufnr].modified = true
         local reason = 'could not validate collapsed directory view: ' .. tostring(project_err)
-        ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
-        return nil, reason
+        return refuse_sync(bufnr, reason)
       end
       expected = projected
     end
@@ -382,7 +441,7 @@ do
         local rec = id and state.rows[id]
         local prefix = line:match('^( *)') or ''
         if #prefix == 0 and not (rec and rec.kind == 'child') and not (rec and rec.deleted_kind) then
-          current_root_rows[#current_root_rows + 1] = { id = id, line = line }
+          current_root_rows[#current_root_rows + 1] = { id = id, line = line, row = row - 1 }
         end
       end
     end
@@ -403,14 +462,13 @@ do
         end
       end
     end
-    local unsafe = first_unsafe(self.root, actual, nested_added) or first_unsafe(self.root, expected, expected_nested)
+    local unsafe = first_unsafe(self.root, actual, nested_added, true)
+      or first_unsafe(self.root, expected, expected_nested, false)
     if unsafe ~= nil then
       vim.bo[bufnr].modified = true
-      ui.notify(
-        'Unsafe entry in the buffer (' .. unsafe.reason .. '); nothing was changed: ' .. unsafe.path,
-        vim.log.levels.ERROR
-      )
-      return nil, unsafe.reason
+      local line = unsafe.line
+      if subtree_edit then line = line_for_path(self.root, visible, unsafe.path) end
+      return refuse_sync(bufnr, unsafe.reason, { line = line, path = unsafe.path })
     end
 
     local original_root_rows = {}
@@ -432,7 +490,7 @@ do
       local rec = state.rows[mark[1]]
       if rec and rec.kind == 'root' and mark[4] and mark[4].invalid then invalid_root_ids[mark[1]] = true end
     end
-    local plan, identity_err = classify_identity(
+    local plan, identity_err, identity_refusal = classify_identity(
       self.root,
       original_root_rows,
       current_root_rows,
@@ -442,20 +500,17 @@ do
     )
     if not plan then
       vim.bo[bufnr].modified = true
-      ui.notify('Refusing to sync: ' .. tostring(identity_err) .. '; nothing was changed.', vim.log.levels.ERROR)
-      return nil, identity_err
+      return refuse_sync(bufnr, identity_err, identity_refusal)
     end
     if plan.kind == 'AMBIGUOUS' then
       local detail = ambiguous_message(plan, actual, expected)
-      ui.notify(detail, vim.log.levels.ERROR)
-      return nil, plan.reason, detail
+      return refuse_sync(bufnr, detail, ambiguous_refusal_context(plan, actual, visible))
     end
 
-    local actions, yanks, build_err = build_actions(self.root, plan)
+    local actions, yanks, build_err, build_refusal = build_actions(self.root, plan)
     if not actions then
       vim.bo[bufnr].modified = true
-      ui.notify('Refusing to sync: ' .. tostring(build_err) .. '; nothing was changed.', vim.log.levels.ERROR)
-      return nil, build_err
+      return refuse_with_path(bufnr, build_err, self.root, visible, build_refusal)
     end
     for _, retry in ipairs(timed_out_snapshots) do
       local directory_snapshot, retry_snapshot = retry.snapshot, retry.git
@@ -470,8 +525,7 @@ do
             .. ignored[1]
             .. '; re-list it or use gi to disable Git-ignore filtering'
           vim.bo[bufnr].modified = true
-          ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
-          return nil, reason
+          return refuse_with_path(bufnr, reason, self.root, visible, { path = ignored[1] })
         end
         git.record_ignore_candidates(retry_snapshot, directory_snapshot.path, directory_snapshot.git_candidates or {})
       else
@@ -616,16 +670,14 @@ do
           if fs.path_identity_index_contains(destination_index, act.dst) then
             vim.bo[bufnr].modified = true
             local reason = 'multiple subtree actions target the same path: ' .. act.dst
-            ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
-            return nil, reason
+            return refuse_with_path(bufnr, reason, self.root, visible, { path = act.dst })
           end
           fs.path_identity_index_add(destination_index, act.dst)
         end
         local _, serialize_err = action_mod.serialize(act)
         if serialize_err then
           vim.bo[bufnr].modified = true
-          ui.notify('Unsafe action (' .. tostring(serialize_err) .. '); nothing was changed.', vim.log.levels.ERROR)
-          return nil, serialize_err
+          return refuse_sync(bufnr, 'Unsafe action (' .. tostring(serialize_err) .. ')')
         end
       end
     end
@@ -644,8 +696,7 @@ do
         local reason = hidden_path and ('directory contains hidden entry: ' .. hidden_path)
           or ('cannot inspect directory descendants: ' .. tostring(inspect_err))
         vim.bo[bufnr].modified = true
-        ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
-        return nil, reason
+        return refuse_sync(bufnr, reason, { path = hidden_path })
       end
     end
 
@@ -695,8 +746,7 @@ do
           local reason = 'destination already exists: '
             .. destination
             .. '; choose another name or use :DirectList! to discard and redo the edit'
-          ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.ERROR)
-          return nil, reason
+          return refuse_with_path(bufnr, reason, self.root, visible, { path = destination })
         end
       end
     end
@@ -704,8 +754,7 @@ do
     if options.expected_plan and not vim.deep_equal(sync_signature(actions, yanks), options.expected_plan) then
       vim.bo[bufnr].modified = true
       local reason = 'sync plan changed while waiting for LSP willRenameFiles; review and save again'
-      ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.WARN)
-      return nil, reason
+      return refuse_sync(bufnr, reason, nil, vim.log.levels.WARN)
     end
 
     -- Ask workspace clients before the first history, register, staging, or
@@ -727,10 +776,7 @@ do
         local token, owns_token = options.pending_token, false
         if token == nil then
           local began, begin_token = pending.begin('willRenameFiles')
-          if not began then
-            ui.notify('direct: cannot rename while another operation is pending', vim.log.levels.WARN)
-            return nil, 'another direct operation is pending'
-          end
+          if not began then return refuse_busy(bufnr) end
           token, owns_token = begin_token, true
         end
         if options.async_actions then options.async_started = true end
@@ -771,8 +817,7 @@ do
             if not ok then
               vim.bo[bufnr].modified = true
               ui.notify(
-                'Refusing to rename after LSP workspace edit failure '
-                  .. '(earlier server edits may already have applied): '
+                'direct: workspace rename failed; earlier server edits may already have applied: '
                   .. tostring(suppressed_or_err),
                 vim.log.levels.ERROR
               )
@@ -841,8 +886,7 @@ do
       local preflight, preflight_err = history.preflight(inputs)
       if not preflight then
         vim.bo[bufnr].modified = true
-        ui.notify('Refusing to sync: history preflight failed: ' .. tostring(preflight_err), vim.log.levels.ERROR)
-        return nil, preflight_err
+        return refuse_sync(bufnr, 'history preflight failed: ' .. tostring(preflight_err))
       end
     end
 
@@ -853,12 +897,13 @@ do
       bufnr = bufnr,
     })
     if pre_event.cancel == true then
-      local reason = 'DirectSyncPre cancelled the save'
-      if type(pre_event.reason) == 'string' and pre_event.reason ~= '' then
-        reason = reason .. ': ' .. pre_event.reason
-      end
       if vim.api.nvim_buf_is_valid(bufnr) then vim.bo[bufnr].modified = true end
-      ui.notify('direct: Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.WARN)
+      local refusal_message = sync_refusals.report(
+        bufnr,
+        'E-DIRECT-SYNC-CANCELLED',
+        { detail = type(pre_event.reason) == 'string' and pre_event.reason or nil },
+        vim.log.levels.WARN
+      )
       require('direct.events').emit('DirectSyncPost', {
         root = self.root,
         actions = actions,
@@ -867,18 +912,17 @@ do
         yanks = yanks,
         success = false,
         cancelled = true,
-        error = reason,
+        error = refusal_message,
         bufnr = bufnr,
       })
-      return nil, reason
+      return nil, refusal_message
     end
     if
       not vim.api.nvim_buf_is_valid(bufnr)
       or not vim.deep_equal(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), visible)
     then
-      local reason = 'listing changed during DirectSyncPre; review and save again'
       if vim.api.nvim_buf_is_valid(bufnr) then vim.bo[bufnr].modified = true end
-      ui.notify('Refusing to sync: ' .. reason .. '; nothing was changed.', vim.log.levels.WARN)
+      local refusal_message = sync_refusals.report(bufnr, 'E-DIRECT-SYNC-LISTING-CHANGED', nil, vim.log.levels.WARN)
       require('direct.events').emit('DirectSyncPost', {
         root = self.root,
         actions = actions,
@@ -886,10 +930,10 @@ do
         failed = {},
         yanks = yanks,
         success = false,
-        error = reason,
+        error = refusal_message,
         bufnr = bufnr,
       })
-      return nil, reason
+      return nil, refusal_message
     end
 
     -- Yank removed paths before applying actions. Delete-backed registers point
@@ -1152,7 +1196,17 @@ do
   end
 
   function M.sync(self, options)
-    local synced, sync_err = history.with_lock(function() return sync_locked(self, options) end)
+    local entered, acquire_message = false, nil
+    local synced, sync_err = history.with_lock(function()
+      entered = true
+      return sync_locked(self, options)
+    end, function(acquire_err)
+      local _, message = refuse_sync(vim.api.nvim_get_current_buf(), 'history unavailable: ' .. tostring(acquire_err), {
+        code = 'E-DIRECT-SYNC-HISTORY',
+      })
+      acquire_message = message
+    end)
+    if not entered then return nil, acquire_message or sync_err end
     if synced then
       local retained, retention_err = require('direct.trash').apply_retention()
       if not retained and retention_err then
@@ -1164,17 +1218,26 @@ do
 
   function M.sync_async(self, callback)
     callback = callback or function() end
-    if pending.refuse('sync') then return nil, 'another direct operation is pending' end
-    local began, token = pending.begin('sync', vim.api.nvim_get_current_buf())
+    local bufnr = vim.api.nvim_get_current_buf()
+    if pending.refuse('sync') then
+      return refuse_sync(
+        bufnr,
+        'another direct operation is pending',
+        { code = 'E-DIRECT-SYNC-BUSY' },
+        vim.log.levels.WARN
+      )
+    end
+    local began, token = pending.begin('sync', bufnr)
     if not began then
-      ui.notify('direct: cannot sync while another operation is pending', vim.log.levels.WARN)
-      return nil, token
+      return refuse_sync(bufnr, tostring(token), { code = 'E-DIRECT-SYNC-BUSY' }, vim.log.levels.WARN)
     end
     local started, start_err = history.lock.acquire_async(function(acquired, acquire_err)
       if not acquired then
         pending.finish(token)
-        ui.notify('direct: history unavailable: ' .. tostring(acquire_err), vim.log.levels.ERROR)
-        local called, callback_err = pcall(callback, nil, acquire_err)
+        local _, message = refuse_sync(bufnr, 'history unavailable: ' .. tostring(acquire_err), {
+          code = 'E-DIRECT-SYNC-HISTORY',
+        })
+        local called, callback_err = pcall(callback, nil, message)
         if not called then ui.report_error('complete sync', callback_err) end
         return
       end
@@ -1219,8 +1282,7 @@ do
     end)
     if not started then
       pending.finish(token)
-      ui.notify('direct: history unavailable: ' .. tostring(start_err), vim.log.levels.ERROR)
-      return nil, start_err
+      return refuse_sync(bufnr, 'history unavailable: ' .. tostring(start_err), { code = 'E-DIRECT-SYNC-HISTORY' })
     end
     return true
   end

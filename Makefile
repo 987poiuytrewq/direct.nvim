@@ -36,10 +36,11 @@ lint:
 	  cat .cache/luacheck-plugin.log; \
 	  if [ "$$result" -ne 0 ]; then echo "luacheck failed for plugin/ftplugin (exit $$result)" >&2; exit 1; fi
 	@set +e; $(LUACHECK) --no-color --codes --formatter plain tests > .cache/luacheck-tests.log 2>&1; result=$$?; set -e; \
-	  grep -E '^tests/.*:.*: \(W[0-9][0-9][0-9]\)' .cache/luacheck-tests.log | sort > .cache/luacheck-tests-warnings.log || true; \
+	  grep -E '^tests/.*:.*: \(W[0-9][0-9][0-9]\)' .cache/luacheck-tests.log | LC_ALL=C sort > .cache/luacheck-tests-warnings.log || true; \
+	  LC_ALL=C sort tests/luacheck-baseline.txt > .cache/luacheck-tests-baseline.log; \
 	  if [ "$$result" -gt 1 ]; then cat .cache/luacheck-tests.log; echo "luacheck found test errors (exit $$result)" >&2; exit 1; fi; \
-	  unexpected=$$(comm -13 tests/luacheck-baseline.txt .cache/luacheck-tests-warnings.log); \
-	  stale=$$(comm -23 tests/luacheck-baseline.txt .cache/luacheck-tests-warnings.log); \
+	  unexpected=$$(LC_ALL=C comm -13 .cache/luacheck-tests-baseline.log .cache/luacheck-tests-warnings.log); \
+	  stale=$$(LC_ALL=C comm -23 .cache/luacheck-tests-baseline.log .cache/luacheck-tests-warnings.log); \
 	  if [ -n "$$unexpected" ] || [ -n "$$stale" ]; then \
 	    cat .cache/luacheck-tests.log; \
 	    if [ -n "$$unexpected" ]; then echo "new Luacheck test warnings:" >&2; printf '%s\n' "$$unexpected" >&2; fi; \

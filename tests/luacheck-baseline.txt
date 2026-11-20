@@ -3,8 +3,8 @@ tests/action/action_spec.lua:669:8: (W311) value assigned to variable 'e' is ove
 tests/action/action_spec.lua:671:8: (W311) value assigned to variable 'e' is unused
 tests/action/grouped_undo_spec.lua:297:23: (W211) unused variable 'fs'
 tests/action/unpaste_spec.lua:9:7: (W211) unused variable 'ui'
-tests/buffer/buffer_expansion_spec.lua:4:7: (W211) unused variable 'fs'
 tests/buffer/buffer_expansion_spec.lua:422:11: (W431) shadowing upvalue 'paths' on line 5
+tests/buffer/buffer_expansion_spec.lua:4:7: (W211) unused variable 'fs'
 tests/buffer/buffer_expansion_spec.lua:5:7: (W211) unused variable 'paths'
 tests/buffer/buffer_listing_spec.lua:160:11: (W211) unused variable 'listing'
 tests/buffer/buffer_listing_spec.lua:5:7: (W211) unused variable 'paths'
@@ -64,9 +64,9 @@ tests/sync/sync_undo_spec.lua:677:11: (W431) shadowing upvalue 'paths' on line 8
 tests/sync/sync_undo_spec.lua:698:11: (W431) shadowing upvalue 'register' on line 10
 tests/sync/sync_undo_spec.lua:757:11: (W431) shadowing upvalue 'register' on line 10
 tests/sync/sync_undo_spec.lua:769:11: (W431) shadowing upvalue 'paths' on line 8
-tests/sync/sync_undo_spec.lua:8:7: (W211) unused variable 'paths'
 tests/sync/sync_undo_spec.lua:802:11: (W431) shadowing upvalue 'register' on line 10
 tests/sync/sync_undo_spec.lua:898:11: (W211) unused variable 'a_id'
+tests/sync/sync_undo_spec.lua:8:7: (W211) unused variable 'paths'
 tests/trash/trash_spec.lua:128:72: (W212) unused argument 'choices'
 tests/trash/trash_spec.lua:128:81: (W212) unused argument 'default'
 tests/trash/trash_spec.lua:5:7: (W211) unused variable 'fs'

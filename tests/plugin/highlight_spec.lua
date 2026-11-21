@@ -440,7 +440,7 @@ H.describe('listing filename highlights', function()
   H.it('matches bufferline filename icon lookup and preserves folder icons', function()
     clean_buffers()
     local config = require('direct.config')
-    config.setup({ show_folder_icons = true, show_file_icons = true })
+    config.setup({ show_folder_icons = true, show_file_icons = true, icons = { provider = 'devicons' } })
     local previous = package.loaded['nvim-web-devicons']
     local requests = {}
     package.loaded['nvim-web-devicons'] = {
@@ -497,6 +497,133 @@ H.describe('listing filename highlights', function()
       icon_mark(0, 2)[4].virt_text,
       { { FILE_ICON .. ' ', 'DirectFileIcon' } },
       'the option disables filetype icons'
+    )
+  end)
+
+  H.it('automatically prefers configured mini.icons and uses its highlight', function()
+    clean_buffers()
+    local config = require('direct.config')
+    config.setup({ show_file_icons = true, show_filetype_icons = true, icons = { provider = 'auto' } })
+    local previous_mini = rawget(_G, 'MiniIcons')
+    local previous_devicons = package.loaded['nvim-web-devicons']
+    local mini_requests, devicons_requests = {}, 0
+    _G.MiniIcons = {
+      get = function(category, name)
+        mini_requests[#mini_requests + 1] = { category, name }
+        return 'M', 'TestMiniIcon'
+      end,
+    }
+    package.loaded['nvim-web-devicons'] = {
+      get_icon = function()
+        devicons_requests = devicons_requests + 1
+        return 'D'
+      end,
+    }
+
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'script.lua', '')
+    buffer.list(ws)
+
+    _G.MiniIcons = previous_mini
+    package.loaded['nvim-web-devicons'] = previous_devicons
+    H.assert_eq(mini_requests, { { 'file', 'script.lua' } }, 'mini.icons receives the file category and basename')
+    H.assert_eq(devicons_requests, 0, 'auto does not consult devicons after mini.icons succeeds')
+    H.assert_eq(
+      icon_mark(0, 0)[4].virt_text,
+      { { 'M ', 'TestMiniIcon' } },
+      'mini.icons glyph and highlight are rendered'
+    )
+  end)
+
+  H.it('falls back through auto providers and uses the generic glyph when unavailable', function()
+    clean_buffers()
+    local config = require('direct.config')
+    local previous_mini = rawget(_G, 'MiniIcons')
+    local previous_devicons = package.loaded['nvim-web-devicons']
+    _G.MiniIcons = { get = function() error('mini unavailable') end }
+    package.loaded['nvim-web-devicons'] = {
+      get_icon = function(name)
+        if name == 'from-devicons.txt' then return 'D', 'IgnoredDeviconHighlight' end
+        error('devicons unavailable')
+      end,
+    }
+    config.setup({ show_file_icons = true, icons = { provider = 'auto' } })
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'from-devicons.txt', '')
+    H.mkfile(ws, 'generic.txt', '')
+    buffer.list(ws)
+    _G.MiniIcons = previous_mini
+    package.loaded['nvim-web-devicons'] = previous_devicons
+    H.assert_eq(
+      icon_mark(0, 0)[4].virt_text,
+      { { 'D ', 'DirectFileIcon' } },
+      'auto falls back to devicons after mini.icons errors'
+    )
+    H.assert_eq(
+      icon_mark(0, 1)[4].virt_text,
+      { { FILE_ICON .. ' ', 'DirectFileIcon' } },
+      'auto falls back to the generic glyph when providers error'
+    )
+
+    config.setup({ show_file_icons = true, icons = { provider = 'mini' } })
+    local listing = buffer.list(ws)
+    H.assert_eq(
+      icon_mark(0, 0)[4].virt_text,
+      { { FILE_ICON .. ' ', 'DirectFileIcon' } },
+      'an explicitly selected but failing mini provider falls back to the generic glyph'
+    )
+    H.assert_not_nil(listing, 'listing remains usable after provider failures')
+  end)
+
+  H.it('uses custom file glyph and highlight and warns once on callback errors', function()
+    clean_buffers()
+    local config = require('direct.config')
+    local custom_calls = 0
+    local custom_kinds = {}
+    local custom_provider = function(name, kind)
+      custom_calls = custom_calls + 1
+      custom_kinds[#custom_kinds + 1] = kind
+      if name == 'custom.txt' then return 'C', 'TestCustomIcon' end
+      error('injected custom provider failure')
+    end
+    config.setup({ show_file_icons = true, icons = { provider = custom_provider } })
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'custom.txt', '')
+    H.mkfile(ws, 'error.txt', '')
+    H.capture_messages()
+    local listing = buffer.list(ws)
+    H.assert_eq(
+      icon_mark(0, 0)[4].virt_text,
+      { { 'C ', 'TestCustomIcon' } },
+      'custom provider glyph and highlight are rendered'
+    )
+    H.assert_eq(
+      icon_mark(0, 1)[4].virt_text,
+      { { FILE_ICON .. ' ', 'DirectFileIcon' } },
+      'custom provider errors retain the generic glyph'
+    )
+    listing:list()
+    local _, warning_count = H.messages():gsub('Custom icon provider failed', '')
+    H.assert_eq(warning_count, 1, 'custom provider errors are reported once')
+    H.assert_eq(custom_calls, 4, 'provider errors do not stop later row rendering or relisting')
+    H.assert_eq(custom_kinds, { 'file', 'file', 'file', 'file' }, 'custom provider receives the file type')
+  end)
+
+  H.it('false icon provider keeps the configured generic file glyph', function()
+    clean_buffers()
+    local config = require('direct.config')
+    config.setup({ show_file_icons = true, icons = { provider = false, file = 'G' } })
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'file.txt', '')
+    buffer.list(ws)
+    H.assert_eq(
+      icon_mark(0, 0)[4].virt_text,
+      { { 'G ', 'DirectFileIcon' } },
+      'false disables provider lookups without disabling file icons'
     )
   end)
 

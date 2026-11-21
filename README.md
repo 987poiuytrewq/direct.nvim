@@ -276,8 +276,9 @@ require('direct').setup({
   },
   show_folder_icons = true,
   show_file_icons = true,
-  show_filetype_icons = true,        -- bufferline-style filename icons via nvim-web-devicons
+  show_filetype_icons = true,
   icons = {
+    provider = 'auto',               -- mini.icons, then nvim-web-devicons
     file = '\u{f15b}',
     folder = '\u{f07b}',
     folder_open = '\u{f07c}',
@@ -401,10 +402,13 @@ lists trash names; it does not size entries or write metadata. If no matching
 history remains, the entry stays marked unknown and needs an explicit restore
 path.
 
-With `show_filetype_icons` enabled, file icons use bufferline.nvim's built-in
-basename-based nvim-web-devicons lookup. The dependency is optional; Direct uses
-`icons.file` when it is unavailable. Set the option to `false` to use the
-generic glyph for every file.
+With `show_filetype_icons` enabled, `icons.provider` selects the source for
+regular-file icons. The default `'auto'` uses configured `mini.icons` first,
+then `nvim-web-devicons`, and falls back to `icons.file` if neither can provide
+an icon. Set it to `'mini'` or `'devicons'` to choose one provider, `false` to
+always use the generic glyph, or a function `(name, type) -> glyph, highlight`
+to supply an icon. A custom function's errors fall back safely and are reported
+once. Folders and deleted tracked files keep their configured Direct icons.
 
 ### Highlights
 

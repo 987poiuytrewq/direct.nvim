@@ -10,6 +10,7 @@ local platform = require('direct.platform')
 ---@field deleted_file? string
 ---@field deleted_folder? string
 ---@field deleted_folder_open? string
+---@field provider? 'auto'|'mini'|'devicons'|false|fun(name: string, type: string): string?, string?
 
 ---@class direct.TrashRetention
 ---@field max_age_days? integer
@@ -90,6 +91,7 @@ local defaults = {
     deleted_file = '\u{f016}',
     deleted_folder = '\u{f114}',
     deleted_folder_open = '\u{f115}',
+    provider = 'auto',
   },
   max_recursive_expand_depth = false,
   buffers = {
@@ -178,16 +180,28 @@ local function resolve_icon_options(value)
 
   local result = vim.deepcopy(defaults.icons)
   for _, key in ipairs(sorted_keys(value)) do
-    local glyph = value[key]
-    if not icon_variants[key] then
+    local option = value[key]
+    if key == 'provider' then
+      if
+        option == 'auto'
+        or option == 'mini'
+        or option == 'devicons'
+        or option == false
+        or type(option) == 'function'
+      then
+        result.provider = option
+      else
+        report_invalid_icon_option(key, "expected 'auto', 'mini', 'devicons', false, or a function")
+      end
+    elseif not icon_variants[key] then
       report_invalid_icon_option(
         tostring(key),
         'unknown icon; expected file, folder, folder_open, deleted_file, deleted_folder, or deleted_folder_open'
       )
-    elseif type(glyph) ~= 'string' or glyph == '' then
+    elseif type(option) ~= 'string' or option == '' then
       report_invalid_icon_option(key, 'expected a non-empty glyph string')
     else
-      result[key] = glyph
+      result[key] = option
     end
   end
   return result, errors

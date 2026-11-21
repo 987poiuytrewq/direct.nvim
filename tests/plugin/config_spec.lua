@@ -255,6 +255,7 @@ H.describe('config', function()
     H.assert_eq(config.defaults.icons.deleted_file, '\u{f016}', 'deleted-file outline glyph')
     H.assert_eq(config.defaults.icons.deleted_folder, '\u{f114}', 'deleted-folder outline glyph')
     H.assert_eq(config.defaults.icons.deleted_folder_open, '\u{f115}', 'expanded deleted-folder outline glyph')
+    H.assert_eq(config.defaults.icons.provider, 'auto', 'icon provider defaults to automatic selection')
 
     local options = config.setup({
       icons = { file = 'F', folder = 'D', deleted_file = 'd' },
@@ -272,6 +273,7 @@ H.describe('config', function()
         deleted_file = 'o',
         deleted_folder = 'O',
         deleted_folder_open = 'P',
+        provider = 'devicons',
       },
     })
     H.assert_eq(options.icons, {
@@ -281,14 +283,21 @@ H.describe('config', function()
       deleted_file = 'o',
       deleted_folder = 'O',
       deleted_folder_open = 'P',
+      provider = 'devicons',
     }, 'every file and folder glyph can be customized')
 
     H.capture_messages()
-    options = config.setup({ icons = { file = false, folder_closed = 'x' } })
+    options = config.setup({ icons = { file = false, folder_closed = 'x', provider = 'typo' } })
     H.assert_eq(options.icons.file, config.defaults.icons.file, 'invalid glyph retains its default')
     H.assert_eq(options.icons.folder, config.defaults.icons.folder, 'unknown variant is ignored')
+    H.assert_eq(options.icons.provider, 'auto', 'invalid provider retains its default')
     H.assert_notified('icons.file', vim.log.levels.ERROR)
     H.assert_notified('icons.folder_closed', vim.log.levels.ERROR)
+    H.assert_notified('icons.provider', vim.log.levels.ERROR)
+    options = config.setup({ icons = { provider = false } })
+    H.assert_false(options.icons.provider, 'provider can be disabled')
+    options = config.setup({ icons = { provider = function() end } })
+    H.assert_true(type(options.icons.provider) == 'function', 'custom provider functions are accepted')
     config.clear_mappings()
   end)
 

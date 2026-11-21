@@ -65,7 +65,7 @@ direct.vim is pure Lua and replaces |netrw| for directory buffers.
       filtering is on by default; see |direct-respect_gitignore|.
     - A Nerd Font with the Font Awesome glyphs, for the default icons
       (optional). See |direct-icons|.
-    - nvim-web-devicons, for icons that match each file's type (optional).
+    - mini.icons or nvim-web-devicons, for optional filetype icons.
       See |direct-show_filetype_icons|.
 
 No Python is needed. To check the Neovim version and the data directory in use,
@@ -767,6 +767,7 @@ Calling `setup()` is optional. These are the defaults:
       show_file_icons = true,
       show_filetype_icons = true,
       icons = {
+        provider = 'auto',
         file = '\u{f15b}',
         folder = '\u{f07b}',
         folder_open = '\u{f07c}',
@@ -946,18 +947,15 @@ show_file_icons         boolean (default: `true`)
 
                                                   *direct-show_filetype_icons*
 show_filetype_icons     boolean (default: `true`)
-    Use bufferline.nvim's built-in nvim-web-devicons lookup for files: match the
-    basename (including exact filename overrides), then the extension, with the
-    provider's default icon as a fallback. Without nvim-web-devicons, files use
-    `icons.file`. Set to `false` to use `icons.file` for every file. Folders and
-    deleted tracked files keep their own icons. Has no effect when
-    |direct-show_file_icons| is off.
+    Use |direct-icons.provider| for regular-file icons. When off, files use
+    `icons.file`. Folders and deleted tracked files keep their own icons. Has no
+    effect when |direct-show_file_icons| is off.
 
-                                                                *direct-icons*
+                                            *direct-icons* *direct-icons.provider*
 icons                   table
     The glyphs used for icons. Any key you leave out keeps its default.
-    `file` is used when filetype icons are disabled or nvim-web-devicons is not
-    available.
+    `file` is used when filetype icons are disabled or no provider returns an
+    icon.
 
     Key                     Default ~
     `file`                    U+F15B  (file)
@@ -966,6 +964,20 @@ icons                   table
     `deleted_file`            U+F016  (outlined file)
     `deleted_folder`          U+F114  (outlined folder)
     `deleted_folder_open`     U+F115  (outlined open folder)
+
+    `provider` selects a source for regular-file icons:
+
+      `auto`       Prefer configured mini.icons, then nvim-web-devicons, then
+                   the generic `file` glyph. This is the default.
+      `mini`       Use the configured global `MiniIcons.get` function.
+      `devicons`   Use nvim-web-devicons.
+      `false`      Do not look up provider icons; use the generic `file` glyph.
+      function     Call `(name, type)` and use its returned glyph and optional
+                   highlight group. Errors fall back to the generic glyph and
+                   are reported once per function.
+
+    Missing or failing providers safely fall back to `file`. Folder icons and
+    deleted tracked-file icons are not passed to providers.
 
     The `deleted_*` icons are used for deleted tracked files
     (|direct.vim-git-deleted|).
@@ -1042,10 +1054,10 @@ definitions are kept.
     DirectGitDeletedDirectory   deleted tracked dir names     |hl-ErrorMsg|
 
 File names get no highlighting based on their name or type. With
-|direct-show_filetype_icons|, nvim-web-devicons supplies the file icon glyph,
-but its highlight group is ignored: visible file icons use |DirectFileIcon| and
-hidden file icons use |DirectHiddenFileIcon|. Changed names and folder icons are
-coloured by Git status (|direct.vim-git-status|).
+|direct-show_filetype_icons|, mini.icons and custom providers may supply a
+highlight group for file icons. nvim-web-devicons uses Direct's normal file-icon
+groups. Changed names and folder icons are coloured by Git status
+(|direct.vim-git-status|).
 
 Listings use their own syntax file, which loads even when Neovim's global
 syntax loading is turned off.

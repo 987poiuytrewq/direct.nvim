@@ -259,6 +259,8 @@ These are the defaults:
 require('direct').setup({
   map_default_keys = true,           -- install the mappings above
   mappings = {},                      -- per-action key override or false to disable
+  sort = 'name',                     -- 'natural' or a comparator function
+  sort_directories_first = true,     -- keep directories in a leading group
   show_hidden = true,                -- show dotfiles (toggle with `gh`)
   respect_gitignore = true,          -- hide Git-ignored entries (toggle with `gi`)
   collapse_single_entry_directories = true, -- show `a/b/c/` chains as one row (toggle with `gC`)
@@ -301,6 +303,18 @@ require('direct').setup({
   },
 })
 ```
+
+`sort` accepts `'name'` (byte-wise name order), `'natural'` (case-insensitive
+numeric name order), or a comparator receiving `{ name, type }` records. Set
+`sort_directories_first = false` to sort directories and files together. If a
+custom comparator errors, Direct warns once for that listing and falls back to
+name order for the complete listing.
+
+`is_hidden(name, path, type)` optionally customizes hidden-entry filtering when
+`show_hidden = false`. Return `true` to hide an entry, `false` to show it (even
+if its name starts with a dot), or `nil` to use the default dot-name rule.
+`gh` reveals dot- and custom-hidden entries; Git-ignore and `wildignore` remain
+independent filters.
 
 Git status is read in the background so it doesn't delay the initial listing.
 When the query completes, Direct adds the status decorations and deleted rows.

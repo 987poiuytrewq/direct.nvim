@@ -185,6 +185,27 @@ local function dirs_then_name(lines)
   return out
 end
 
+-- sort_lines(lines, options) orders directory rows and file rows using the
+-- same comparator contract as the filesystem listing. Deleted and collapsed
+-- rows are display-only, so their type is inferred from the row marker.
+local function sort_lines(lines, options)
+  options = options or {}
+  local entries = {}
+  for _, line in ipairs(lines or {}) do
+    entries[#entries + 1] = {
+      name = paths.strip_directory_marker(line),
+      type = is_dir_line(line) and 'directory' or 'file',
+      line = line,
+    }
+  end
+  fs.sort_entries(entries, options)
+  local ordered = {}
+  for _, entry in ipairs(entries) do
+    ordered[#ordered + 1] = entry.line
+  end
+  return ordered
+end
+
 local function recorded_row_text(rec)
   local name = rec.name
   if is_dir_line(name) then name = paths.mark_directory(paths.strip_directory_marker(name)) end
@@ -223,6 +244,7 @@ M.current_row_record = current_row_record
 M.is_dir_line = is_dir_line
 M.refresh_icons = refresh_icons
 M.dirs_then_name = dirs_then_name
+M.sort_lines = sort_lines
 M.recorded_row_text = recorded_row_text
 M.visible_row_for_id = visible_row_for_id
 M.remove_expanded_subtree = remove_expanded_subtree

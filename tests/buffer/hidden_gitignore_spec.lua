@@ -579,6 +579,7 @@ H.describe('hidden and Git-ignore filtering', function()
     local calls_after_first_list = timed_out_queries
     listing:list({ discard = true })
     local calls_after_second_list = timed_out_queries
+    local state_after_second_list = require('direct.buffer.buffer')._state_for_test(vim.api.nvim_get_current_buf())
     local marked_after_second_list = vim.b.direct_gitignore_timed_out
     local namespace = vim.api.nvim_get_namespaces()['direct.git-ignore-timeout']
 
@@ -592,7 +593,16 @@ H.describe('hidden and Git-ignore filtering', function()
     )
     H.assert_true(
       calls_after_second_list > calls_after_first_list,
-      'the second listing retries the fake Git timeout; calls=' .. calls_after_second_list
+      'the second listing retries the fake Git timeout; calls='
+        .. calls_after_first_list
+        .. '->'
+        .. calls_after_second_list
+        .. ', respect='
+        .. tostring(state_after_second_list and state_after_second_list.view_respect_gitignore)
+        .. ', override='
+        .. tostring(state_after_second_list and state_after_second_list.view_respect_gitignore_override)
+        .. ', snapshot='
+        .. tostring(state_after_second_list and state_after_second_list.sort_options.respect_gitignore)
     )
     H.assert_true(
       calls_after_save_retry > calls_after_second_list,

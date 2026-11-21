@@ -12,7 +12,7 @@ tests/buffer/buffer_navigation_spec.lua:235:11: (W211) unused variable 'first'
 tests/buffer/buffer_navigation_spec.lua:237:11: (W211) unused variable 'second'
 tests/buffer/buffer_navigation_spec.lua:432:72: (W212) unused argument 'choices'
 tests/buffer/buffer_navigation_spec.lua:432:81: (W212) unused argument 'default'
-tests/buffer/hidden_gitignore_spec.lua:1185:11: (W431) shadowing upvalue 'git' on line 4
+tests/buffer/hidden_gitignore_spec.lua:1195:11: (W431) shadowing upvalue 'git' on line 4
 tests/filesystem/fs_spec.lua:311:69: (W212) unused argument 'from'
 tests/filesystem/fs_spec.lua:484:69: (W212) unused variable length argument
 tests/filesystem/fs_spec.lua:86:26: (W212) unused argument 'copied'

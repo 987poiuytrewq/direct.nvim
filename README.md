@@ -248,6 +248,32 @@ require('direct').setup({ mappings = {
 Set `map_default_keys = false` to disable all defaults while keeping explicit
 `mappings` and `<Plug>` mappings active.
 
+`mappings` can also bind a custom Normal-mode key to a Lua function. The
+function receives a detached entry record with `path`, `name`, `type`, `root`,
+and `deleted`; errors are reported as warnings instead of escaping the mapping.
+The `g?` help view labels these keys `Custom function`:
+
+```lua
+require('direct').setup({
+  mappings = {
+    ['<leader>y'] = function(entry)
+      vim.fn.setreg('+', entry.path)
+    end,
+    ['<leader>T'] = function(entry)
+      if entry.deleted then return end
+      local dir = entry.type == 'directory' and entry.path or vim.fs.dirname(entry.path)
+      vim.cmd('botright new')
+      vim.fn.termopen({ vim.o.shell }, { cwd = dir })
+    end,
+  },
+})
+```
+
+`require('direct').current_entry()` returns the unchanged row under the cursor,
+or `nil` outside a Direct listing or on an edited/unidentified row.
+`require('direct').selected_entries()` returns the ordered entries in the
+active Visual line range, or `nil` when there is no active Direct selection.
+
 With mouse support on (`:set mouse=a`), double-click an entry to open it, and
 click a folder icon to expand or collapse that folder.
 
@@ -258,7 +284,7 @@ These are the defaults:
 ```lua
 require('direct').setup({
   map_default_keys = true,           -- install the mappings above
-  mappings = {},                      -- per-action key override or false to disable
+  mappings = {},                      -- per-action override, false to disable, or lhs -> function(entry)
   sort = 'name',                     -- 'natural' or a comparator function
   sort_directories_first = true,     -- keep directories in a leading group
   show_hidden = true,                -- show dotfiles (toggle with `gh`)

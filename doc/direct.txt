@@ -828,24 +828,33 @@ buffers                 table (defaults: `{ reuse = true, open_in = 'current' }`
 map_default_keys        boolean (default: `true`)
     Install the global `-` mapping and the buffer-local mappings in
     listings. Set to `false` to disable default physical keys; explicit
-    per-action mappings are still installed. `<Plug>` mappings are always
-    available. See |direct.vim-mappings|.
+    per-action mappings and custom function keys are still installed.
+    `<Plug>` mappings are always available. See |direct.vim-mappings|.
 
                                                              *direct-mappings*
 mappings                table (default: `{}`)
     Per-action key overrides. Use an action name as the key and a non-empty
     key string as its value, or `false` to disable that action's default key.
-    For example:
+    A custom key may instead be a key string mapped directly to a Lua function.
+    Custom function keys are buffer-local Normal-mode mappings. The function
+    receives a detached entry record with `path`, `name`, `type`, `root`, and
+    `deleted`; errors are reported as warnings. `g?` labels these mappings
+    `Custom function`. For example:
 >
         require('direct').setup({
-          mappings = { expand = 'o', undo = '<leader>u', toggle_hidden = false },
+          mappings = {
+            expand = 'o',
+            undo = '<leader>u',
+            toggle_hidden = false,
+            ['<leader>y'] = function(entry) vim.fn.setreg('+', entry.path) end,
+          },
         })
 <
     Action names include `open`, `open_horizontal`, `open_vertical`, `open_tab`,
     `undo`, `redo`, `yank`, `paste`, `toggle_hidden`, `toggle_gitignore`,
     `toggle_directory_collapse`, `git_add`, `git_unstage`, `git_restore`,
-    `git_diff`, `next_change`, `show_help`, `expand`, `collapse`, `toggle`, and the recursive
-    folder actions. Each action has a `<Plug>(direct-...)` mapping.
+    `git_diff`, `next_change`, `show_help`, `expand`, `collapse`, `toggle`, and
+    the recursive folder actions. Each action has a `<Plug>(direct-...)` mapping.
     `map_default_keys = false` suppresses defaults but not explicit overrides
     or `<Plug>` mappings.
 
@@ -1372,7 +1381,7 @@ Use `mappings` to override one action, or map a `<Plug>` entry point yourself:
 ==============================================================================
 15. Lua API                                                   *direct.vim-api*
 
-The functions in `require('direct')` mirror the commands:
+The functions in `require('direct')` expose commands and listing state:
 
     Function                    Equivalent ~
     `setup(opts)`                 |direct.setup()|
@@ -1402,8 +1411,10 @@ The functions in `require('direct')` mirror the commands:
     `next_directory()` `previous_directory()`   visible directory navigation
     `next_file()`                 |:DirectNextFile|
     `previous_file()`             |:DirectPreviousFile|
-    `run(command)`                |:DirectRun|
-    `git(command)`                |:DirectGit|
+    `run(command)`                 |:DirectRun|
+    `git(command)`                  |:DirectGit|
+    `current_entry()`               unchanged entry record or `nil`
+    `selected_entries()`            ordered entry records in the active Visual line range
 
 `open({ split = 'horizontal' })`, `open({ split = 'vertical' })` and
 `open({ split = 'tab' })` open the selected entry in a new window or tab. The
@@ -1416,6 +1427,15 @@ error outside a listing.
 `sync()` without a callback runs synchronously for Lua callers.
 `sync(callback)` uses the same asynchronous path as |:DirectSync| and |:write|;
 the callback receives `(result, error)` when the operation has finished.
+
+An entry record is a detached table with `path` (absolute path), `name`
+(without the trailing directory marker), `type` (`file` or `directory`), `root`
+(the listing root), and `deleted` (true for a Git-deleted row). `current_entry()`
+returns `nil` outside a Direct listing or when the row is edited or cannot be
+identified safely. `selected_entries()` is available while a Visual line range
+is active; it returns entries in display order and `nil` outside a Direct
+listing or Visual mode. The returned tables do not expose or mutate listing
+internals.
 
 ==============================================================================
 16. User events                                            *direct.vim-events*

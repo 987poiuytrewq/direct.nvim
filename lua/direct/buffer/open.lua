@@ -180,6 +180,37 @@ do
     return current_row_record(bufnr, row - 1)
   end
 
+  -- Buffer:get_entry_records(firstline, lastline) -> row records whose display
+  -- text still matches their captured identities. Validate the tree once so
+  -- public range APIs do not repeat a whole-buffer integrity walk per row.
+  function M.get_entry_records(_, firstline, lastline)
+    local bufnr = vim.api.nvim_get_current_buf()
+    if
+      type(firstline) ~= 'number'
+      or type(lastline) ~= 'number'
+      or firstline < 1
+      or lastline < firstline
+      or firstline % 1 ~= 0
+      or lastline % 1 ~= 0
+    then
+      return nil, 'invalid row range'
+    end
+    restore_deleted_rows(bufnr)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    if lastline > #lines then return nil, 'row identity is unavailable' end
+    local safe, integrity_err = children_integrity(bufnr, lines)
+    if not safe then return nil, integrity_err end
+    local records = {}
+    for row = firstline, lastline do
+      local record = current_row_record(bufnr, row - 1)
+      if not record or not record.path or lines[row] ~= record.text then
+        return nil, 'row identity is unavailable or has unsaved edits'
+      end
+      records[#records + 1] = record
+    end
+    return records
+  end
+
   -- Buffer:paste_destination([row]) -> the directory represented by the row.
   -- A directory row is itself the destination; a file row uses its parent.
   -- Resolve through the row record so expanded child rows never rely on their

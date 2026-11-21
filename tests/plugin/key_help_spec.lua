@@ -99,6 +99,20 @@ H.describe('in-listing key help', function()
     H.assert_eq(vim.api.nvim_get_current_buf(), listing_buf, 'Escape returns to the listing')
   end)
 
+  H.it('shows a custom Lua action mapping', function()
+    setup_listing({
+      mappings = {
+        ['<leader>y'] = function() end,
+      },
+    })
+
+    local _, help_buf = open_help()
+    local lines = vim.api.nvim_buf_get_lines(help_buf, 0, -1, false)
+    H.assert_true(contains(lines, '<leader>y'), 'custom action key is shown')
+    H.assert_true(contains(lines, 'custom'), 'custom action source is labeled')
+    H.assert_true(contains(lines, 'Custom function'), 'custom action uses the fixed description')
+  end)
+
   H.it('omits actions explicitly disabled in the mappings option', function()
     setup_listing({
       mappings = {

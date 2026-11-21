@@ -97,6 +97,55 @@ function M.open(line, options)
   return buffer.restore():open(line, options)
 end
 
+local function entry_from_record(record, root)
+  if not record or type(record.name) ~= 'string' or type(record.path) ~= 'string' or record.path == '' then
+    return nil
+  end
+  local kind = record.deleted_kind
+  if kind ~= 'file' and kind ~= 'directory' then
+    kind = paths.is_directory_name(record.name) and 'directory' or 'file'
+  end
+  return {
+    path = record.path,
+    name = paths.strip_directory_marker(record.name),
+    type = kind,
+    root = root,
+    deleted = record.deleted_kind ~= nil,
+  }
+end
+
+--- Return the unchanged entry record under the cursor, or nil when unavailable.
+---@return direct.Entry?
+function M.current_entry()
+  if vim.bo.filetype ~= constants.FILETYPE then return nil end
+  local listing = buffer.restore()
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local records = listing:get_entry_records(row, row)
+  return records and entry_from_record(records[1], listing.root) or nil
+end
+
+--- Return unchanged entry records for the active visual line range, or nil
+--- outside a Direct listing or Visual mode.
+---@return direct.Entry[]?
+function M.selected_entries()
+  if vim.bo.filetype ~= constants.FILETYPE then return nil end
+  local mode = vim.api.nvim_get_mode().mode
+  if mode ~= 'v' and mode ~= 'V' and mode ~= '\22' then return nil end
+  local anchor, cursor = vim.fn.line('v'), vim.fn.line('.')
+  if anchor < 1 or cursor < 1 then return nil end
+  local listing = buffer.restore()
+  local first, last = math.min(anchor, cursor), math.max(anchor, cursor)
+  local records = listing:get_entry_records(first, last)
+  if not records then return nil end
+  local entries = {}
+  for _, record in ipairs(records) do
+    local entry = entry_from_record(record, listing.root)
+    if not entry then return nil end
+    entries[#entries + 1] = entry
+  end
+  return entries
+end
+
 function M.open_parent_expanded()
   local parent = vim.fn.fnamemodify(buffer.root_for_buffer(), ':h')
   local opened = M.list(parent)
@@ -501,6 +550,8 @@ local protected_actions = {
   previous_change = 'navigate to the previous changed entry',
   next_file = 'navigate to the next file',
   previous_file = 'navigate to the previous file',
+  current_entry = 'get the entry under the cursor',
+  selected_entries = 'get the selected entries',
   undo = 'undo the last filesystem action',
   redo = 'redo the last filesystem action',
   reset_history = 'reset the filesystem history',

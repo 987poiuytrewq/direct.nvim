@@ -513,6 +513,27 @@ H.describe('config', function()
     pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
   end)
 
+  H.it('accepts custom function mappings keyed by their lhs', function()
+    local config = fresh_config()
+    config.clear_mappings()
+    local callback = function() end
+
+    local options = config.setup({
+      map_default_keys = false,
+      mappings = { ['<leader>y'] = callback },
+    })
+    H.assert_eq(options.mappings['<leader>y'], callback, 'custom mapping callback is preserved')
+
+    H.capture_messages()
+    options = config.setup({
+      map_default_keys = false,
+      mappings = { ['<leader>y'] = 'not a built-in action' },
+    })
+    H.assert_nil(options.mappings['<leader>y'], 'custom keys require a callback')
+    H.assert_notified('unknown mapping action <leader>y', vim.log.levels.ERROR)
+    config.clear_mappings()
+  end)
+
   H.it('the VimEnter install runs exactly once and setup() suppresses it', function()
     local config = fresh_config()
     config.clear_mappings()

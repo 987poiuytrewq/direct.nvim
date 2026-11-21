@@ -777,6 +777,7 @@ Buffer.open = open.open
 Buffer.get_paths = open.get_paths
 Buffer.get_entry_path = open.get_entry_path
 Buffer.get_entry_record = open.get_entry_record
+Buffer.get_entry_records = open.get_entry_records
 Buffer.paste_destination = open.paste_destination
 Buffer.refresh_after_paste = open.refresh_after_paste
 

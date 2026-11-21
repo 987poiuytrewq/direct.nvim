@@ -138,7 +138,7 @@ into each task below:
 | A52 | P3 | Open | Rewrite refusal messages in plain language and point at the line |
 | A53 | P3 | Open | Add `g?` key help inside a listing |
 | A54 | P3 | Open | Let users choose the sort order and what is hidden |
-| A55 | P3 | Open | Support other icon providers and optional detail columns |
+| A55 | P3 | Partial | Ship configurable icon providers; defer optional detail columns pending demand and performance evidence |
 | A56 | P3 | Open | Allow custom key actions and expose the entry under the cursor |
 | A57 | P2 | Done | Explain and probe filesystems without safe no-replace renames |
 | A58 | P3 | Done | Measure large-directory listing and set a performance budget |
@@ -927,6 +927,9 @@ rows. Renames under each order give the same result on disk.
 
 ### A55 — Only one icon provider, and no detail columns (P3)
 
+**Progress.** Configurable file icon providers were shipped in PR #207 (merge
+`75c8506`). The separate detail-columns follow-up is deferred below.
+
 **Problem.** Filetype icons come only from nvim-web-devicons
 (`lua/direct/buffer/rows.lua`, around line 98). mini.icons, which many
 configurations now use instead, isn't supported, and neither is a user
@@ -939,15 +942,35 @@ as columns.
 - Add `icons.provider`: `'auto'` (default: mini.icons if loaded, else
   nvim-web-devicons, else the generic glyphs), `'mini'`, `'devicons'`,
   `false`, or a function `(name, type) -> glyph, highlight`.
-- Optionally, as a second PR: a `columns` option for size and modification
-  time shown as virtual text to the right, like the Git symbols. Read the stat
-  data the listing already collects, and keep columns read-only, since they
-  aren't part of the editable text.
+- Optional follow-up: a `columns` option for size and modification time shown as
+  virtual text to the right, like the Git symbols. Plumb through the list-time
+  stat used to build row identity where possible, and keep columns outside the
+  editable listing text.
 
-**Tests.** With a stubbed mini.icons, `'auto'` uses it. A provider function's
-glyph and highlight are used. An error in the function falls back to the
-generic glyph and is reported once. Columns appear as virtual text and are not
-part of the line text, so they can't be edited or affect a save.
+**Columns decision (2026-11-21): Deferred.** No repository issue requests size,
+modification-time, or other metadata columns, and the open beta-feedback issue
+has no comments asking for them. The `fs_scandir` path supplies name/type only
+(`lua/direct/buffer/listing.lua`, around line 220); the later row-identity step
+stats each visible path but retains only path/inode, not size/mtime. A columns
+implementation may be able to reuse the existing identity stat work; no extra
+stat per entry is assumed here. What is unmeasured is the incremental row-state,
+formatting, and virtual-text rendering cost. The A58 benchmark profile already
+records about 10,003 `fs_stat` calls and 10,001 row extmark writes for 10,000
+entries, with listing/re-list medians of 184.89/244.64 ms locally and
+191.33/295.36 ms on CI (columns disabled). The CI re-list baseline is about
+295 ms, close to the 300 ms first-list advisory budget; there is no demonstrated
+headroom for additional display work in this synchronous path. With no
+demonstrated user demand and no measurement of incremental rendering cost, the
+optional parity feature is not justified yet. Reopen this follow-up when
+concrete user requests and a benchmark support it. If implemented, keep columns
+as read-only virtual text and test that edits and saves cannot consume or alter
+them.
+
+**Tests (shipped icon-provider part).** With a stubbed mini.icons, `'auto'`
+uses it. A provider function's glyph and highlight are used. An error in the
+function falls back to the generic glyph and is reported once. If columns are
+reopened, test that their virtual text is not part of listing text and cannot
+affect an edit or save.
 
 ### A56 — Custom keys can only call built-in actions (P3)
 

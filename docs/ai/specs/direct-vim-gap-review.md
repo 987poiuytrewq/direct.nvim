@@ -1,7 +1,8 @@
 # Spec: direct.vim improvements, fourth review
 
-**Status:** A33–A37, A41–A43, A45–A47, A49–A50 and A57–A58 are complete.
-A48 is partially complete; A38–A40, A44 and A51–A56 remain open.
+**Status:** A33–A37, A41–A43, A45–A47, A49–A54 and A56–A58 are complete.
+A38–A40 and A44 remain open. A48 is partial (pre-release soak pending), and
+A55 is partial (icon providers shipped; detail columns deferred).
 
 **Source:** a fourth static review of `origin/master` at `1af1402`
 (17 November 2026). Every task from the earlier reviews (S1–S6, R1–R3, F1–F6,
@@ -19,11 +20,14 @@ them as a guide to where to look, not as exact counts.
 
 **Last checked:** `origin/master` at `1af1402` (17 November 2026).
 
-**Backlog status checked:** `origin/master` at `6d4073c` (20 November 2026).
-The review findings and suggested order below describe the original review
-baseline; task statuses reflect the merged work through this commit. A42's
-v0.4.0 beta is tagged and published. A48's stability guidance, beta notice and
-feedback issue are in place, but the pre-release soak was not performed.
+**Backlog status checked:** `origin/master` at `cc24e5c` (21 November 2026).
+The findings and original static-review baseline above remain unchanged; the
+task statuses and suggested order below reflect merged work through this
+commit. A42's v0.4.0 beta is tagged and published. A48's
+stability guidance, beta notice and feedback issue are in place, but the
+pre-release soak was not performed. A55's icon providers shipped in PR #207;
+the optional columns remain deferred per the decision below. A56 shipped in PR
+#209.
 
 ## What this review found
 
@@ -134,12 +138,12 @@ into each task below:
 | A48 | P4 | Partial | State what is stable before 1.0 and gather real-world use |
 | A49 | P2 | Done | Make `:wq`, `:x`, `:wa` and quitting work with background saves |
 | A50 | P2 | Done | Treat `cc` on a top-level row as a rename, as child rows already do |
-| A51 | P3 | Open | Add `:DirectPlan` to preview a save without applying it |
-| A52 | P3 | Open | Rewrite refusal messages in plain language and point at the line |
-| A53 | P3 | Open | Add `g?` key help inside a listing |
-| A54 | P3 | Open | Let users choose the sort order and what is hidden |
+| A51 | P3 | Done | Add `:DirectPlan` to preview a save without applying it |
+| A52 | P3 | Done | Rewrite refusal messages in plain language and point at the line |
+| A53 | P3 | Done | Add `g?` key help inside a listing |
+| A54 | P3 | Done | Let users choose the sort order and what is hidden |
 | A55 | P3 | Partial | Ship configurable icon providers; defer optional detail columns pending demand and performance evidence |
-| A56 | P3 | Open | Allow custom key actions and expose the entry under the cursor |
+| A56 | P3 | Done | Allow custom key actions and expose the entry under the cursor |
 | A57 | P2 | Done | Explain and probe filesystems without safe no-replace renames |
 | A58 | P3 | Done | Measure large-directory listing and set a performance budget |
 
@@ -1079,13 +1083,11 @@ benchmark in CI, so a slowdown can land unnoticed.
 ## Suggested order
 
 1. Complete the A48 pre-release soak and record its result. The stability
-   guidance and v0.4.0 beta feedback path are already in place; the soak can
-   proceed independently of the remaining engineering work.
-2. Continue A38 as separate one-function PRs, and do A39 as its own config
-   split. These can proceed independently; A39 should land before A53 and A56,
-   which depend on the established configuration and mapping shape.
-3. Do A40 before A44 because the lint, coverage and CI changes overlap.
-4. Do A52 and A53 before A51, which depends on the refusal and help work.
-5. Do A54 after A51. A58's performance baseline is complete; keep A55-icons
-   and the optional A55-columns work in separate PRs, then do A56 after A55 is
-   resolved.
+   guidance and v0.4.0 beta feedback path are already in place; the soak remains
+   the outstanding release-maturity check.
+2. Continue the remaining engineering backlog: A38 as separate one-function
+   PRs, A39 as its config split, and A40 before A44 because the lint, coverage
+   and CI changes overlap.
+3. Revisit A55 columns only if concrete user demand emerges and a benchmark
+   shows that the incremental metadata and virtual-text cost fits the existing
+   listing budget. Until then, keep this optional follow-up deferred.

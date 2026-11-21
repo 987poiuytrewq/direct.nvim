@@ -312,6 +312,8 @@ H.describe('entry: direct-buffer guard', function()
       'list_cwd',
       'open',
       'open_parent_expanded',
+      'current_entry',
+      'selected_entries',
       'show_help',
       'expand',
       'collapse',

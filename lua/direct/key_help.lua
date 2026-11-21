@@ -30,6 +30,15 @@ local function active_mappings()
   for _, entry in ipairs(require('direct.folding').KEY_MAPS) do
     add(entry)
   end
+  for _, entry in ipairs(require('direct.config.mappings').custom_mappings(config)) do
+    entries_by_lhs['n\0' .. entry.lhs] = {
+      action = 'custom:' .. entry.lhs,
+      lhs = entry.lhs,
+      mode = 'n',
+      description = 'Custom function',
+      source = 'custom',
+    }
+  end
 
   local entries = {}
   for _, entry in pairs(entries_by_lhs) do

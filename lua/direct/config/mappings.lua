@@ -4,6 +4,8 @@ local M = {}
 local constants = require('direct.constants')
 local ui = require('direct.ui')
 
+local CUSTOM_MAPPING_DESC_PREFIX = 'direct: custom action: '
+
 -- Global mapping: normal `-` opens the current buffer's directory.
 M.GLOBAL_MAP = {
   action = 'list_buffer',
@@ -195,6 +197,30 @@ function M.mapping_lhs(config, action, default)
   return config.options.map_default_keys and default or nil
 end
 
+-- Custom callbacks are keyed by their physical lhs, unlike built-in overrides
+-- which are keyed by action name.
+function M.custom_mappings(config)
+  local known = M.mapping_catalog(config)
+  local entries = {}
+  for lhs, callback in pairs(config.options.mappings or {}) do
+    if not known[lhs] and type(callback) == 'function' then
+      entries[#entries + 1] = { lhs = lhs, callback = callback }
+    end
+  end
+  table.sort(entries, function(a, b) return a.lhs < b.lhs end)
+  return entries
+end
+
+local function custom_mapping_callback(lhs, callback)
+  return function()
+    local ok, err = xpcall(function()
+      local entry = require('direct').current_entry()
+      if entry then callback(entry) end
+    end, debug.traceback)
+    if not ok then ui.report_error('run custom key action ' .. lhs, err, vim.log.levels.WARN) end
+  end
+end
+
 local function open_direct_buffers()
   local bufs = {}
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
@@ -249,7 +275,9 @@ local function clear_owned_buffer_maps(config, target)
   local rhs = buffer_mapping_rhs(config)
   for _, mode in ipairs({ 'n', 'v' }) do
     for _, map in ipairs(vim.api.nvim_buf_get_keymap(target, mode)) do
-      if rhs[map.rhs] then
+      local custom_action = type(map.desc) == 'string'
+        and map.desc:sub(1, #CUSTOM_MAPPING_DESC_PREFIX) == CUSTOM_MAPPING_DESC_PREFIX
+      if rhs[map.rhs] or custom_action then
         local ok, err = pcall(vim.keymap.del, mode, map.lhs, { buffer = target })
         if not ok then
           ui.notify(
@@ -279,6 +307,14 @@ function M.install_buffer_mappings(config, bufnr)
     end
   end
   require('direct.folding').install_mappings(target, require('direct.buffer.buffer'))
+  for _, entry in ipairs(M.custom_mappings(config)) do
+    vim.keymap.set('n', entry.lhs, custom_mapping_callback(entry.lhs, entry.callback), {
+      buffer = target,
+      silent = true,
+      noremap = true,
+      desc = CUSTOM_MAPPING_DESC_PREFIX .. entry.lhs,
+    })
+  end
   return true
 end
 

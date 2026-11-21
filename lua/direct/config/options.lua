@@ -45,6 +45,15 @@ local platform = require('direct.platform')
 
 ---@alias direct.SortComparator fun(a: direct.ListEntry, b: direct.ListEntry): boolean
 
+---@class direct.Entry
+---@field path string Absolute path represented by this listing row.
+---@field name string Entry name without the trailing directory marker.
+---@field type 'file'|'directory'
+---@field root string Absolute root of the current listing.
+---@field deleted boolean Whether this is a Git-deleted, view-only row.
+
+---@alias direct.CustomAction fun(entry: direct.Entry)
+
 ---@class direct.Config
 ---@field map_default_keys? boolean
 ---@field directory_separator? '/'|'\\'
@@ -58,7 +67,7 @@ local platform = require('direct.platform')
 ---@field undo_confirm? boolean|'elsewhere'
 ---@field history_limit? integer
 ---@field trash_retention? false|direct.TrashRetention
----@field mappings? table<string, string|false>
+---@field mappings? table<string, string|false|direct.CustomAction>
 ---@field show_folder_icons? boolean
 ---@field show_file_icons? boolean
 ---@field show_filetype_icons? boolean
@@ -312,12 +321,16 @@ local function resolve_mappings(value, mapping_catalog)
   local result = {}
   for _, action in ipairs(sorted_keys(value)) do
     local key = value[action]
-    if not known[action] then
-      errors[#errors + 1] = 'direct: unknown mapping action ' .. tostring(action)
-    elseif key == false or (type(key) == 'string' and key ~= '') then
+    if type(action) == 'string' and action ~= '' and known[action] then
+      if key == false or (type(key) == 'string' and key ~= '') then
+        result[action] = key
+      else
+        errors[#errors + 1] = 'direct: mappings.' .. action .. ' must be a non-empty key or false'
+      end
+    elseif type(action) == 'string' and action ~= '' and type(key) == 'function' then
       result[action] = key
     else
-      errors[#errors + 1] = 'direct: mappings.' .. tostring(action) .. ' must be a non-empty key or false'
+      errors[#errors + 1] = 'direct: unknown mapping action ' .. tostring(action)
     end
   end
   return result, errors

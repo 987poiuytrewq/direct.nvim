@@ -952,17 +952,19 @@ modification-time, or other metadata columns, and the open beta-feedback issue
 has no comments asking for them. The `fs_scandir` path supplies name/type only
 (`lua/direct/buffer/listing.lua`, around line 220); the later row-identity step
 stats each visible path but retains only path/inode, not size/mtime. A columns
-implementation would need to extend that per-entry stat/cache or add metadata
-reads. The A58 benchmark does not measure either metadata retention or extra
-column rendering: its 10,000-entry profile already records about 10,003
-`fs_stat` calls and 10,001 row extmark writes, with listing/re-list medians of
-184.89/244.64 ms locally and 191.33/295.36 ms on CI (columns disabled). The
-baseline is under budget, but there is no measurement demonstrating that
-additional per-entry metadata and virtual-text work fits the 300 ms advisory
-budget. With no user demand and no such measurement, the optional parity feature
-is not justified yet. Reopen this follow-up when concrete user requests and a
-benchmark support it. If implemented, keep columns as read-only virtual text
-and test that edits and saves cannot consume or alter them.
+implementation may be able to reuse the existing identity stat work; no extra
+stat per entry is assumed here. What is unmeasured is the incremental row-state,
+formatting, and virtual-text rendering cost. The A58 benchmark profile already
+records about 10,003 `fs_stat` calls and 10,001 row extmark writes for 10,000
+entries, with listing/re-list medians of 184.89/244.64 ms locally and
+191.33/295.36 ms on CI (columns disabled). The CI re-list baseline is about
+295 ms, close to the 300 ms first-list advisory budget; there is no demonstrated
+headroom for additional display work in this synchronous path. With no
+demonstrated user demand and no measurement of incremental rendering cost, the
+optional parity feature is not justified yet. Reopen this follow-up when
+concrete user requests and a benchmark support it. If implemented, keep columns
+as read-only virtual text and test that edits and saves cannot consume or alter
+them.
 
 **Tests (shipped icon-provider part).** With a stubbed mini.icons, `'auto'`
 uses it. A provider function's glyph and highlight are used. An error in the

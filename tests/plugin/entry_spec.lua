@@ -714,14 +714,14 @@ H.describe('entry: default mappings', function()
       zM = 'direct: Collapse all direct directories',
       ['[d'] = 'direct: Jump to the previous visible direct directory',
       [']d'] = 'direct: Jump to the next visible direct directory',
-      ['<LeftMouse>'] = 'direct: Toggle a direct directory from its folder icon',
-      ['<2-LeftMouse>'] = 'direct: Open the direct entry under the double-click',
     }
     for lhs, desc in pairs(fold_descriptions) do
       local record = normal_records[lhs]
       H.assert_true(record and record.callback ~= nil, 'direct mapping ' .. lhs .. ' uses a Lua callback')
       H.assert_eq(record and record.desc, desc, 'fold mapping description ' .. lhs)
     end
+    H.assert_nil(normal_records['<LeftMouse>'], 'mouse click mappings are opt-in')
+    H.assert_nil(normal_records['<2-LeftMouse>'], 'mouse double-click mappings are opt-in')
 
     for _, maps in ipairs({ normal, visual }) do
       for lhs, rhs in pairs(maps) do
@@ -731,6 +731,28 @@ H.describe('entry: default mappings', function()
         )
       end
     end
+  end)
+
+  H.it('map_mouse_keys=true installs mouse handlers without changing default keyboard mappings', function()
+    clean_buffers()
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'a.txt', { 'a' })
+
+    require('direct.config').setup({ map_default_keys = true, map_mouse_keys = true })
+    require('direct').list(ws)
+    local normal_records = buf_map_records(vim.api.nvim_get_current_buf(), 'n')
+    H.assert_eq(
+      normal_records['<LeftMouse>'] and normal_records['<LeftMouse>'].desc,
+      'direct: Toggle a direct directory from its folder icon',
+      'opt-in folder click handler is installed'
+    )
+    H.assert_eq(
+      normal_records['<2-LeftMouse>'] and normal_records['<2-LeftMouse>'].desc,
+      'direct: Open the direct entry under the double-click',
+      'opt-in double-click handler is installed'
+    )
+    H.assert_true(normal_records['zo'] ~= nil, 'keyboard defaults remain installed')
   end)
 
   H.it('z- opens the parent listing and expands the directory just left', function()

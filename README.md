@@ -213,7 +213,7 @@ Mappings are buffer-local to direct listings, except the global `-`.
 |------------------|-----------------------------------------------------|
 | `-`              | List the current file's directory, or go to the parent |
 | `z-`             | Go to the parent and expand the directory you left  |
-| `<CR>`, double-click | Open the file or directory                      |
+| `<CR>`           | Open the file or directory                      |
 | `<C-s>` `<C-v>` `<C-t>` | Open in a horizontal split, vertical split, or tab |
 | `g?`             | Show the active mappings for this listing           |
 | `zo` `zc` `za`   | Expand, collapse or toggle one directory            |
@@ -232,6 +232,9 @@ Mappings are buffer-local to direct listings, except the global `-`.
 | `]c` `[c`        | Next or previous changed entry                      |
 | `ga` `<leader>gu` `<leader>gr` | Stage, unstage, or confirm restore of the entry |
 
+With `map_mouse_keys = true` and `:set mouse=a`, double-click an entry to open
+it or click a folder icon to expand or collapse it.
+
 These defaults are buffer-local, but inside a Direct listing they replace any
 existing mappings for the same keys. In particular, `gd` is commonly used for
 LSP go-to-definition, `<leader>gr` for references, and `<leader>gu` for a
@@ -245,8 +248,10 @@ require('direct').setup({ mappings = {
 } })
 ```
 
-Set `map_default_keys = false` to disable all defaults while keeping explicit
-`mappings` and `<Plug>` mappings active.
+Set `map_default_keys = false` to disable default keyboard mappings while
+keeping explicit `mappings` and `<Plug>` mappings active. Mouse mappings are
+separate and opt-in with `map_mouse_keys = true`; leaving them off allows
+tabline click handlers, including bufferline.nvim, to receive mouse clicks.
 
 `mappings` can also bind a custom Normal-mode key to a Lua function. The
 function receives a detached entry record with `path`, `name`, `type`, `root`,
@@ -274,8 +279,10 @@ or `nil` outside a Direct listing or on an edited/unidentified row.
 `require('direct').selected_entries()` returns the ordered entries in the
 active Visual line range, or `nil` when there is no active Direct selection.
 
-With mouse support on (`:set mouse=a`), double-click an entry to open it, and
-click a folder icon to expand or collapse that folder.
+With `map_mouse_keys = true` and mouse support on (`:set mouse=a`), double-click
+an entry to open it, and click a folder icon to expand or collapse that folder.
+Mouse mappings are opt-in because they can intercept clicks handled by tabline
+plugins such as bufferline.nvim.
 
 ## Configuration
 
@@ -283,7 +290,8 @@ These are the defaults:
 
 ```lua
 require('direct').setup({
-  map_default_keys = true,           -- install the mappings above
+  map_default_keys = true,           -- install the default keyboard mappings
+  map_mouse_keys = false,            -- opt in to Direct's mouse-click mappings
   mappings = {},                      -- per-action override, false to disable, or lhs -> function(entry)
   sort = 'name',                     -- 'natural' or a comparator function
   sort_directories_first = true,     -- keep directories in a leading group

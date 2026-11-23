@@ -56,6 +56,7 @@ local platform = require('direct.platform')
 
 ---@class direct.Config
 ---@field map_default_keys? boolean
+---@field map_mouse_keys? boolean
 ---@field directory_separator? '/'|'\\'
 ---@field sort? 'name'|'natural'|direct.SortComparator
 ---@field sort_directories_first? boolean
@@ -80,6 +81,7 @@ local platform = require('direct.platform')
 ---@type direct.Config
 local defaults = {
   map_default_keys = true,
+  map_mouse_keys = false,
   directory_separator = platform.separator,
   sort = 'name',
   sort_directories_first = true,
@@ -358,6 +360,7 @@ local option_schema = {
   -- These options historically passed through unchanged; keep their existing
   -- semantics while still declaring them in the option table.
   { key = 'map_default_keys', default = defaults.map_default_keys, validate = passthrough },
+  { key = 'map_mouse_keys', default = defaults.map_mouse_keys, validate = boolean_rule('map_mouse_keys') },
   {
     key = 'directory_separator',
     default = defaults.directory_separator,

@@ -29,7 +29,7 @@ Notable changes to direct.nvim are documented here. Versions follow
 ## [0.4.0] - 2026-11-18
 
 > **Beta:** The maintainer pre-release soak was not performed. Please share
-> what worked and what did not in [issue #159](https://github.com/987poiuytrewq/direct.nvim/issues/159).
+> what worked and what did not in [issue #159](https://github.com/987poiuytrewq/direct.vim/issues/159).
 
 ### Changed
 

@@ -71,6 +71,7 @@ local platform = require('direct.platform')
 ---@field show_folder_icons? boolean
 ---@field show_file_icons? boolean
 ---@field show_filetype_icons? boolean
+---@field color_file_icons? boolean
 ---@field icons? direct.Icons
 ---@field max_recursive_expand_depth? false|integer
 ---@field git? direct.GitConfig
@@ -93,6 +94,7 @@ local defaults = {
   show_folder_icons = true,
   show_file_icons = true,
   show_filetype_icons = true,
+  color_file_icons = true,
   icons = {
     file = '\u{f15b}',
     folder = '\u{f07b}',
@@ -436,6 +438,11 @@ local option_schema = {
     key = 'show_filetype_icons',
     default = defaults.show_filetype_icons,
     validate = boolean_rule('show_filetype_icons'),
+  },
+  {
+    key = 'color_file_icons',
+    default = defaults.color_file_icons,
+    validate = boolean_rule('color_file_icons'),
   },
   { key = 'icons', default = defaults.icons, type = 'table', validate = resolve_icon_options },
   {

@@ -303,6 +303,7 @@ require('direct').setup({
   show_folder_icons = true,
   show_file_icons = true,
   show_filetype_icons = true,
+  color_file_icons = true,
   icons = {
     provider = 'auto',               -- mini.icons, then nvim-web-devicons
     file = '\u{f15b}',
@@ -435,6 +436,8 @@ an icon. Set it to `'mini'` or `'devicons'` to choose one provider, `false` to
 always use the generic glyph, or a function `(name, type) -> glyph, highlight`
 to supply an icon. A custom function's errors fall back safely and are reported
 once. Folders and deleted tracked files keep their configured Direct icons.
+Set `color_file_icons = false` to keep provider glyphs but use Direct's default
+file-icon highlight instead of provider colors. It defaults to `true`.
 
 ### Highlights
 

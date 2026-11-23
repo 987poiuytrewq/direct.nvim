@@ -766,6 +766,7 @@ Calling `setup()` is optional. These are the defaults:
       show_folder_icons = true,
       show_file_icons = true,
       show_filetype_icons = true,
+      color_file_icons = true,
       icons = {
         provider = 'auto',
         file = '\u{f15b}',
@@ -960,7 +961,13 @@ show_filetype_icons     boolean (default: `true`)
     `icons.file`. Folders and deleted tracked files keep their own icons. Has no
     effect when |direct-show_file_icons| is off.
 
-                                            *direct-icons* *direct-icons.provider*
+                                                   *direct-color_file_icons*
+color_file_icons        boolean (default: `true`)
+    Use provider-supplied highlight groups for file icons. When `false`, provider
+    glyphs are still used, but regular-file icons use Direct's default file icon
+    highlight instead.
+
+                                             *direct-icons* *direct-icons.provider*
 icons                   table
     The glyphs used for icons. Any key you leave out keeps its default.
     `file` is used when filetype icons are disabled or no provider returns an
@@ -1064,7 +1071,8 @@ definitions are kept.
 
 File names get no highlighting based on their name or type. With
 |direct-show_filetype_icons|, mini.icons and custom providers may supply a
-highlight group for file icons. nvim-web-devicons uses Direct's normal file-icon
+highlight group for file icons; |direct-color_file_icons| controls whether that
+provider colour is used. nvim-web-devicons uses Direct's normal file-icon
 groups. Changed names and folder icons are coloured by Git status
 (|direct.vim-git-status|).
 

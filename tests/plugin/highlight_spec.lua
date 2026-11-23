@@ -536,6 +536,30 @@ H.describe('listing filename highlights', function()
     )
   end)
 
+  H.it('can disable provider colors without disabling filetype icons', function()
+    clean_buffers()
+    local config = require('direct.config')
+    config.setup({
+      show_file_icons = true,
+      show_filetype_icons = true,
+      color_file_icons = false,
+      icons = { provider = 'mini' },
+    })
+    local previous_mini = rawget(_G, 'MiniIcons')
+    _G.MiniIcons = { get = function() return 'M', 'TestMiniIcon' end }
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    H.mkfile(ws, 'script.lua', '')
+    buffer.list(ws)
+    _G.MiniIcons = previous_mini
+
+    H.assert_eq(
+      icon_mark(0, 0)[4].virt_text,
+      { { 'M ', 'DirectFileIcon' } },
+      'provider glyph remains while its highlight is suppressed'
+    )
+  end)
+
   H.it('falls back through auto providers and uses the generic glyph when unavailable', function()
     clean_buffers()
     local config = require('direct.config')

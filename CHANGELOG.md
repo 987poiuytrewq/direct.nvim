@@ -7,6 +7,9 @@ Notable changes to direct.nvim are documented here. Versions follow
 
 ### Added
 
+- Add the opt-in `map_mouse_keys` option for Direct's folder-icon and
+  double-click handlers, leaving tabline mouse clicks available to plugins by
+  default.
 - Show active, overridden Direct listing mappings in a floating help window with
   `g?`; disabled mappings are omitted.
 - Configure name, natural, or comparator-based listing order and custom hidden

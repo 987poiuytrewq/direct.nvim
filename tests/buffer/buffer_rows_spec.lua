@@ -541,6 +541,7 @@ H.describe('buffer: row identity and filtered rendering', function()
 
   H.it('double-click opens the directory or file under the mouse', function()
     clean_buffers()
+    require('direct.config').setup({ map_mouse_keys = true })
     local sb = H.sandbox()
     local ws = H.mkdir(sb.root, 'ws')
     H.mkdir(ws, 'sub')

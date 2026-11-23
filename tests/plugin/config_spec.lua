@@ -213,9 +213,52 @@ H.describe('config', function()
     config.clear_mappings()
   end)
 
+  H.it('mouse mappings are opt-in and update already-open direct buffers', function()
+    local config = fresh_config()
+    config.clear_mappings()
+    config.setup({ map_default_keys = true })
+    local sb = H.sandbox()
+    local ws = H.mkdir(sb.root, 'ws')
+    buffer.list(ws)
+    local bufnr = vim.api.nvim_get_current_buf()
+    local function map_desc(lhs)
+      return vim.api.nvim_buf_call(bufnr, function()
+        local map = vim.fn.maparg(lhs, 'n', false, true)
+        return map and map.desc
+      end)
+    end
+    H.assert_false(config.options.map_mouse_keys, 'mouse mappings default off')
+    H.assert_nil(map_desc('<LeftMouse>'), 'folder click mapping is absent by default')
+    H.assert_nil(map_desc('<2-LeftMouse>'), 'double-click mapping is absent by default')
+
+    H.capture_messages()
+    config.setup({ map_mouse_keys = 'true' })
+    H.assert_false(config.options.map_mouse_keys, 'invalid values leave mouse mappings disabled')
+    H.assert_notified('map_mouse_keys must be a boolean', vim.log.levels.ERROR)
+
+    config.setup({ map_default_keys = true, map_mouse_keys = true })
+    H.assert_eq(
+      map_desc('<LeftMouse>'),
+      'direct: Toggle a direct directory from its folder icon',
+      'enabling the option installs the folder click mapping'
+    )
+    H.assert_eq(
+      map_desc('<2-LeftMouse>'),
+      'direct: Open the direct entry under the double-click',
+      'enabling the option installs the double-click mapping'
+    )
+
+    config.setup({ map_default_keys = true })
+    H.assert_nil(map_desc('<LeftMouse>'), 'resetting the option removes the folder click mapping')
+    H.assert_nil(map_desc('<2-LeftMouse>'), 'resetting the option removes the double-click mapping')
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    config.clear_mappings()
+  end)
+
   H.it('file and folder icons default on and reject typos', function()
     local config = fresh_config()
     config.clear_mappings()
+    H.assert_false(config.defaults.map_mouse_keys, 'mouse mappings are opt-in by default')
     H.assert_true(config.defaults.show_folder_icons, 'folder icons are on by default')
     H.assert_true(config.defaults.show_file_icons, 'file icons are on by default')
     H.assert_true(config.defaults.show_filetype_icons, 'filetype icons are on by default')

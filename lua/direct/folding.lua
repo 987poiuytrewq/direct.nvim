@@ -47,7 +47,7 @@ function M.install_mappings(bufnr, buffer_override)
       })
     end
   end
-  if config.options.map_default_keys then
+  if config.options.map_mouse_keys then
     for _, map in ipairs(M.MOUSE_MAPS) do
       vim.keymap.set('n', map.lhs, map.callback(buffer), {
         buffer = bufnr,

@@ -747,6 +747,7 @@ Calling `setup()` is optional. These are the defaults:
 >lua
     require('direct').setup({
       map_default_keys = true,
+      map_mouse_keys = false,
       sort = 'name',
       sort_directories_first = true,
       show_hidden = true,
@@ -828,9 +829,20 @@ buffers                 table (defaults: `{ reuse = true, open_in = 'current' }`
                                                       *direct-map_default_keys*
 map_default_keys        boolean (default: `true`)
     Install the global `-` mapping and the buffer-local mappings in
-    listings. Set to `false` to disable default physical keys; explicit
+    listings. Set to `false` to disable default keyboard mappings; explicit
     per-action mappings and custom function keys are still installed.
-    `<Plug>` mappings are always available. See |direct.nvim-mappings|.
+    `<Plug>` mappings are always available. Mouse mappings are controlled
+    separately by |direct-map_mouse_keys|. See |direct.nvim-mappings|.
+
+                                                       *direct-map_mouse_keys*
+map_mouse_keys          boolean (default: `false`)
+    Install buffer-local `<LeftMouse>` and `<2-LeftMouse>` handlers in Direct
+    listings. These handlers support folder-icon toggling and double-click
+    opening, but can intercept clicks owned by tabline plugins such as
+    bufferline.nvim. Enable this option to use Direct's mouse handlers:
+>
+        require('direct').setup({ map_mouse_keys = true })
+<
 
                                                              *direct-mappings*
 mappings                table (default: `{}`)
@@ -856,8 +868,9 @@ mappings                table (default: `{}`)
     `toggle_directory_collapse`, `git_add`, `git_unstage`, `git_restore`,
     `git_diff`, `next_change`, `show_help`, `expand`, `collapse`, `toggle`, and
     the recursive folder actions. Each action has a `<Plug>(direct-...)` mapping.
-    `map_default_keys = false` suppresses defaults but not explicit overrides
-    or `<Plug>` mappings.
+    `map_default_keys = false` suppresses default keyboard mappings but not
+    explicit overrides or `<Plug>` mappings. Mouse mappings remain disabled
+    unless `map_mouse_keys = true`.
 
                                                                   *direct-sort*
 sort                    `'name'`, `'natural'` or a comparator function
@@ -1321,8 +1334,9 @@ Running commands ~
 ==============================================================================
 14. Mappings                                             *direct.nvim-mappings* *direct.vim-mappings*
 
-Default physical mappings are installed when |direct-map_default_keys| is on.
-Per-action overrides are installed regardless of that option, and `<Plug>`
+Default keyboard mappings are installed when |direct-map_default_keys| is on.
+Mouse mappings are separate and opt-in with |direct-map_mouse_keys|.
+Per-action overrides are installed regardless of those options, and `<Plug>`
 entry points are always available.
 
 Global, in Normal mode:
@@ -1337,8 +1351,6 @@ In a listing (buffer-local):
     n       <C-v>           open in a vertical split
     n       <C-t>           open in a new tab
     n       g?              show active mappings for this listing
-    n       <2-LeftMouse>   open the entry under the cursor
-    n       <LeftMouse>     on a folder icon, expand or collapse it
     n       -               go to the parent directory
     n       z-              go to the parent and expand the directory you left
     n       zo              expand one directory level
@@ -1366,6 +1378,11 @@ In a listing (buffer-local):
     n       <leader>gu      `:DirectGit git reset -- {}` (unstage)
     n       <leader>gr      |:DirectGitRestore| (confirm worktree restore)
 
+When |direct-map_mouse_keys| is enabled, these additional mappings are installed:
+
+    n       <2-LeftMouse>   open the entry under the cursor
+    n       <LeftMouse>     on a folder icon, expand or collapse it
+
 In a listing, the buffer-local `-` takes priority over the global one.
 
 These defaults replace existing mappings for the same keys while a Direct
@@ -1379,8 +1396,9 @@ the conflicting actions with `mappings`, for example:
       git_unstage = '<leader>gU',
     } })
 <
-Set `map_default_keys = false` to disable all physical defaults while keeping
-explicit `mappings` and `<Plug>` mappings active.
+Set `map_default_keys = false` to disable default keyboard mappings while
+keeping explicit `mappings` and `<Plug>` mappings active. Mouse mappings remain
+disabled unless `map_mouse_keys = true`.
 
 Use `mappings` to override one action, or map a `<Plug>` entry point yourself:
 >lua

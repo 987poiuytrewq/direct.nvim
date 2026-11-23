@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to direct.vim are documented here. Versions follow
+Notable changes to direct.nvim are documented here. Versions follow
 [Semantic Versioning](https://semver.org/); release tags use the `v` prefix.
 
 ## [Unreleased]

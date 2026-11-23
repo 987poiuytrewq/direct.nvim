@@ -76,7 +76,7 @@ fixture:
 | Git-ignore on | 750 ms | 412.71 ms |
 
 The first hosted calibration ran in GitHub Actions run
-[44539164138](https://github.com/987poiuytrewq/direct.vim/actions/runs/44539164138):
+[44539164138](https://github.com/987poiuytrewq/direct.nvim/actions/runs/44539164138):
 Ubuntu 26.04.1 on an AWS `ubuntu-latest` runner (Linux 7.0.0-1016-aws,
 x86_64, Intel Xeon 6975P-C), Neovim 0.11.7 / LuaJIT, Git 2.56.1. The 10,000
 entry medians were:

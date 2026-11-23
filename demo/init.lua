@@ -118,13 +118,13 @@ if has_lualine then
       -- start with 'v:' as Vim variables, which fails on every redraw and
       -- leaves the status line empty.
       lualine_c = { _G.DemoStatus },
-      lualine_x = { { function() return 'direct.vim' end } },
+      lualine_x = { { function() return 'direct.nvim' end } },
       lualine_y = {},
       lualine_z = {},
     },
   })
 else
-  vim.o.statusline = '  %{v:lua.DemoStatus()}%=direct.vim  '
+  vim.o.statusline = '  %{v:lua.DemoStatus()}%=direct.nvim  '
 end
 
 local has_bufferline, bufferline = pcall(require, 'bufferline')

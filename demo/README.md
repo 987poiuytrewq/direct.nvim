@@ -1,6 +1,6 @@
 # Scripted demo
 
-`demo.sh` records a one-minute tour of direct.vim with asciinema, for the top
+`demo.sh` records a one-minute tour of direct.nvim with asciinema, for the top
 of the project README.
 
 ## The tour
@@ -30,7 +30,7 @@ keystroke overlay:
    "already exists" prompt names the copy `examples/advanced/`.
 8. **See what changed, and stage it.** `gs` shows only changed files, and `ga`
    stages `README.md`.
-9. **Back to the full listing**, with the title and `:help direct.vim`.
+9. **Back to the full listing**, with the title and `:help direct.nvim`.
 
 Neovim starts inside the project, so messages show paths relative to it.
 Searches type only enough of a name to match one line.
@@ -79,4 +79,4 @@ the demo uses Neovim's default colour scheme and a plain status line.
 
 Recordings go to `demo/casts/` (also ignored); set `CAST_DIR` to change that.
 The project and the demo's data directory are temporary and removed after each
-run, so the tour never touches your own files or direct.vim history.
+run, so the tour never touches your own files or direct.nvim history.

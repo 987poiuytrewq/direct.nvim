@@ -5,7 +5,7 @@
   "measurement": {
     "source_revision": "f692488638d7086dd56681ed12c60d6a988addbb",
     "ci_run_id": 44750453963,
-    "ci_run_url": "https://github.com/987poiuytrewq/direct.vim/actions/runs/44750453963",
+    "ci_run_url": "https://github.com/987poiuytrewq/direct.nvim/actions/runs/44750453963",
     "measured_at": "2026-11-20",
     "ci_environment": {
       "runners": [

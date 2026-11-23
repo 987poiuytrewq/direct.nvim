@@ -1,21 +1,21 @@
-# direct.vim
+# direct.nvim
 
 **Edit your filesystem like a text buffer.**
 
-direct.vim lists a directory in a Neovim buffer, one line per entry. Rename,
+direct.nvim lists a directory in a Neovim buffer, one line per entry. Rename,
 create, delete and move files with ordinary Vim editing, then `:write` to apply
 the changes. Every filesystem change can be undone and redone.
 
 Saving runs the filesystem and history commit asynchronously. `:write` waits for
 the commit to finish, and cross-filesystem copies show progress. `<C-c>` stops
-waiting but does not cancel the save; direct.vim reports that it is continuing
+waiting but does not cancel the save; direct.nvim reports that it is continuing
 in the background. `:wq` and `:x` finish the save before closing, and `:wa`
 queues modified Direct listings one at a time. On exit, Neovim waits for pending
 saves; `<C-c>` lets you quit anyway. `:bw!` warns that the listing buffer is
 wiped while its save continues. If Neovim exits during an operation, journal
 recovery completes it or reports the interruption on the next start.
 
-<img src="demo/tour.gif" width="600" alt="direct.vim demo: renaming, creating and deleting files by editing a listing, undoing on disk, opening files and folders, renaming with :s, copying a folder, and staging with Git">
+<img src="demo/tour.gif" width="600" alt="direct.nvim demo: renaming, creating and deleting files by editing a listing, undoing on disk, opening files and folders, renaming with :s, copying a folder, and staging with Git">
 
 - **Edit with Vim.** Use `cw`, `dd`, `o`, `:s`, macros or anything else, then `:w`.
 - **Browse as a tree.** Expand directories in place with the usual fold keys
@@ -33,7 +33,7 @@ recovery completes it or reports the interruption on the next start.
 
 ## How it compares
 
-direct.vim is **not** a sidebar file tree, and it doesn't preview files. If
+direct.nvim is **not** a sidebar file tree, and it doesn't preview files. If
 that's what you want, use [neo-tree](https://github.com/nvim-neo-tree/neo-tree.nvim)
 or [nvim-tree](https://github.com/nvim-tree/nvim-tree.lua).
 
@@ -41,7 +41,7 @@ It's closest to [oil.nvim](https://github.com/stevearc/oil.nvim) and
 [mini.files](https://github.com/echasnovski/mini.nvim/blob/main/readmes/mini-files.md):
 all three turn a directory into a buffer you edit and save. The differences:
 
-- **Trees you can edit.** direct.vim expands folders in place, and you can
+- **Trees you can edit.** direct.nvim expands folders in place, and you can
   edit, move and re-indent entries across the whole tree in one save. oil.nvim
   shows one folder per buffer, and mini.files shows folders as columns.
 - **Undo on disk.** `u` and `Ctrl-r` undo and redo renames, creates, deletes
@@ -52,9 +52,9 @@ all three turn a directory into a buffer you edit and save. The differences:
   staging keys, with no extra plugins. oil.nvim has third-party extensions for
   Git status.
 - **No previews or remote files.** oil.nvim and mini.files preview files, and
-  oil.nvim can browse SSH and S3. direct.vim does neither.
+  oil.nvim can browse SSH and S3. direct.nvim does neither.
 
-|  | direct.vim | oil.nvim | mini.files | neo-tree, nvim-tree | netrw |
+|  | direct.nvim | oil.nvim | mini.files | neo-tree, nvim-tree | netrw |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Change files by editing text | ✓ | ✓ | ✓ | — | — |
 | Layout | Buffer, folders expand as a tree | Buffer, one folder | Floating columns | Sidebar tree | Buffer, list or tree |
@@ -91,7 +91,7 @@ SHA-256 fallback on 0.11 to keep those keys identical across versions.
 
 **v0.4.0 is a beta.** The maintainer pre-release soak was not performed. If you
 try the beta, please share what worked and what did not in the
-[feedback issue](https://github.com/987poiuytrewq/direct.vim/issues/159).
+[feedback issue](https://github.com/987poiuytrewq/direct.nvim/issues/159).
 
 The commands, `setup()` options, `User` events, default mappings, and persisted
 data formats are intended to remain stable during the 0.x series. This is a
@@ -105,30 +105,30 @@ migration or a safe refusal, not a silent rewrite.
 CI runs the suite on Linux, macOS, and Windows using the runners' local disks.
 It does not establish compatibility with network or FUSE filesystems, test
 case-insensitive-volume edge cases as a separate configuration, or cover very
-large directories. See `:help direct.vim-data` for filesystem limitations.
+large directories. See `:help direct.nvim-data` for filesystem limitations.
 
 ## Installation
 
 With Neovim's built-in `vim.pack`:
 
 ```lua
-vim.pack.add({ 'https://github.com/987poiuytrewq/direct.vim' })
+vim.pack.add({ 'https://github.com/987poiuytrewq/direct.nvim' })
 ```
 
 With [lazy.nvim](https://github.com/folke/lazy.nvim), load it at startup so it
 can take over directories opened from the command line (`nvim .`):
 
 ```lua
-{ '987poiuytrewq/direct.vim', version = '*', lazy = false }
+{ '987poiuytrewq/direct.nvim', version = '*', lazy = false }
 ```
 
 With [vim-plug](https://github.com/junegunn/vim-plug):
 
 ```vim
-Plug '987poiuytrewq/direct.vim'
+Plug '987poiuytrewq/direct.nvim'
 ```
 
-`setup()` is optional, and direct.vim replaces netrw for directory buffers
+`setup()` is optional, and direct.nvim replaces netrw for directory buffers
 automatically.
 
 Releases are tagged with a `v` prefix; see [CHANGELOG.md](CHANGELOG.md) for
@@ -151,7 +151,7 @@ release notes. lazy.nvim users can select tagged releases with `version = '*'`.
 
 4. Changed your mind? Press `u` to undo the filesystem change.
 
-See `:help direct.vim-write` for save, quit, and interrupted-operation behavior.
+See `:help direct.nvim-write` for save, quit, and interrupted-operation behavior.
 
 ### Rules for edits
 
@@ -187,7 +187,7 @@ See `:help direct.vim-write` for save, quit, and interrupted-operation behavior.
   destinations are kept and shown after the successful save. A changed or
   missing edit source is refused, as is an external entry that occupies a
   requested destination.
-- **Unclear edits change nothing.** If direct.vim can't tell what you meant, or
+- **Unclear edits change nothing.** If direct.nvim can't tell what you meant, or
   an edited source changed on disk or a destination is occupied, the save is
   refused, the filesystem is left alone, and your edits stay in the buffer.
   Refusals use stable `E-DIRECT-*` codes; when a row is known, the cursor and a
@@ -405,7 +405,7 @@ prompts, `false` never prompts, and `'elsewhere'` (the default) prompts only if
 the affected paths are outside the current listing's directory.
 
 `history_limit` bounds each undo/redo stack. When a commit exceeds the limit,
-the oldest steps are dropped and direct.vim warns once per Neovim session.
+the oldest steps are dropped and direct.nvim warns once per Neovim session.
 `trash_retention` defaults to `{ max_age_days = 90 }`; set `max_age_days`,
 `max_size_bytes`, or both to change pruning, or use `false` to disable it.
 History-referenced trash is kept unless explicitly forced through
@@ -457,7 +457,7 @@ Visible file icons use `DirectFileIcon`; hidden file icons retain
 highlight groups do not override Direct's groups. Git status still colours the
 file names and folder icons.
 
-`:help direct.vim` lists every group.
+`:help direct.nvim` lists every group.
 
 ## Git
 
@@ -523,7 +523,7 @@ through `willRenameFiles`, so they can update imports before the file moves.
 
 ## Events for plugins
 
-direct.vim emits Neovim `User` autocmds after a listing, before and after a
+direct.nvim emits Neovim `User` autocmds after a listing, before and after a
 filesystem sync, after filesystem undo, redo and paste, after trash restore or
 empty, after history reset, and after Git worktree restore. Event callbacks
 receive copied `data`. Sync data includes the absolute `root` and planned
@@ -564,7 +564,7 @@ refused and the listing remains modified for review.
 
 ## Commands
 
-direct.vim notifications are prefixed with `direct:` so they can be
+direct.nvim notifications are prefixed with `direct:` so they can be
 distinguished from messages from Neovim and other plugins.
 
 | Command                    | Description                                           |
@@ -623,7 +623,7 @@ refreshed.
 
 ## How safe is it?
 
-direct.vim is built so that a mistake can be undone:
+direct.nvim is built so that a mistake can be undone:
 
 - Deleted entries go to a trash directory, and undo restores them from there.
 - Files are created, moved and renamed with no-replace operations, so an
@@ -643,13 +643,13 @@ direct.vim is built so that a mistake can be undone:
 
 The lock file is stored at `<data>/direct/.direct-history.lock`; a companion
 `.owner` file records the holder PID for diagnostics. Do not run an older
-direct.vim version at the same time as this version: older versions use
+direct.nvim version at the same time as this version: older versions use
 `<data>/.direct-history.lock`, so the two versions would not coordinate with
 each other. The old lock file is left untouched and is harmless once no older
 version is running.
 
 Other programs don't use the lock, and network filesystems are not guaranteed
-to work. `:help direct.vim-data` explains exactly what is guaranteed.
+to work. `:help direct.nvim-data` explains exactly what is guaranteed.
 
 Direct's atomic no-replace rename is implemented for Linux, macOS and Windows.
 FreeBSD and other BSD systems currently fail closed because Direct has no native
@@ -660,14 +660,14 @@ Direct never falls back to a replacing rename. `:checkhealth direct` tests this
 capability only inside Direct's own data directory. When a rename on another
 filesystem reports that the operation is unsupported, Direct remembers that
 device for the current session and refuses later renames there before changing
-anything. See `:help direct.vim-data`.
+anything. See `:help direct.nvim-data`.
 
 ## Documentation
 
 This README is an overview. The full reference is in Neovim:
 
 ```vim
-:help direct.vim
+:help direct.nvim
 ```
 
 It covers every command, option, mapping and highlight group, the Lua API, the

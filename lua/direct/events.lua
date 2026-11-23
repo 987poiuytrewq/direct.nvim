@@ -1,4 +1,4 @@
--- User autocmd notifications exposed by direct.vim.
+-- User autocmd notifications exposed by direct.nvim.
 local M = {}
 local cancel_sequence = 0
 local cancellations = {}

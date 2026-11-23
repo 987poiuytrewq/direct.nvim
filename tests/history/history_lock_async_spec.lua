@@ -175,7 +175,7 @@ H.describe('async history lock', function()
     )
     H.assert_nil(callback_result, 'the busy lock is not acquired')
     H.assert_true(
-      callback_err:find('another Neovim instance is using direct.vim history', 1, true) ~= nil,
+      callback_err:find('another Neovim instance is using direct.nvim history', 1, true) ~= nil,
       'the existing busy-lock message is preserved'
     )
     H.assert_true(callback_err:find('PID', 1, true) ~= nil, 'the holder PID remains in the message')

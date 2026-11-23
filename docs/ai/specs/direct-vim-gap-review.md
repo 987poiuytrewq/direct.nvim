@@ -1,4 +1,4 @@
-# Spec: direct.vim improvements, fourth review
+# Spec: direct.nvim improvements, fourth review
 
 **Status:** A33–A37, A41–A43, A45–A47, A49–A54 and A56–A58 are complete.
 A38–A40 and A44 remain open. A48 is partial (pre-release soak pending), and
@@ -190,7 +190,7 @@ with `vim.wait(RETRY_TIMEOUT_MS, ..., RETRY_INTERVAL_MS)`.
   the lock. Saves, undo and yank callers reach this from key mappings.
 - **`vim.wait` runs the event loop.** Timers, autocommands, scheduled
   callbacks and further keypresses can run in the middle of the wait. That
-  includes other direct.vim code, such as a refresh scheduled by an earlier
+  includes other direct.nvim code, such as a refresh scheduled by an earlier
   operation. `acquire` is called before the caller has necessarily claimed
   `pending`, so a second operation could start while the first is still
   waiting for the lock.
@@ -664,7 +664,7 @@ breaking `move_groups` and confirming that some seed fails.
 
 ### A47 — There are no golden fixtures for the on-disk formats (P2)
 
-**Problem.** direct.vim persists several formats between versions: the history
+**Problem.** direct.nvim persists several formats between versions: the history
 stacks (a header plus canonical JSONL, currently a versioned format in
 `history/format.lua`), the journal (`history/transaction.lua`), the trash
 metadata files, the register manifests, and the lock files. The project is
@@ -700,7 +700,7 @@ not performed; record the soak and its outcome before marking this task done.
 **Problem.** There are four tags (`v0.1.0` on 9 November to `v0.3.0` on 16
 November 2026), about 445 commits with 389 by one author and 56 by an AI
 assistant, no open or closed issues, and no pull requests from anyone else.
-The README compares direct.vim with established tools and claims safety
+The README compares direct.nvim with established tools and claims safety
 properties. Both are credible from the code, but nobody else has yet put the
 plugin through everyday use on real trees, odd filesystems or other platforms,
 and neither the README nor the changelog says what may change before 1.0.
@@ -713,7 +713,7 @@ and neither the README nor the changelog says what may change before 1.0.
   change in a minor release, and how deprecations are announced.
 - Say what has been tried. List the platforms and filesystems the suite and
   CI cover (Linux, macOS and Windows on local disks) and the ones it doesn't
-  (network and FUSE filesystems, which `:help direct.vim-data` already warns
+  (network and FUSE filesystems, which `:help direct.nvim-data` already warns
   about, case-insensitive volumes, very large directories), so users can
   judge the risk.
 - Mark the next release as a beta in its notes and ask for reports, using the
@@ -765,7 +765,7 @@ None of `:wq`, `:x` or `:wa` appear in the tests or the docs.
 - Add an `ExitPre` handler. If a save is pending, say what it is doing and
   wait for it, with `<C-c>` to stop waiting and quit anyway.
 - When `:bw!` cancels a save, say so, and say what the journal will do with it.
-- Document all of this in the help under `direct.vim-write`.
+- Document all of this in the help under `direct.nvim-write`.
 
 **Tests.** In a real process: `:w` returns with the listing clean and the
 change on disk. `:wq` after a rename applies the rename and exits with status
@@ -865,7 +865,7 @@ know about them before they hit them.
 
 - Give every refusal a short code (for example `E-DIRECT-ROW-AMBIGUOUS`) and a
   plain message that says what happened, on which line, and what to do. For
-  example: "Line 12 was replaced as a whole, and direct.vim can't tell whether
+  example: "Line 12 was replaced as a whole, and direct.nvim can't tell whether
   `old.txt` was renamed or replaced. Undo that change and rename with `ciw`,
   or use `:DirectList!` to discard the edits."
 - Move the cursor to the first offending line and mark it with a diagnostic
@@ -1028,8 +1028,8 @@ guaranteed to work", but nothing tells the user that this is what happened.
 
 - Map `EINVAL`, `ENOTSUP`/`EOPNOTSUPP`, `ENOSYS` and `EPERM` from these calls to
   one message: this filesystem (name the mount point if it can be found)
-  doesn't support safe no-replace renames, so direct.vim won't rename here;
-  see `:help direct.vim-data`.
+  doesn't support safe no-replace renames, so direct.nvim won't rename here;
+  see `:help direct.nvim-data`.
 - Remember the result per device (`st_dev`) for the session, so the message
   is given once and later saves on that device are refused up front, before
   anything is changed.

@@ -250,7 +250,7 @@ function M.show()
     end
     return table.concat(columns, '  ')
   end
-  local lines = { 'direct.vim trash', render(headers) }
+  local lines = { 'direct.nvim trash', render(headers) }
   if #entries == 0 then
     lines[#lines + 1] = '(empty)'
   else

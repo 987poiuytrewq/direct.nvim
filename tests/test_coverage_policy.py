@@ -136,9 +136,9 @@ class CoveragePolicyTests(unittest.TestCase):
 
     def test_windows_summary_paths_are_made_repo_relative_off_windows(self):
         text = summary(
-            (r"D:\a\direct.vim\direct.vim\lua\direct\ok.lua", 90, 10, 90.0)
+            (r"D:\a\direct.nvim\direct.nvim\lua\direct\ok.lua", 90, 10, 90.0)
         )
-        files, _ = parse_summary(text, r"D:\a\direct.vim\direct.vim")
+        files, _ = parse_summary(text, r"D:\a\direct.nvim\direct.nvim")
         self.assertIn("lua/direct/ok.lua", files)
 
     def test_baseline_transition_allows_raise_and_exception_removal(self):

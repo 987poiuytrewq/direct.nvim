@@ -9,8 +9,8 @@ local temp_sequence = 0
 local unsupported_rename_devices = {}
 
 local function unsupported_rename_error(device)
-  local message = 'This filesystem does not support safe no-replace renames, so direct.vim will not rename here. '
-    .. 'See :help direct.vim-data.'
+  local message = 'This filesystem does not support safe no-replace renames, so direct.nvim will not rename here. '
+    .. 'See :help direct.nvim-data.'
   if device ~= nil then message = message .. ' (device ' .. tostring(device) .. ')' end
   return message
 end

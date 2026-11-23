@@ -1,37 +1,37 @@
 *direct.txt*                              Edit your filesystem like a buffer
 
-                                  DIRECT.VIM
+                                  DIRECT.NVIM
 
-                                                         *direct.vim* *direct*
+                                                         *direct.nvim* *direct.vim* *direct*
 ==============================================================================
-CONTENTS                                                 *direct.vim-contents*
+CONTENTS                                                 *direct.nvim-contents* *direct.vim-contents*
 
-     1. Introduction ...................................... |direct.vim-intro|
-     2. Requirements ............................... |direct.vim-requirements|
-     3. Quick start .................................. |direct.vim-quickstart|
-     4. Navigating ..................................... |direct.vim-navigate|
-     5. Editing ............................................ |direct.vim-edit|
+     1. Introduction ...................................... |direct.nvim-intro|
+     2. Requirements ............................... |direct.nvim-requirements|
+     3. Quick start .................................. |direct.nvim-quickstart|
+     4. Navigating ..................................... |direct.nvim-navigate|
+     5. Editing ............................................ |direct.nvim-edit|
         Save refusal codes ............................... |direct-refusals|
-     6. Undo and redo ...................................... |direct.vim-undo|
-     7. Yank and paste ..................................... |direct.vim-yank|
-     8. Git ................................................. |direct.vim-git|
-     9. Running commands .................................... |direct.vim-run|
-    10. LSP file operations ................................. |direct.vim-lsp|
-    11. Configuration ..................................... |direct.vim-setup|
-    12. Highlights ................................... |direct.vim-highlights|
-    13. Commands ....................................... |direct.vim-commands|
-    14. Mappings ....................................... |direct.vim-mappings|
-    15. Lua API ............................................. |direct.vim-api|
-    16. User events ..................................... |direct.vim-events|
-    17. Data and safety .................................... |direct.vim-data|
-    18. Upgrading from the Python version ............... |direct.vim-upgrade|
-    19. Stability ....................................... |direct.vim-stability|
-    20. Licence ......................................... |direct.vim-licence|
+     6. Undo and redo ...................................... |direct.nvim-undo|
+     7. Yank and paste ..................................... |direct.nvim-yank|
+     8. Git ................................................. |direct.nvim-git|
+     9. Running commands .................................... |direct.nvim-run|
+    10. LSP file operations ................................. |direct.nvim-lsp|
+    11. Configuration ..................................... |direct.nvim-setup|
+    12. Highlights ................................... |direct.nvim-highlights|
+    13. Commands ....................................... |direct.nvim-commands|
+    14. Mappings ....................................... |direct.nvim-mappings|
+    15. Lua API ............................................. |direct.nvim-api|
+    16. User events ..................................... |direct.nvim-events|
+    17. Data and safety .................................... |direct.nvim-data|
+    18. Upgrading from the Python version ............... |direct.nvim-upgrade|
+    19. Stability ....................................... |direct.nvim-stability|
+    20. Licence ......................................... |direct.nvim-licence|
 
 ==============================================================================
-1. Introduction                                             *direct.vim-intro*
+1. Introduction                                             *direct.nvim-intro* *direct.vim-intro*
 
-direct.vim lists a directory in a buffer, one line per entry. Rename, create,
+direct.nvim lists a directory in a buffer, one line per entry. Rename, create,
 delete and move files with ordinary Vim editing, then |:write| to apply the
 changes to the filesystem.
 >
@@ -54,10 +54,10 @@ Features:
       hide Git-ignored files.
     - Language servers are told about renames, creates and deletes.
 
-direct.vim is pure Lua and replaces |netrw| for directory buffers.
+direct.nvim is pure Lua and replaces |netrw| for directory buffers.
 
 ==============================================================================
-2. Requirements                                      *direct.vim-requirements*
+2. Requirements                                      *direct.nvim-requirements* *direct.vim-requirements*
 
     - Neovim 0.11.7 or later, on Linux, macOS or Windows. Other operating
       systems may run Neovim but are not supported for safe filesystem changes.
@@ -74,7 +74,7 @@ along with history counts, trash size and register size, run:
     :checkhealth direct
 <
 ==============================================================================
-3. Quick start                                         *direct.vim-quickstart*
+3. Quick start                                         *direct.nvim-quickstart* *direct.vim-quickstart*
 
 1. Open a directory. Any of these work:
 >
@@ -99,12 +99,12 @@ along with history counts, trash size and register size, run:
 
 Directory names end with the separator (`archive/`); file names do not. At the
 root level, a save can mix renames, creates and deletes. Rows are paired by
-their identities, not by position. If direct.vim can't tell what you meant,
-the save is refused and nothing on disk changes. See |direct.vim-edit| for the
+their identities, not by position. If direct.nvim can't tell what you meant,
+the save is refused and nothing on disk changes. See |direct.nvim-edit| for the
 full rules.
 
 ==============================================================================
-4. Navigating                                            *direct.vim-navigate*
+4. Navigating                                            *direct.nvim-navigate* *direct.vim-navigate*
 
 Opening a listing ~
 
@@ -165,18 +165,18 @@ Jumping ~
                 inside expanded subtrees count; collapsed or hidden entries
                 don't, and it stops at the ends rather than wrapping.
     ]c  [c      Next or previous entry with a Git change. See
-                |direct.vim-git-navigate|.
+                |direct.nvim-git-navigate|.
 
 ==============================================================================
-5. Editing                                                   *direct.vim-edit*
+5. Editing                                                   *direct.nvim-edit* *direct.vim-edit*
 
 Edit a listing as you would any file, using any Vim command. When you save,
-direct.vim compares the buffer with the filesystem, applies the differences,
+direct.nvim compares the buffer with the filesystem, applies the differences,
 and lists the directory again.
 
 Rename, create and delete ~
-                                                         *direct.vim-classify*
-At the root level, direct.vim compares rows by their extmark identities rather
+                                                         *direct.nvim-classify* *direct.vim-classify*
+At the root level, direct.nvim compares rows by their extmark identities rather
 than pairing lines by position. A single save can mix:
 
     Rename      Change the text of an existing line.
@@ -201,14 +201,14 @@ remain separate when there is no grouped permutation.
 
 A row whose mark survives a text edit is a rename. An unmarked row is a create,
 and a marked row that disappears is a delete. Whole-line replacements such as
-`cc` or `S` may invalidate the mark: if so, direct.vim treats the old row as a
+`cc` or `S` may invalidate the mark: if so, direct.nvim treats the old row as a
 delete and the new row as a create. The deleted entry is kept in trash and
 referenced by the register. If text undo/redo leaves an original row's identity
 unclear, the save is refused and the listing must be reviewed or re-listed. A
 duplicate line is always refused.
 
 Directories and files ~
-                                                   *direct.vim-separator-rule*
+                                                   *direct.nvim-separator-rule* *direct.vim-separator-rule*
 A directory is always written with a trailing separator, and a file never has
 one. The line decides what is created or renamed, not the filesystem:
 
@@ -223,7 +223,7 @@ is left out of the editable listing.
 Creating nested paths ~
 
 A new line can contain a relative path, such as `reports/2026/summary.txt`.
-direct.vim creates the file and any missing parent directories. A path ending
+direct.nvim creates the file and any missing parent directories. A path ending
 in the separator, such as `reports/2026/`, creates a directory. After the
 save, the new parent directories are expanded and the cursor moves to the last
 added entry. Parent directories are recorded separately in the history, so `u`
@@ -239,7 +239,7 @@ These are refused when you save:
     - Components that begin with whitespace.
 
 Editing expanded directories ~
-                                                        *direct.vim-tree-edit*
+                                                        *direct.nvim-tree-edit* *direct.vim-tree-edit*
 Each expanded directory is its own edit scope. Edit, add or delete its
 children just as you would at the root. Changes in several expanded
 directories are combined into one save.
@@ -258,17 +258,17 @@ descendants, and keeps it in trash for undo and register paste. To keep some of
 the descendants, re-indent them under another directory in the same edit.
 
 If you move or rename a directory and also edit its descendants, you may need
-to save the two changes separately. direct.vim refuses the save when it can't
+to save the two changes separately. direct.nvim refuses the save when it can't
 determine a safe order for the filesystem actions.
 
-When a whole line is replaced, direct.vim uses the row mark if it survives. If
+When a whole line is replaced, direct.nvim uses the row mark if it survives. If
 the edit invalidates it, the old row is deleted and the replacement is created;
 the two rows are never paired by position or by a guessed filename match. Root
 and expanded-directory changes can be combined into the same save.
 
 What gets checked before a save ~
 
-Before changing anything, direct.vim checks the whole edit. Any of the
+Before changing anything, direct.nvim checks the whole edit. Any of the
 following refuses the entire save. Nothing is yanked, changed on disk or
 written to history:
 
@@ -279,7 +279,7 @@ written to history:
     - A row identity lost after text undo or redo. The refusal explains that the
       edit cannot be safely identified; restore the marked state or use
       |:DirectList| with `!` to discard it and redo the change.
-    - A filter change that affects the save. See |direct.vim-filters|.
+    - A filter change that affects the save. See |direct.nvim-filters|.
 
 Unrelated entries added, removed or replaced on disk after listing do not block
 a save, including inside expanded directories. A successful save re-lists and
@@ -290,12 +290,12 @@ or use |:DirectList| with `!` to discard an unidentifiable edit.
 Save refusal codes ~
                                                           *direct-refusals*
 
-Every save refusal starts with a stable `E-DIRECT-...` code. When direct.vim
+Every save refusal starts with a stable `E-DIRECT-...` code. When direct.nvim
 can identify an offending buffer row, it moves the cursor there and adds a
 diagnostic. The diagnostic clears on the next text change. Global checks have
 no row diagnostic when there is no honest row to point to.
 
-These codes describe checks made before direct.vim changes the filesystem:
+These codes describe checks made before direct.nvim changes the filesystem:
 
     E-DIRECT-SYNC-BUSY
         Another Direct operation is running. Wait for it to finish, then save.
@@ -404,7 +404,7 @@ Destinations and hidden entries ~
         filters before retrying.
 
 A refusal is different from an action failure. If some filesystem actions have
-already run, direct.vim reports the applied and failed actions and re-lists
+already run, direct.nvim reports the applied and failed actions and re-lists
 the filesystem; it does not label that partial result with a refusal code. A
 workspace-edit failure may also follow edits already applied by a language
 server.
@@ -418,7 +418,7 @@ exactly as they were. If they aren't, those rows are treated as unsafe to
 save, open or yank.
 
 Filters ~
-                                                          *direct.vim-filters*
+                                                          *direct.nvim-filters* *direct.vim-filters*
 Four independent filters can hide entries from a listing:
 
     - 'wildignore'.
@@ -445,13 +445,13 @@ one does not scan or move its target.
 
 Windows ~
 
-direct.vim runs on Windows as well as Linux and macOS. On Windows, names are
+direct.nvim runs on Windows as well as Linux and macOS. On Windows, names are
 also checked against Windows' rules: backslashes, drive prefixes, reserved
 device names (such as `CON` or `NUL`, including with an extension), and
 trailing dots or spaces are rejected when you save.
 
 ==============================================================================
-6. Undo and redo                                             *direct.vim-undo*
+6. Undo and redo                                             *direct.nvim-undo* *direct.vim-undo*
 
 In a clean listing, `u` and `<C-r>` undo and redo the last filesystem action,
 such as a save or a paste. They are the same as |:DirectUndo| and |:DirectRedo|.
@@ -461,15 +461,15 @@ returns the listing to its clean baseline, the paired redo remains text-only
 until the listing is refreshed.
 
 The history is stored on disk, so it survives restarting Neovim and is shared
-by every listing. See |direct.vim-data|.
+by every listing. See |direct.nvim-data|.
 
 Before undoing or redoing paths outside the current listing's directory,
-direct.vim asks what will change and where. Set |direct-undo_confirm| to change
+direct.nvim asks what will change and where. Set |direct-undo_confirm| to change
 when this confirmation is shown. The action summary is still shown after a
 successful undo or redo.
 
 ==============================================================================
-7. Yank and paste                                            *direct.vim-yank*
+7. Yank and paste                                            *direct.nvim-yank* *direct.vim-yank*
 
 Yanking ~
 
@@ -513,7 +513,7 @@ Entries pasted before a later one is skipped or fails are kept and recorded in
 the history. If every entry is skipped, nothing is recorded.
 
 Undoing a paste ~
-                                                          *direct.vim-unpaste*
+                                                          *direct.nvim-unpaste* *direct.vim-unpaste*
 Pastes are in the undo history like any other change. Before removing
 anything, undo checks every pasted file, directory tree and symlink against
 the register. If any of them is missing, changed or unreadable, or the
@@ -523,7 +523,7 @@ history entry is kept.
 Matching entries are first moved to `.direct-unpaste-*` paths in the same
 directory and checked again. Only those captured paths are deleted, so a new
 file created under the original name is never removed. If the capture fails,
-direct.vim restores what it captured without overwriting anything. A
+direct.nvim restores what it captured without overwriting anything. A
 quarantine path it can't restore is kept and reported so you can recover it.
 
 Limits: a crash during deletion can leave `.direct-unpaste-*` paths behind. A
@@ -532,14 +532,14 @@ paste. Another process that has the files open can still change them between
 the check and the deletion.
 
 ==============================================================================
-8. Git                                                        *direct.vim-git*
+8. Git                                                        *direct.nvim-git* *direct.vim-git*
 
-In a Git repository, direct.vim shows the status of each entry and offers a
+In a Git repository, direct.nvim shows the status of each entry and offers a
 few Git shortcuts. Turn the status display off with |direct-git.enabled|.
 Ignore filtering is controlled separately by |direct-respect_gitignore|.
 
 Status display ~
-                                                       *direct.vim-git-status*
+                                                       *direct.nvim-git-status* *direct.vim-git-status*
 Git status is read once each time a listing is refreshed. To update it, list
 the directory again, or use |:DirectGit|, which refreshes it for you.
 
@@ -566,13 +566,13 @@ the index and the worktree.
 Names and folder icons are coloured to match the first (leftmost) symbol: the
 index status when there is one, otherwise the worktree status. Visible file
 icons use |DirectFileIcon| and hidden file icons use |DirectHiddenFileIcon|.
-See |direct.vim-highlights| for the groups.
+See |direct.nvim-highlights| for the groups.
 
 Change the glyphs with |direct-git.symbols|, or hide the status component with
 |direct-git.show_symbols| while keeping the colours.
 
 Deleted files ~
-                                                      *direct.vim-git-deleted*
+                                                      *direct.nvim-git-deleted* *direct.vim-git-deleted*
 Tracked files that were deleted from disk are shown as protected rows, and so
 are directories that contain them. Their names use the colour of their status.
 Hide these rows with |direct-git.show_deleted|.
@@ -582,7 +582,7 @@ them, and stage, unstage or restore them with `ga`, `<leader>gu` and
 `<leader>gr`. Edits, opens, yanks and pastes on them are ignored.
 
 Showing only changes ~
-                                                         *direct.vim-git-view*
+                                                         *direct.nvim-git-view* *direct.vim-git-view*
 `gs` (|:DirectToggleGitStatus|) switches to a view that shows only entries
 with a Git status, with every directory expanded. Press it again to return to
 the normal listing. |:DirectGitStatus| switches to the view without toggling
@@ -593,13 +593,13 @@ default; elsewhere it defaults to the working directory. An explicit relative
 working directory otherwise. Options and directories can be completed.
 
 Directories that contain changes stay visible, and their children are filtered
-the same way. The view combines with the other filters (|direct.vim-filters|),
+the same way. The view combines with the other filters (|direct.nvim-filters|),
 and the entries it hides are never treated as deleted. Outside a repository,
 or with |direct-git.enabled| off, the view is empty. These commands are
 refused while the listing has unsaved edits.
 
 Comparing with a branch ~
-                                                       *direct.vim-git-diff*
+                                                       *direct.nvim-git-diff* *direct.vim-git-diff*
 `gd` or `:DirectGitDiff` toggles the current listing to show only committed
 paths changed between the merge base of a target ref and `HEAD`. With no
 `--ref`, the target is `origin/HEAD`, falling back to local `main` and then
@@ -624,7 +624,7 @@ different ref or option set switches the active filter. The command refuses
 while the target listing has unsaved edits.
 
 Jumping between changes ~
-                                                     *direct.vim-git-navigate*
+                                                     *direct.nvim-git-navigate* *direct.vim-git-navigate*
 `]c` and `[c` (|:DirectNextChange| and |:DirectPreviousChange|) move to the
 next and previous entry with a Git change, in any listing. They skip ignored
 entries, only look at rows currently in the buffer (not collapsed or hidden
@@ -648,7 +648,7 @@ the Git restore itself is not. The status display refreshes when the command
 finishes.
 
 Ignore filtering ~
-                                                       *direct.vim-git-ignore*
+                                                       *direct.nvim-git-ignore* *direct.vim-git-ignore*
 With |direct-respect_gitignore| on (the default), Git-ignored entries are
 hidden. `gi` (|:DirectToggleGitIgnore|) toggles the filter in the current
 listing; normally it is refused while the listing has unsaved edits, and it
@@ -678,7 +678,7 @@ metadata changes invalidate them. A change in a nested repository's ignore file
 can require a re-list even when it doesn't affect the current listing.
 
 ==============================================================================
-9. Running commands                                           *direct.vim-run*
+9. Running commands                                           *direct.nvim-run* *direct.vim-run*
 
 |:DirectRun| runs a shell command on the entry under the cursor:
 >
@@ -691,7 +691,7 @@ contain `{}`.
 
 The command runs asynchronously, from the listing's directory. Its output and
 exit status are shown when it finishes. The current row must be an existing
-entry or a deleted tracked file (|direct.vim-git-deleted|).
+entry or a deleted tracked file (|direct.nvim-git-deleted|).
 
 |:DirectGit| works the same way and also refreshes the Git status in the
 listing when the command finishes. It doesn't re-list the directory or change
@@ -702,9 +702,9 @@ status and output.
     :DirectGit git restore --staged -- {}
 <
 ==============================================================================
-10. LSP file operations                                       *direct.vim-lsp*
+10. LSP file operations                                       *direct.nvim-lsp* *direct.vim-lsp*
 
-direct.vim tells language servers about the filesystem changes it makes, so
+direct.nvim tells language servers about the filesystem changes it makes, so
 they can, for example, update imports when a file is renamed. Only servers
 that advertise the matching `workspace.fileOperations` capability are
 contacted, and their file and glob filters are respected where Neovim exposes
@@ -724,14 +724,14 @@ Renames ~
 
 The `willRenameFiles` request is asynchronous. A |:write| waits for the complete
 save, including the server reply and the filesystem and history commit. The
-listing stays modified until the commit finishes. Other direct.vim filesystem
+listing stays modified until the commit finishes. Other direct.nvim filesystem
 operations are refused while the save is pending.
 
 Edits returned by servers are applied in client-ID order. If a server returns
 an error or doesn't reply within the timeout, you get a warning and the rename
 goes ahead without that server's edits. If an edit can't be applied, the
 rename is refused; edits already applied by other servers are kept. Before
-renaming, direct.vim checks the listing and the filesystem again, in case the
+renaming, direct.nvim checks the listing and the filesystem again, in case the
 edits changed them.
 
 Notifications ~
@@ -741,7 +741,7 @@ and redo. Internal paths (trash, register, temporary and quarantine paths) are
 never reported, and yanking on its own sends nothing.
 
 ==============================================================================
-11. Configuration                                           *direct.vim-setup*
+11. Configuration                                           *direct.nvim-setup* *direct.vim-setup*
                                                               *direct.setup()*
 Calling `setup()` is optional. These are the defaults:
 >lua
@@ -829,7 +829,7 @@ map_default_keys        boolean (default: `true`)
     Install the global `-` mapping and the buffer-local mappings in
     listings. Set to `false` to disable default physical keys; explicit
     per-action mappings and custom function keys are still installed.
-    `<Plug>` mappings are always available. See |direct.vim-mappings|.
+    `<Plug>` mappings are always available. See |direct.nvim-mappings|.
 
                                                              *direct-mappings*
 mappings                table (default: `{}`)
@@ -889,7 +889,7 @@ show_hidden             boolean (default: `true`)
                                                     *direct-respect_gitignore*
 respect_gitignore       boolean (default: `true`)
     Hide Git-ignored entries. `gi` (|:DirectToggleGitIgnore|) toggles this in
-    the current listing. See |direct.vim-git-ignore|.
+    the current listing. See |direct.nvim-git-ignore|.
 
                                             *direct-collapse_single_entry_directories*
 collapse_single_entry_directories boolean (default: `true`)
@@ -917,7 +917,7 @@ undo_confirm             `true`, `false` or `'elsewhere'` (default)
                                                        *direct-history_limit*
 history_limit             positive integer (default: `1000`)
     Maximum undo and redo steps kept in each stack. When a commit exceeds the
-    limit, the oldest steps are dropped. direct.vim warns once per Neovim
+    limit, the oldest steps are dropped. direct.nvim warns once per Neovim
     session when this first happens.
 
                                                        *direct-trash_retention*
@@ -939,7 +939,7 @@ trash_retention          `false` or a table (default: `{ max_age_days = 90 }`)
                                                   *direct-directory_separator*
 directory_separator     `'/'` or `'\'` (default: the platform separator)
     The trailing marker that identifies directory rows. Set it before
-    opening listings. See |direct.vim-separator-rule|.
+    opening listings. See |direct.nvim-separator-rule|.
 
                                            *direct-max_recursive_expand_depth*
 max_recursive_expand_depth   `false` or positive integer (default: `false`)
@@ -989,7 +989,7 @@ icons                   table
     deleted tracked-file icons are not passed to providers.
 
     The `deleted_*` icons are used for deleted tracked files
-    (|direct.vim-git-deleted|).
+    (|direct.nvim-git-deleted|).
 
                                                           *direct-git*
                                                           *direct-git.enabled*
@@ -1018,7 +1018,7 @@ git.show_symbols        boolean (default: `true`)
 
                                                      *direct-git.show_deleted*
 git.show_deleted        boolean (default: `true`)
-    Show rows for deleted tracked files (|direct.vim-git-deleted|). Has no
+    Show rows for deleted tracked files (|direct.nvim-git-deleted|). Has no
     effect when |direct-git.enabled| is off.
 
                                                           *direct-git.symbols*
@@ -1037,7 +1037,7 @@ git.symbols             table
     })
 <
 ==============================================================================
-12. Highlights                                         *direct.vim-highlights*
+12. Highlights                                         *direct.nvim-highlights* *direct.vim-highlights*
 
 Every group links to a standard group by default, so it follows your colour
 scheme. Override them in your colour scheme or with |nvim_set_hl()|. The
@@ -1066,18 +1066,18 @@ File names get no highlighting based on their name or type. With
 |direct-show_filetype_icons|, mini.icons and custom providers may supply a
 highlight group for file icons. nvim-web-devicons uses Direct's normal file-icon
 groups. Changed names and folder icons are coloured by Git status
-(|direct.vim-git-status|).
+(|direct.nvim-git-status|).
 
 Listings use their own syntax file, which loads even when Neovim's global
 syntax loading is turned off.
 
 ==============================================================================
-13. Commands                                             *direct.vim-commands*
+13. Commands                                             *direct.nvim-commands* *direct.vim-commands*
 
 Unless noted otherwise, these commands work only in a listing. In any other
 buffer they report an error and do nothing.
 
-All direct.vim notifications use the `direct:` prefix.
+All direct.nvim notifications use the `direct:` prefix.
 
 Opening listings ~
                                                                  *:DirectList*
@@ -1106,7 +1106,7 @@ Editing ~
     while it is pending, and the listing stays modified until the commit
     completes. Other direct operations are refused meanwhile. Long copies to
     another filesystem report progress. |:write| waits for this operation; see
-    |direct.vim-write|.
+    |direct.nvim-write|.
 
                                                                   *:DirectPlan*
 :DirectPlan
@@ -1116,7 +1116,7 @@ Editing ~
     without prompting. The preview has no default key mapping; configure
     `mappings.plan` to add one.
 
-Saving and quitting ~                                      *direct.vim-write*
+Saving and quitting ~                                      *direct.nvim-write* *direct.vim-write*
 
 Saving a Direct listing runs filesystem changes and the history commit
 asynchronously. A |:write| or `:w` waits until both have completed, so the
@@ -1125,7 +1125,7 @@ copies report progress while they run. Other Direct filesystem and history
 operations are refused while a save is pending.
 
 Pressing <C-c> during the wait stops waiting, not the save. The save continues
-in the background, and direct.vim reports that it is still running. Do not
+in the background, and direct.nvim reports that it is still running. Do not
 start another Direct filesystem or history operation until it finishes.
 
 |:wq| and |:x| wait for the save to complete before closing the listing.
@@ -1134,7 +1134,7 @@ than starting overlapping operations.
 
 When Neovim is about to exit with a save pending, an ExitPre handler waits for
 it. Press <C-c> to stop waiting and quit anyway. If Neovim exits before the
-operation finishes, the journal lets direct.vim complete the interrupted
+operation finishes, the journal lets direct.nvim complete the interrupted
 operation or report it on the next start.
 
 `:bw!` warns that the listing buffer is being wiped, but wiping it does not
@@ -1246,7 +1246,7 @@ Git ~
                                                       *:DirectToggleGitStatus*
 :DirectToggleGitStatus
     Switch to or from the view that shows only changed entries
-    (|direct.vim-git-view|). Refused while the listing has unsaved edits.
+    (|direct.nvim-git-view|). Refused while the listing has unsaved edits.
 
                                                              *:DirectGitStatus*
 :DirectGitStatus [--dir {dir}]
@@ -1293,7 +1293,7 @@ Navigating ~
 Running commands ~
                                                                   *:DirectRun*
 :DirectRun {command}
-    Run {command} on the entry under the cursor. See |direct.vim-run|.
+    Run {command} on the entry under the cursor. See |direct.nvim-run|.
     Does not refresh Git status.
 
                                                                   *:DirectGit*
@@ -1311,7 +1311,7 @@ Running commands ~
     undoable; the Git restore itself is not.
 
 ==============================================================================
-14. Mappings                                             *direct.vim-mappings*
+14. Mappings                                             *direct.nvim-mappings* *direct.vim-mappings*
 
 Default physical mappings are installed when |direct-map_default_keys| is on.
 Per-action overrides are installed regardless of that option, and `<Plug>`
@@ -1379,7 +1379,7 @@ Use `mappings` to override one action, or map a `<Plug>` entry point yourself:
     vim.keymap.set('n', '<leader>e', '<Plug>(direct-expand)', { remap = true })
 <
 ==============================================================================
-15. Lua API                                                   *direct.vim-api*
+15. Lua API                                                   *direct.nvim-api* *direct.vim-api*
 
 The functions in `require('direct')` expose commands and listing state:
 
@@ -1438,9 +1438,9 @@ listing or Visual mode. The returned tables do not expose or mutate listing
 internals.
 
 ==============================================================================
-16. User events                                            *direct.vim-events*
+16. User events                                            *direct.nvim-events* *direct.vim-events*
 
-direct.vim sends Neovim `User` autocmds so other plugins can observe completed
+direct.nvim sends Neovim `User` autocmds so other plugins can observe completed
 operations. In callbacks, event data is available as `args.data`:
 >
     vim.api.nvim_create_autocmd('User', {
@@ -1478,11 +1478,11 @@ another Direct filesystem or history operation. Editing the listing also
 refuses the sync and leaves it modified for review.
 
 ==============================================================================
-17. Data and safety                                          *direct.vim-data*
+17. Data and safety                                          *direct.nvim-data* *direct.vim-data*
 
 Data directory ~
 
-direct.vim keeps its state in:
+direct.nvim keeps its state in:
 
     1. `$XDG_DATA_HOME/direct`, when `$XDG_DATA_HOME` is set and not empty;
     2. otherwise `$HOME/.local/share/direct`;
@@ -1517,7 +1517,7 @@ copies release the lock while waiting; before continuing, Direct checks
 history and the paste destination again.
 
 History format ~
-                                                   *direct.vim-history-format*
+                                                   *direct.nvim-history-format* *direct.vim-history-format*
 `undo.log` and `redo.log` are JSONL files. Each starts with the header
 `{"format":"direct-history","version":1}`, followed by one JSON action per
 line. Both files are checked before the register is read or the filesystem is
@@ -1541,7 +1541,7 @@ is finished the next time the history is used.
 An undo or redo entry is kept until its filesystem change has succeeded.
 Actions are written to the journal before they run: simple changes, the
 staging and final renames of grouped moves, and the progress of pastes and
-their undo. After a crash, direct.vim uses the recorded identities and
+their undo. After a crash, direct.nvim uses the recorded identities and
 content checks to finish the steps whose outcome is clear, then updates the
 history to match. If it can't tell what happened, for example with a partial
 copy, a changed quarantine path or a damaged journal, it keeps everything as
@@ -1551,18 +1551,18 @@ reports.
 Locking ~
 
 Neovim instances on the same machine that share a data directory coordinate
-through an advisory lock. It is held while direct.vim changes the filesystem
+through an advisory lock. It is held while direct.nvim changes the filesystem
 and updates the history, including during asynchronous pastes, undos and
 redos. The
 operating system releases it if Neovim exits or crashes.
 
 Other programs don't use this lock, so they can still change files while
-direct.vim is working. Locking across machines and on network filesystems is
+direct.nvim is working. Locking across machines and on network filesystems is
 not guaranteed.
 
 Filesystem changes ~
 
-direct.vim never overwrites an existing entry:
+direct.nvim never overwrites an existing entry:
 
     - Moves and renames use the platform's atomic no-replace move (on Linux,
       macOS and Windows). FreeBSD and other BSD systems currently have no
@@ -1584,7 +1584,7 @@ refuses later renames on that device before changing anything. See
 filesystems are not guaranteed to work.
 
 Moving across filesystems ~
-                                                            *direct.vim-exdev*
+                                                            *direct.nvim-exdev* *direct.vim-exdev*
 A move to another filesystem is done as a copy. The file or tree is copied to
 a temporary path in the destination directory, then renamed into place
 without replacing anything.
@@ -1598,11 +1598,11 @@ copies may remain.
 
 Limits: a program that has a file open can still change it after the
 comparison. A process run by the same user could swap a path between a check
-and the next step; if that happens, direct.vim keeps the temporary path and
+and the next step; if that happens, direct.nvim keeps the temporary path and
 reports it so you can recover it. Network filesystems are not guaranteed.
 
 ==============================================================================
-18. Upgrading from the Python version                     *direct.vim-upgrade*
+18. Upgrading from the Python version                     *direct.nvim-upgrade* *direct.vim-upgrade*
 
 The Lua version uses a new data format and doesn't migrate the Python
 version's data:
@@ -1616,16 +1616,16 @@ version's data:
     - Trash: entries deleted with the Python version can still be restored.
 
 ==============================================================================
-19. Stability                                           *direct.vim-stability*
+19. Stability                                           *direct.nvim-stability* *direct.vim-stability*
 
-direct.vim 0.4.0 is a beta. The maintainer pre-release soak was not performed.
+direct.nvim 0.4.0 is a beta. The maintainer pre-release soak was not performed.
 If you try this release, please share what worked and what did not in the
 feedback issue:
-https://github.com/987poiuytrewq/direct.vim/issues/159
+https://github.com/987poiuytrewq/direct.nvim/issues/159
 
 The commands, |direct.setup()| options, |User| events, default mappings, and
 persisted data formats are intended to remain stable during the 0.x series.
-direct.vim is pre-1.0, so a minor release may still change behavior or public
+direct.nvim is pre-1.0, so a minor release may still change behavior or public
 interfaces. Breaking changes and migrations are described in the changelog and
 release notes. Deprecations are called out there and in this help; when
 practical, an interface is marked deprecated before removal.
@@ -1637,10 +1637,10 @@ The test suite pins the v0.3.0 format baselines.
 CI runs tests on Linux, macOS and Windows using the runners' local disks. It
 does not establish compatibility with network or FUSE filesystems, test
 case-insensitive-volume edge cases as a separate configuration, or cover very
-large directories. See |direct.vim-data| for filesystem limitations.
+large directories. See |direct.nvim-data| for filesystem limitations.
 
 ==============================================================================
-20. Licence                                               *direct.vim-licence*
+20. Licence                                               *direct.nvim-licence* *direct.vim-licence*
 
 Copyright (c) 2017-2026 Duncan Williams
 

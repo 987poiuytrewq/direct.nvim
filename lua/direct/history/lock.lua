@@ -53,7 +53,7 @@ end
 
 local function busy_message(path)
   local pid = read_owner(path)
-  return 'another Neovim instance is using direct.vim history'
+  return 'another Neovim instance is using direct.nvim history'
     .. (pid and (' (PID ' .. pid .. ')') or '')
     .. '; retry the operation'
 end

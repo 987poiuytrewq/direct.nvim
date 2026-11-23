@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in direct.vim. Keep each branch and pull request to
+Thanks for your interest in direct.nvim. Keep each branch and pull request to
 one task, and write a failing test before implementing a behavior change. Run
 the relevant test first to confirm it fails for the expected reason, then run
 the full checks before submitting.
@@ -67,7 +67,7 @@ Version tags are the versions installed by lazy.nvim's `version = '*'`.
 
 ## Demo recording
 
-`make demo` records a scripted tour of direct.vim with
+`make demo` records a scripted tour of direct.nvim with
 [asciinema](https://asciinema.org/) and converts it to `demo/tour.gif` with
 [agg](https://github.com/asciinema/agg). The tour uses a throwaway Git
 repository and data directory. `make demo-check` plays the same tour without
@@ -76,7 +76,7 @@ details.
 
 ## Persisted data formats
 
-Treat files written by direct.vim as user data. When changing a persisted
+Treat files written by direct.nvim as user data. When changing a persisted
 format, bump its existing version marker and add a new immutable fixture
 directory under `tests/fixtures/formats/<version>/`. Do not edit or regenerate
 fixtures for an older release; add a new directory for each release baseline.

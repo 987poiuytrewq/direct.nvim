@@ -612,7 +612,7 @@ H.describe('fs', function()
       'error explains the unavailable safety capability: ' .. tostring(err)
     )
     H.assert_true(
-      tostring(err):find(':help direct.vim-data', 1, true) ~= nil,
+      tostring(err):find(':help direct.nvim-data', 1, true) ~= nil,
       'error points to filesystem documentation: ' .. tostring(err)
     )
     H.assert_eq(vim.fn.readfile(src), { 'SOURCE' }, 'source remains unchanged')

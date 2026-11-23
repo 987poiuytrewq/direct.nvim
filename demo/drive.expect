@@ -148,7 +148,7 @@ if {$asciinema eq ""} {
   spawn -noecho sh -c "stty rows $rows cols $cols; exec $nvim_command"
 } else {
   set record_args [list $asciinema rec --capture-input --window-size ${cols}x${rows} \
-    --title "direct.vim: edit your filesystem like a buffer" -c $nvim_command --return]
+    --title "direct.nvim: edit your filesystem like a buffer" -c $nvim_command --return]
   if {$force eq "1"} {
     lappend record_args --overwrite
   }
@@ -293,7 +293,7 @@ after 800
 # 9. Back to the full listing.
 key "gs"
 wait_for {LICENSE}
-caption "direct.vim: edit your filesystem like a buffer" ":help direct.vim" 1
+caption "direct.nvim: edit your filesystem like a buffer" ":help direct.nvim" 1
 after 2000
 caption ""
 key "ZQ" 500

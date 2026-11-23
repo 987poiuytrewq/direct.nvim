@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem with direct.vim
+description: Report a reproducible problem with direct.nvim
 title: "[Bug]: "
 labels:
   - bug
@@ -9,7 +9,7 @@ body:
       value: |
         For a vulnerability that could cause data loss or run unintended commands,
         do not open a public issue. Follow the private reporting instructions in
-        [SECURITY.md](https://github.com/987poiuytrewq/direct.vim/blob/master/SECURITY.md).
+        [SECURITY.md](https://github.com/987poiuytrewq/direct.nvim/blob/master/SECURITY.md).
         Reproduce bugs only in a throwaway directory with non-sensitive files.
   - type: input
     id: nvim-version
@@ -30,7 +30,7 @@ body:
   - type: input
     id: plugin-version
     attributes:
-      label: direct.vim version
+      label: direct.nvim version
       description: Include the release tag or commit if installed from source.
       placeholder: "v0.3.0"
     validations:

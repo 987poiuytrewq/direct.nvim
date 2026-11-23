@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a change to direct.vim
+description: Suggest a change to direct.nvim
 title: "[Feature]: "
 labels:
   - enhancement

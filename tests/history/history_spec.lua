@@ -576,7 +576,7 @@ H.describe('history', function()
       'the concurrent process fails closed instead of entering the critical section'
     )
     H.assert_true(
-      output:find('another Neovim instance is using direct.vim', 1, true) ~= nil,
+      output:find('another Neovim instance is using direct.nvim', 1, true) ~= nil,
       'the busy-lock error explains the cause'
     )
     H.assert_true(

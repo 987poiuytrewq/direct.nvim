@@ -106,7 +106,7 @@ function M.lines()
   local history_dir, undo_path, redo_path = history_paths()
   local undo, redo = read_stack(undo_path), read_stack(redo_path)
   local lines = {
-    'direct.vim filesystem history (read-only)',
+    'direct.nvim filesystem history (read-only)',
     'Data directory: ' .. paths.data_home(),
     '',
   }

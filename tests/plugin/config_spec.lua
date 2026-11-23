@@ -219,30 +219,39 @@ H.describe('config', function()
     H.assert_true(config.defaults.show_folder_icons, 'folder icons are on by default')
     H.assert_true(config.defaults.show_file_icons, 'file icons are on by default')
     H.assert_true(config.defaults.show_filetype_icons, 'filetype icons are on by default')
+    H.assert_true(config.defaults.color_file_icons, 'file icon colors are on by default')
     local options = config.setup({
       show_folder_icons = true,
       show_file_icons = true,
       show_filetype_icons = false,
+      color_file_icons = false,
     })
     H.assert_true(options.show_folder_icons, 'the documented icon option is accepted')
     H.assert_true(options.show_file_icons, 'the documented file icon option is accepted')
     H.assert_false(options.show_filetype_icons, 'filetype icons can be disabled')
+    H.assert_false(options.color_file_icons, 'file icon colors can be disabled')
     H.capture_messages()
     options = config.setup({
       show_folder_icons = true,
       show_file_icons = true,
       show_filetype_icons = true,
+      color_file_icons = true,
       show_folder_icon = true,
     })
     H.assert_true(options.show_folder_icons, 'known option remains applied')
     H.assert_true(options.show_file_icons, 'known file option remains applied')
     H.assert_true(options.show_filetype_icons, 'known filetype option remains applied')
+    H.assert_true(options.color_file_icons, 'known file color option remains applied')
     H.assert_nil(options.show_folder_icon, 'misspelled option is not stored')
     H.assert_notified('show_folder_icon', vim.log.levels.ERROR)
     H.capture_messages()
     options = config.setup({ show_filetype_icons = 'true' })
     H.assert_true(options.show_filetype_icons, 'invalid filetype setting retains its default')
     H.assert_notified('show_filetype_icons must be a boolean', vim.log.levels.ERROR)
+    H.capture_messages()
+    options = config.setup({ color_file_icons = 'true' })
+    H.assert_true(options.color_file_icons, 'invalid file color setting retains its default')
+    H.assert_notified('color_file_icons must be a boolean', vim.log.levels.ERROR)
     config.clear_mappings()
   end)
 

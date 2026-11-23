@@ -127,7 +127,7 @@ local function refresh_icons(bufnr, state, row_ids)
             icon_provider.file_icon(paths.strip_directory_marker(rec.name), options.icons.provider)
           if file_glyph then
             base_glyph = file_glyph
-            base_group = file_highlight or base_group
+            if options.color_file_icons == true then base_group = file_highlight or base_group end
           end
         end
       end

@@ -2,9 +2,10 @@
 
 **Edit your filesystem like a text buffer.**
 
-direct.nvim lists a directory in a Neovim buffer, one line per entry. Rename,
-create, delete and move files with ordinary Vim editing, then `:write` to apply
-the changes. Every filesystem change can be undone and redone.
+direct.nvim is a Neovim-specific, buffer-based file manager (Neovim 0.11.7+).
+It lists a directory one line per entry. Rename, create, delete and move files
+with ordinary Vim editing, then `:write` to apply the changes. Every filesystem
+change can be undone and redone.
 
 Saving runs the filesystem and history commit asynchronously. `:write` waits for
 the commit to finish, and cross-filesystem copies show progress. `<C-c>` stops
@@ -71,7 +72,7 @@ the latest.
 
 ## Requirements
 
-- Neovim **0.11.7** or later, on Linux, macOS or Windows
+- Neovim **0.11.7** or later, on Linux, macOS or Windows; Vim is not supported
 - Git, for status and ignore filtering (optional)
 - A [Nerd Font](https://www.nerdfonts.com/), for the default icons (optional;
   you can turn icons off or replace them)

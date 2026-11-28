@@ -35,12 +35,15 @@ proc wait_for {pattern} {
   }
 }
 
+# Every `nvim --server` call below reads stdin from /dev/null: run from a real
+# terminal, it would otherwise inherit that terminal, start its own UI, and
+# print terminal queries instead of the reply.
 proc wait_for_sync {} {
   global nvim socket
   after 200
   for {set attempt 0} {$attempt < 200} {incr attempt} {
     set pending [exec $nvim --server $socket --remote-expr \
-      {luaeval("require('direct.pending').is_pending() and 1 or 0")} 2>@1]
+      {luaeval("require('direct.pending').is_pending() and 1 or 0")} </dev/null 2>@1]
     if {[string trim $pending] eq "0"} { return }
     after 100
   }
@@ -60,7 +63,7 @@ proc wait_for_file {path should_exist} {
 proc wait_for_listing_write {} {
   global nvim socket
   for {set attempt 0} {$attempt < 200} {incr attempt} {
-    set modified [exec $nvim --server $socket --remote-expr {&modified} 2>@1]
+    set modified [exec $nvim --server $socket --remote-expr {&modified} </dev/null 2>@1]
     if {[string trim $modified] eq "0"} { return }
     after 100
   }
@@ -71,11 +74,11 @@ proc wait_for_listing_write {} {
 proc wait_for_listing_modified {} {
   global nvim socket
   for {set attempt 0} {$attempt < 200} {incr attempt} {
-    set modified [exec $nvim --server $socket --remote-expr {&modified} 2>@1]
+    set modified [exec $nvim --server $socket --remote-expr {&modified} </dev/null 2>@1]
     if {[string trim $modified] eq "1"} { return }
     after 100
   }
-  puts stderr "demo: timed out waiting for the listing edit: [exec $nvim --server $socket --remote-expr {string([mode(), line('.'), getline('.'), &modified])} 2>@1]"
+  puts stderr "demo: timed out waiting for the listing edit: [exec $nvim --server $socket --remote-expr {string([mode(), line('.'), getline('.'), &modified])} </dev/null 2>@1]"
   exit 1
 }
 
@@ -87,7 +90,7 @@ proc key {keys {delay 350}} {
 proc send_input {keys} {
   global asciinema nvim socket
   if {$asciinema eq ""} {
-    exec $nvim --server $socket --remote-send $keys 2>@1
+    exec $nvim --server $socket --remote-send $keys </dev/null 2>@1
   } else {
     send -- $keys
   }
@@ -106,7 +109,7 @@ proc find_row {text} {
   type_text $text
   key "\r" 400
   for {set attempt 0} {$attempt < 200} {incr attempt} {
-    set line [exec $nvim --server $socket --remote-expr {getline('.')} 2>@1]
+    set line [exec $nvim --server $socket --remote-expr {getline('.')} </dev/null 2>@1]
     if {[string first [string tolower $text] [string tolower $line]] >= 0} { return }
     after 100
   }
@@ -132,8 +135,8 @@ proc caption {title {keys ""} {show_all 0}} {
   set all [expr {$show_all ? "v:true" : "v:false"}]
   set args "[vim_string $title], [vim_string $keys], $all"
   # Some builds print the reply ("true") on stderr, which exec would treat as
-  # a failure; 2>@1 captures it, so only a non-zero exit status fails.
-  if {[catch {exec $nvim --server $socket --remote-expr "v:lua.DemoCaption($args)" 2>@1} err]} {
+  # a failure; </dev/null 2>@1 captures it, so only a non-zero exit status fails.
+  if {[catch {exec $nvim --server $socket --remote-expr "v:lua.DemoCaption($args)" </dev/null 2>@1} err]} {
     puts stderr "demo: could not show caption: $err"
     exit 1
   }
